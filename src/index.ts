@@ -32,7 +32,7 @@ import Schema from '@deepseek-ai/schemastery'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { CredentialInfo } from '@deepseek-ai/dsh-credentials'
-import { LlmError, assertUsableApiKey } from '@deepseek-ai/dsh-llm'
+import { LlmError, assertUsableApiKey, resolveImageAttachmentAccess } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-commands'
 import type {} from '@deepseek-ai/dsh-user-questions'
@@ -222,6 +222,25 @@ export function apply(ctx: Context, config: Config): void {
     // the request-level override (preferred over every store read), so the
     // harness-backed grant store serves Codex while changing nothing for it.
     auth: codexAuth(() => ctx.get('credentials') as CodexCredentialService | undefined),
+    // Both routes carry images: history with a read_image result reaches this
+    // adapter as durable references, and pi-ai refuses the whole turn unless
+    // the composition's attachment store resolves their bytes here. The
+    // execution-world mapping is separately optional — a composition without
+    // the filesystem service still sends the image, only without the
+    // model-facing normalized-copy path.
+    resolveAttachments: () => ctx.get('attachments'),
+    resolveImageAccess: (attachments, ref) => resolveImageAttachmentAccess(
+      attachments,
+      hostPath => ctx.get('fs')?.processPathFromHostPath(hostPath),
+      ref,
+    ),
+    // A stored replay state the installed pi-ai cannot reconstruct already
+    // degrades to provider-neutral content; naming it keeps that downgrade
+    // diagnosable instead of silent.
+    onReplayDegrade: ({ provider, model, reason }) => {
+      ctx.logger.warn('dsh-provider-extra: unusable replay state on assistant history for route "'
+        + provider + '/' + model + '"; sending that message as provider-neutral content (' + reason + ')')
+    },
   })
 
   // A route another adapter already owns (opencode-go configured under
