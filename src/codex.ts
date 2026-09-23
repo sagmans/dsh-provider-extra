@@ -23,6 +23,8 @@ import {
 import type { CredentialKey, CredentialRecord } from '@deepseek-ai/dsh-credentials'
 import { LlmError, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
+import { resolveExtraModels } from './extra-models.ts'
+import type { ExtraModelSpec } from './extra-models.ts'
 
 /** pi-ai catalog id of the ChatGPT-subscription provider this route serves. */
 export const CODEX_CATALOG_ID = 'openai-codex'
@@ -175,6 +177,8 @@ export interface CodexRouteConfig {
   provider: string
   /** Name configuration surfaces show for this route. */
   displayName: string
+  /** Extra models served beside the installed catalog; read from settings per request. */
+  extraModels?: ExtraModelSpec[]
 }
 
 /**
@@ -200,8 +204,8 @@ export function catalogCodex(): Provider {
  * catalog provider so its API implementation and OAuth quirks survive, while
  * identity and models answer to the route configuration.
  */
-function routeProvider(config: CodexRouteConfig, catalog: Provider): Provider {
-  const models: Model<Api>[] = catalog.getModels().map(model => ({
+function routeProvider(config: CodexRouteConfig, catalog: Provider, models: readonly Model<Api>[]): Provider {
+  const routed: Model<Api>[] = models.map(model => ({
     ...model,
     provider: config.provider,
   }))
@@ -212,7 +216,7 @@ function routeProvider(config: CodexRouteConfig, catalog: Provider): Provider {
     id: config.provider,
     name: config.displayName,
     auth: catalog.auth,
-    getModels: () => models,
+    getModels: () => routed,
     stream: (model, context, options) => catalog.stream(model, context, options),
     streamSimple: (model, context, options) => catalog.streamSimple(model, context, options),
   }
@@ -238,6 +242,10 @@ const REQUEST_IMAGE_MAX_BYTES = 1024 * 1024
  */
 export function buildCodexProfile(config: CodexRouteConfig): ResolvedPiAiProviderProfile {
   const catalog = catalogCodex()
+  // Codex ships no fallback template: a sibling from another vendor's gateway
+  // would be dispatched as if the subscription served it, so a declaration
+  // that names none is reported instead of cloned.
+  const extras = resolveExtraModels(catalog.getModels(), config.extraModels ?? [])
   return {
     provider: config.provider,
     displayName: config.displayName,
@@ -246,9 +254,9 @@ export function buildCodexProfile(config: CodexRouteConfig): ResolvedPiAiProvide
     requestImagePixelBudget: REQUEST_IMAGE_PIXEL_BUDGET,
     requestImageMaxBytes: REQUEST_IMAGE_MAX_BYTES,
     retryPolicy: resolveRetryPolicy(undefined, 'dsh-provider-extra: openai-codex'),
-    modelErrors: new Map(),
+    modelErrors: extras.modelErrors,
     configuredMaxTokens: new Map(),
-    piProvider: routeProvider(config, catalog),
+    piProvider: routeProvider(config, catalog, [...catalog.getModels(), ...extras.models]),
   }
 }
 

@@ -45,7 +45,8 @@ import {
   OPENCODE_GO_PROVIDER_ID,
   buildOpenCodeGoProfile,
 } from './opencode-go.ts'
-import type { ExtraModelSpec, OpenCodeGoRouteConfig } from './opencode-go.ts'
+import type { OpenCodeGoRouteConfig } from './opencode-go.ts'
+import type { ExtraModelSpec } from './extra-models.ts'
 import {
   DEFAULT_CODEX_DISPLAY_NAME,
   DEFAULT_CODEX_ROUTE_ID,
@@ -94,20 +95,32 @@ export const Config: Schema<Config> = Schema.object({
 export const name = 'dsh-provider-extra'
 export const inject = ['llm']
 
-/** Restart-free model additions for the route, read from the settings section per request. */
+/** Restart-free model additions, read from the settings section per request. */
 export interface ProviderExtraSection {
   /** Extra models served beside the installed catalog; later entries win by id. */
   extraModels: ExtraModelSpec[]
+  /** Extra models the Codex route serves; each names the catalog sibling it clones. */
+  codexExtraModels: ExtraModelSpec[]
 }
 
-const extraModelSchema: Schema<ExtraModelSpec> = Schema.object({
+const goExtraModelSchema: Schema<ExtraModelSpec> = Schema.object({
   id: Schema.string().required(),
   name: Schema.string(),
   template: Schema.string().default(DEFAULT_EXTRA_MODEL_TEMPLATE),
 })
 
+// The Codex route ships no default template: a declaration must name the
+// sibling it clones, because a clone from another vendor's catalog would be
+// dispatched as if the subscription served it.
+const codexExtraModelSchema: Schema<ExtraModelSpec> = Schema.object({
+  id: Schema.string().required(),
+  name: Schema.string(),
+  template: Schema.string(),
+})
+
 const SectionSchema: Schema<ProviderExtraSection> = Schema.object({
-  extraModels: Schema.array(extraModelSchema).default([]),
+  extraModels: Schema.array(goExtraModelSchema).default([]),
+  codexExtraModels: Schema.array(codexExtraModelSchema).default([]),
 })
 
 /**
@@ -174,14 +187,15 @@ export function apply(ctx: Context, config: Config): void {
     displayName: config.codexDisplayName,
   }
 
-  // The Codex profile is boot-time, not per-request: it takes no settings
-  // inputs, and building it per operation would let a catalog drift (pi-ai no
-  // longer shipping Codex) fail every request on both routes instead of just
-  // standing this route down once, loudly, here.
-  let codexProfile: ResolvedPiAiProviderProfile | undefined
+  // The catalog check stays boot-time even though settings can now extend the
+  // profile per request: a catalog drift (pi-ai no longer shipping Codex) must
+  // stand this route down once, loudly, here, instead of failing every request
+  // on both routes.
+  let codexServable = false
   if (config.codexEnabled) {
     try {
-      codexProfile = buildCodexProfile(codex)
+      buildCodexProfile(codex)
+      codexServable = true
     } catch (error) {
       ctx.logger.error('dsh-provider-extra: codex route "' + codex.provider + '" disabled; the installed pi-ai catalog cannot serve it')
       ctx.logger.error(error)
@@ -191,12 +205,15 @@ export function apply(ctx: Context, config: Config): void {
   // Route wiring is boot-time, but the model list is per-request: the section
   // thunk below tracks the settings overlay, so a committed extras change
   // reaches the next operation with no rebuild and no restart.
-  let currentSection: () => ProviderExtraSection = () => ({ extraModels: [] })
+  let currentSection: () => ProviderExtraSection = () => ({ extraModels: [], codexExtraModels: [] })
   const profiles = (): Map<string, ResolvedPiAiProviderProfile> => {
+    const section = currentSection()
     const entries: [string, ResolvedPiAiProviderProfile][] = [
-      [route.provider, buildOpenCodeGoProfile({ ...route, extraModels: currentSection().extraModels })],
+      [route.provider, buildOpenCodeGoProfile({ ...route, extraModels: section.extraModels })],
     ]
-    if (codexProfile !== undefined) entries.push([codex.provider, codexProfile])
+    if (codexServable) {
+      entries.push([codex.provider, buildCodexProfile({ ...codex, extraModels: section.codexExtraModels })])
+    }
     return new Map(entries)
   }
   const adapter = new PiAiAdapter({
@@ -258,7 +275,7 @@ export function apply(ctx: Context, config: Config): void {
   // all-or-nothing: one call for both would drop a working route when the
   // other collides. llm-pi-ai's directory already lists the catalog id, so
   // no directory entry is registered here — core's serves the Models page.
-  if (codexProfile !== undefined) {
+  if (codexServable) {
     try {
       ctx.llm.registerAdapter([codex.provider], adapter)
     } catch (error) {
@@ -281,7 +298,7 @@ export function apply(ctx: Context, config: Config): void {
     ctx.logger.warn(error)
   }
   ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.settings.installSection(ctx, SETTINGS_NS, SectionSchema, { extraModels: [] }, {
+    settingsCtx.settings.installSection(ctx, SETTINGS_NS, SectionSchema, { extraModels: [], codexExtraModels: [] }, {
       setSource: (source) => { currentSection = source },
       // No registration facts derive from the section: the route set is fixed
       // at composition and the adapter rebuilds its snapshot on every

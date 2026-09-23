@@ -105,6 +105,20 @@ dsh-provider-extra:
 
 Each entry clones wire behavior from its template. Later entries win by ID. A catalog-owned ID is not replaced. An unknown template becomes a model diagnostic without disabling the route.
 
+## Codex models
+
+The Codex route serves pi-ai's installed `openai-codex` catalog for the signed-in subscription. Extend it the same way when the subscription serves an ID the installed catalog predates:
+
+```yaml
+dsh-provider-extra:
+  codexExtraModels:
+    - id: gpt-6-luna
+      name: GPT-6 Luna
+      template: gpt-5.6-luna
+```
+
+Unlike the Go route, these entries must name their `template`: Codex ships no default sibling, so a declaration that names none is reported as a model diagnostic instead of cloned from another vendor's catalog. Later entries win by ID, a catalog-owned ID is not replaced, and an unknown template becomes a diagnostic without disabling the route. Both settings sections are read per request, so a committed change reaches the next turn with no restart.
+
 ## Provider sign-in
 
 Sign in from the profile you are already using: the plugin registers a command in the harness command palette, and it reaches every provider the installed pi-ai catalog ships a login for — the two routes here, and core's own.

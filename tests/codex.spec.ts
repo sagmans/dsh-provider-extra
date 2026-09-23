@@ -109,6 +109,44 @@ describe('codex profile', () => {
   })
 })
 
+describe('codex settings-declared extra models', () => {
+  it('serves a declared model cloned from its template', () => {
+    const profile = buildCodexProfile({
+      ...route,
+      extraModels: [{ id: 'gpt-6-luna', name: 'GPT-6 Luna', template: 'gpt-5.6-luna' }],
+    })
+    const models = profile.piProvider!.getModels()
+    const extra = models.find(model => model.id === 'gpt-6-luna')
+    const template = models.find(model => model.id === 'gpt-5.6-luna')!
+    assert.notEqual(extra, undefined, 'route serves the declared model')
+    assert.equal(extra!.name, 'GPT-6 Luna')
+    assert.equal(extra!.api, template.api)
+    assert.equal(extra!.contextWindow, template.contextWindow)
+    assert.equal(extra!.maxTokens, template.maxTokens)
+    // The catalog keeps dispatch and wire quirks; only identity answers to the route.
+    assert.equal(extra!.provider, route.provider)
+  })
+
+  it('records an unknown template beside serviceable models', () => {
+    const profile = buildCodexProfile({ ...route, extraModels: [{ id: 'gpt-6-luna', template: 'no-such-model' }] })
+    assert.ok(profile.modelErrors.has('gpt-6-luna'), 'failure is diagnosable')
+    assert.equal(profile.piProvider!.getModels().find(model => model.id === 'gpt-6-luna'), undefined)
+    // One mistyped declaration must not silence the subscription route.
+    assert.ok(profile.piProvider!.getModels().length > 0)
+  })
+
+  it('records a declaration that names no template and clones nothing', () => {
+    const profile = buildCodexProfile({ ...route, extraModels: [{ id: 'gpt-6-luna' }] })
+    assert.ok(profile.modelErrors.has('gpt-6-luna'), 'a route with no shipped default must say so')
+    assert.equal(profile.piProvider!.getModels().find(model => model.id === 'gpt-6-luna'), undefined)
+  })
+
+  it('leaves a catalog-shipped id to the catalog', () => {
+    const profile = buildCodexProfile({ ...route, extraModels: [{ id: 'gpt-5.4', name: 'Renamed' }] })
+    assert.equal(profile.piProvider!.getModels().find(model => model.id === 'gpt-5.4')!.name, 'GPT-5.4')
+  })
+})
+
 describe('harness credential store', () => {
   it('reads nothing without a service and ignores foreign ids', async () => {
     const bare = new HarnessCredentialStore(() => undefined)
