@@ -1,6 +1,6 @@
 {
   "name": "@sagmans/dsh-provider-extra",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Extra LLM provider routes for DeepSeek Harness: OpenCode Go with per-session x-opencode-session routing, and OpenAI Codex over ChatGPT-subscription OAuth.",
   "keywords": [
     "deepseek-harness",
