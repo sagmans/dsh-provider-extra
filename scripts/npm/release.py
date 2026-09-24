@@ -65,6 +65,18 @@ def parse_trust_list(text):
     return configs
 
 
+def single_metadata(response):
+    """Normalise the registry metadata npm returns for one version.
+
+    npm 11 answers with the metadata object and npm 12 wraps the same object in a one-element list,
+    so the tool must accept both to serve either npm. An empty or longer list describes something
+    other than one version and is left for the shape checks to reject.
+    """
+    if isinstance(response, list) and len(response) == 1:
+        return response[0]
+    return response
+
+
 class Target:
     def __init__(self):
         require(os.environ.get("DRY_RUN", "0") in ("0", "1"), "DRY_RUN must be 0 or 1")
@@ -167,7 +179,7 @@ class Target:
         return parse_trust_list(self.npm("trust", "list", self.package, "--color=false", tty=True).stdout)
 
     def registry_metadata(self):
-        metadata = read_json(self.npm("view", f"{self.package}@{self.version}", "--json").stdout)
+        metadata = single_metadata(read_json(self.npm("view", f"{self.package}@{self.version}", "--json").stdout))
         self.validate_metadata(metadata)
         return metadata
 

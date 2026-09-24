@@ -117,6 +117,11 @@ if TOOL == "npm":
         metadata["dist"] = {"integrity": "bad" if SCENARIO == "bad-integrity" else os.environ["ARTIFACT_INTEGRITY"]}
         if SCENARIO == "wrong-manifest":
             metadata["name"] = "other"
+        # npm 12 wraps the metadata for one version in a one-element list; npm 11 returns it directly.
+        if SCENARIO == "array-metadata":
+            metadata = [metadata]
+        if SCENARIO == "double-metadata":
+            metadata = [metadata, metadata]
         output(metadata)
     if args[0] == "publish":
         if SCENARIO == "publish-error":
