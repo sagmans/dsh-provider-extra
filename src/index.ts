@@ -37,7 +37,7 @@ import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-commands'
 import type {} from '@deepseek-ai/dsh-user-questions'
 import { createModels } from '@earendil-works/pi-ai'
-import type { Provider } from '@earendil-works/pi-ai'
+import type { Provider, Transport } from '@earendil-works/pi-ai'
 import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
 import {
   DEFAULT_EXTRA_MODEL_TEMPLATE,
@@ -55,6 +55,7 @@ import {
   codexAuth,
   recordKeyFor,
 } from './codex.ts'
+import { CODEX_TRANSPORTS } from './codex.ts'
 import type { CodexCredentialService, CodexRouteConfig } from './codex.ts'
 import { DEFAULT_LOGIN_COMMAND_NAME, createLoginCommand } from './login-command.ts'
 import type { LoginChoice, LoginCommandHost } from './login-contract.ts'
@@ -104,6 +105,12 @@ export interface Config {
   codexExtraModels?: readonly ExtraModelSpec[]
   /** Exact model ids the Codex route serves, in this order. */
   codexModels?: readonly string[]
+  /**
+   * Transport to pin on every Codex request. Unset keeps pi-ai's own choice,
+   * whose websocket path needs a connection that outlives the response; a
+   * deployment where that connection never settles pins sse instead.
+   */
+  codexTransport?: Transport
   loginCommandEnabled: boolean
   loginCommandName: string
 }
@@ -125,6 +132,7 @@ export const Config: Schema<Config> = Schema.object({
   codexDisplayName: Schema.string().default(DEFAULT_CODEX_DISPLAY_NAME),
   codexExtraModels: Schema.array(codexExtraModelSchema),
   codexModels: Schema.array(Schema.string()),
+  codexTransport: Schema.union(CODEX_TRANSPORTS),
   loginCommandEnabled: Schema.boolean().default(true),
   loginCommandName: Schema.string().default(DEFAULT_LOGIN_COMMAND_NAME),
 }) as Schema<Config>
@@ -227,6 +235,7 @@ export function apply(ctx: Context, config: Config): void {
     provider: config.codexRouteId,
     displayName: config.codexDisplayName,
     ...codexModels === undefined ? {} : { models: codexModels },
+    ...config.codexTransport === undefined ? {} : { transport: config.codexTransport },
   }
 
   // The entry's own declarations are the base layer the settings section sits

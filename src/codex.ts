@@ -12,7 +12,7 @@
  */
 
 import { defaultProviderAuthContext } from '@earendil-works/pi-ai'
-import type { Api, AuthContext, Credential, CredentialInfo, CredentialStore, Model, Provider } from '@earendil-works/pi-ai'
+import type { Api, AuthContext, Credential, CredentialInfo, CredentialStore, Model, Provider, Transport } from '@earendil-works/pi-ai'
 import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
 import {
   credentialKey,
@@ -38,6 +38,13 @@ export const DEFAULT_CODEX_ROUTE_ID = CODEX_CATALOG_ID
 
 /** Display name for selectors, matching pi-ai's subscription label. */
 export const DEFAULT_CODEX_DISPLAY_NAME = 'OpenAI Codex'
+
+/**
+ * Transports pi-ai's Codex API accepts, as that API declares them. Named here
+ * because a profile pins one: the websocket path keeps a connection-scoped
+ * continuation cache, which some networks and proxies never let complete.
+ */
+export const CODEX_TRANSPORTS = ['sse', 'websocket', 'websocket-cached', 'auto'] as const
 
 /**
  * Record scope for the OAuth grant. Identical to dsh-llm-pi-ai's own scope,
@@ -181,6 +188,30 @@ export interface CodexRouteConfig {
   extraModels?: ExtraModelSpec[]
   /** Exact model ids to serve, in this order; absent serves the whole catalog plus extras. */
   models?: readonly string[]
+  /** Transport to pin on every request; absent leaves pi-ai's own choice alone. */
+  transport?: Transport
+}
+
+/**
+ * The per-request stream options this route reads. Structural, so it fits every
+ * stream-options type pi-ai's delegates receive without naming them.
+ */
+interface TransportStreamOptions {
+  transport?: Transport
+}
+
+/**
+ * Stamp the pinned transport onto one request's stream options. pi-ai selects
+ * its Codex transport per request, so this is the only boundary where a profile
+ * can choose one; a route that pins none hands pi-ai's options through exactly
+ * as it received them.
+ * @param options - the per-request stream options pi-ai is about to dispatch.
+ * @param config - the route configuration.
+ * @returns the options with the transport pinned, or unchanged when none is.
+ */
+export function withTransport<T extends TransportStreamOptions>(options: T | undefined, config: CodexRouteConfig): T | undefined {
+  if (config.transport === undefined || options === undefined) return options
+  return { ...options, transport: config.transport }
 }
 
 /**
@@ -219,8 +250,8 @@ function routeProvider(config: CodexRouteConfig, catalog: Provider, models: read
     name: config.displayName,
     auth: catalog.auth,
     getModels: () => routed,
-    stream: (model, context, options) => catalog.stream(model, context, options),
-    streamSimple: (model, context, options) => catalog.streamSimple(model, context, options),
+    stream: (model, context, options) => catalog.stream(model, context, withTransport(options, config)),
+    streamSimple: (model, context, options) => catalog.streamSimple(model, context, withTransport(options, config)),
   }
 }
 

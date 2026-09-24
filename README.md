@@ -70,6 +70,7 @@ To customize them, add an ID-targeted override to `$DSH_HOME/profiles/web/cordis
     # models: [...]              # exact model IDs to serve, in this order
     # codexExtraModels: [...]    # the same two knobs for the Codex route
     # codexModels: [...]
+    # codexTransport: sse        # pin the Codex transport; unset keeps pi-ai's choice
     # codexEnabled: false
     # loginCommandEnabled: false
     # loginCommandName: dsh-provider-extra-login
@@ -132,6 +133,8 @@ The Codex route serves pi-ai's installed `openai-codex` catalog for the signed-i
 ```
 
 Unlike the Go route, these entries must name their `template`: Codex ships no default sibling, so a declaration that names none is reported as a model diagnostic instead of cloned from another vendor's catalog. Later entries win by ID, a catalog-owned ID is not replaced, and an unknown template becomes a diagnostic without disabling the route. `codexModels` narrows this route exactly as `models` narrows the Go route, under the same composition-time proof. Both declarations are read per request, so a committed settings change reaches the next turn with no restart.
+
+`codexTransport` pins the transport pi-ai uses for this route: `sse`, `websocket`, `websocket-cached`, or `auto`. Leave it out and pi-ai chooses, which on a network that never lets the subscription's websocket continue past the first answer leaves the reply printed and the process waiting; pin `sse` there.
 
 ## Provider sign-in
 

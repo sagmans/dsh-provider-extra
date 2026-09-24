@@ -29,6 +29,7 @@ import {
   codexApiKey,
   codexAuth,
   recordKeyFor,
+  withTransport,
 } from '../src/codex.ts'
 import type { CodexCredentialService } from '../src/codex.ts'
 import { answerPrompt, renderEvent, renderPrompt, runCodexLogin } from '../src/codex-login.ts'
@@ -129,6 +130,19 @@ describe('codex profile', () => {
 
   it('resolves no per-request key, deferring to the stored grant', async () => {
     await assert.equal(await codexApiKey(), undefined)
+  })
+
+  it('pins the configured transport on a request and leaves other options alone', () => {
+    const pinned = withTransport({ transport: 'auto', temperature: 0.2 }, { ...route, transport: 'sse' })
+    assert.deepEqual(pinned, { transport: 'sse', temperature: 0.2 })
+    // A route that pins none is not a route that overrides: pi-ai keeps choosing.
+    assert.deepEqual(withTransport({ transport: 'websocket-cached' }, route), { transport: 'websocket-cached' })
+    assert.equal(withTransport(undefined, { ...route, transport: 'sse' }), undefined)
+  })
+
+  it('resolves the transport a composition entry pins, and none when it pins nothing', () => {
+    assert.equal(resolveConfig({ codexTransport: 'sse' }).codexTransport, 'sse')
+    assert.equal(resolveConfig({}).codexTransport, undefined)
   })
 })
 
