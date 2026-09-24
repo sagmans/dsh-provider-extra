@@ -90,6 +90,35 @@ class ReleaseTests(unittest.TestCase):
                 self.assertNotIn("--@example:registry=" + REGISTRY, call)
         self.assert_no_mutation()
 
+    def test_registry_metadata_accepts_the_shape_npm_12_returns(self):
+        # npm 12 answers a version-qualified view with a one-element list while npm 11 answers with
+        # the object, so the tool has to serve both or a supported npm becomes unusable.
+        result = self.run_helper("verify", SCENARIO="array-metadata")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("verified", result.stdout)
+
+    def test_registry_metadata_still_rejects_an_unexpected_shape(self):
+        # A response that describes anything other than one version must not be normalised away.
+        result = self.run_helper("verify", SCENARIO="double-metadata")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("object", result.stderr)
+
+    def test_interactive_prompt_is_answered_so_an_otp_read_cannot_stall(self):
+        # npm opens the browser page only after a keypress, and it waits for the browser afterwards.
+        # An unanswered prompt stalls the read until the window closes, so the prompt is answered.
+        script = (
+            "import sys, time\n"
+            "sys.stdout.write('Press ENTER to open in the browser...')\n"
+            "sys.stdout.flush()\n"
+            "if sys.stdin.readline() == '':\n"
+            "    sys.exit(3)\n"
+            "sys.exit(0)\n"
+        )
+        sys.path.insert(0, str(ROOT / "scripts/npm"))
+        import execution
+        result = execution.run([sys.executable, "-c", script], tty=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_preflight_rejects_a_redirected_registry(self):
         for scenario in ("rogue-registry", "rogue-scoped-registry"):
             with self.subTest(scenario=scenario):

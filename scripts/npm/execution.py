@@ -16,6 +16,17 @@ PTY_CHUNK_BYTES = 65536
 READ_ATTEMPTS = 10
 READ_BACKOFF_SECONDS = 5
 READ_BACKOFF_CAP_SECONDS = 120
+# npm asks for a keypress before it opens the browser authentication page, and it only starts
+# waiting for the browser once that keypress arrives. Without it every OTP-gated read stalls until
+# the window closes, so the prompt is answered as soon as it appears.
+PTY_PROMPT_PATTERN = re.compile(r"Press ENTER to open in the browser")
+PTY_PROMPT_REPLY = b"\n"
+# A child that has just printed a prompt may not be reading yet, and a closed slave raises instead
+# of returning short, so the reply is retried across a few chunks rather than sent once.
+PTY_REPLY_ATTEMPTS = 5
+# The prompt can straddle a read boundary, so a tail longer than the prompt itself is kept and
+# matched on. Matching the tail rather than the accumulated output keeps memory bounded.
+PTY_PROMPT_TAIL_BYTES = 256
 
 
 class ReleaseError(Exception):
@@ -62,6 +73,8 @@ def run(command, *, data=None, check=True, tty=False):
 
 def _run_in_pty(command):
     master, slave = pty.openpty()
+    answered = False
+    seen = ""
     try:
         try:
             process = subprocess.Popen(command, stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
@@ -79,11 +92,30 @@ def _run_in_pty(command):
             chunks.append(text)
             # Mirror the child's output so the operator can see and answer an interactive prompt.
             print(text, end="", file=sys.stderr, flush=True)
+            # Only the pending browser page is answered; a genuine prompt for the operator stays open.
+            seen = (seen + text)[-PTY_PROMPT_TAIL_BYTES:]
+            if not answered and PTY_PROMPT_PATTERN.search(seen):
+                answered = _answer_prompt(master)
         returncode = process.wait()
     finally:
         os.close(master)
     captured = "".join(chunks).replace("\r\n", "\n").replace("\r", "\n")
     return subprocess.CompletedProcess(command, returncode, captured, "")
+
+
+def _answer_prompt(master):
+    """Press ENTER for the browser prompt, tolerating a child that has stopped reading.
+
+    The write is retried because the child can print the prompt before it starts reading, and a
+    failure to write only means the process is gone, which the read loop already handles.
+    """
+    for _ in range(PTY_REPLY_ATTEMPTS):
+        try:
+            os.write(master, PTY_PROMPT_REPLY)
+            return True
+        except OSError:
+            time.sleep(0.1)
+    return True
 
 
 def read_with_retry(operation, *, attempts=READ_ATTEMPTS, backoff=READ_BACKOFF_SECONDS, cap=READ_BACKOFF_CAP_SECONDS):
