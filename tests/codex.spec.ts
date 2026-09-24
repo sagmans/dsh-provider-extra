@@ -19,6 +19,7 @@ import { createModels } from '@earendil-works/pi-ai'
 import type { Credential } from '@earendil-works/pi-ai'
 import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import type { CredentialKey, CredentialRecord } from '@deepseek-ai/dsh-credentials'
+import { LlmError } from '@deepseek-ai/dsh-llm'
 import {
   CODEX_CATALOG_ID,
   DEFAULT_CODEX_DISPLAY_NAME,
@@ -32,9 +33,31 @@ import {
 import type { CodexCredentialService } from '../src/codex.ts'
 import { answerPrompt, renderEvent, renderPrompt, runCodexLogin } from '../src/codex-login.ts'
 import type { LoginModels, LoginTerminal } from '../src/codex-login.ts'
+import { Config } from '../src/index.ts'
+import type { Config as ConfigShape } from '../src/index.ts'
+
+/**
+ * Resolve one raw entry document the way the loader hands it to the schema: a
+ * profile patch is a partial document, so only the schema can say whether a
+ * key survives into the config this plugin runs on.
+ */
+function resolveConfig(document: Record<string, unknown>): ConfigShape {
+  return Config(document as unknown as ConfigShape)
+}
 
 /** The route under test: the catalog id, so the grant address is shared. */
 const route = { provider: DEFAULT_CODEX_ROUTE_ID, displayName: DEFAULT_CODEX_DISPLAY_NAME }
+
+/** One catalog id and one sibling id the installed catalog ships. */
+const CATALOG_MODEL_ID = 'gpt-5.6-luna'
+
+/** A declared extra cloning the catalog sibling above, as a subscription-only id would. */
+const DECLARED_EXTRA = { id: 'gpt-6-luna', name: 'GPT-6 Luna', template: CATALOG_MODEL_ID }
+
+/** The served ids of one route configuration, in the order it advertises them. */
+function servedIds(config: { models?: readonly string[]; extraModels?: { id: string; name?: string; template?: string }[] } = {}): string[] {
+  return buildCodexProfile({ ...route, ...config }).piProvider!.getModels().map(model => model.id)
+}
 
 /** One fresh OAuth grant, as pi-ai's login would produce it. */
 function grant(): Credential {
@@ -144,6 +167,54 @@ describe('codex settings-declared extra models', () => {
   it('leaves a catalog-shipped id to the catalog', () => {
     const profile = buildCodexProfile({ ...route, extraModels: [{ id: 'gpt-5.4', name: 'Renamed' }] })
     assert.equal(profile.piProvider!.getModels().find(model => model.id === 'gpt-5.4')!.name, 'GPT-5.4')
+  })
+})
+
+describe('codex exact model selection', () => {
+  it('distills the composition entry into the models the entry itself carries', () => {
+    const resolved = resolveConfig({ codexExtraModels: [DECLARED_EXTRA], codexModels: [DECLARED_EXTRA.id] })
+    assert.deepEqual(resolved.codexModels, [DECLARED_EXTRA.id])
+    assert.deepEqual(resolved.codexExtraModels?.[0]?.template, CATALOG_MODEL_ID)
+  })
+
+  it('serves everything the catalog and the extras resolved when no selection is declared', () => {
+    const ids = servedIds({ extraModels: [DECLARED_EXTRA] })
+    assert.ok(ids.includes(CATALOG_MODEL_ID))
+    assert.ok(ids.includes(DECLARED_EXTRA.id))
+    assert.ok(ids.length > 2, 'the catalog stays whole')
+  })
+
+  it('serves only the declared ids, in the declared order', () => {
+    // Catalog last: the declaration, not the catalog, decides the order.
+    assert.deepEqual(servedIds({ models: [DECLARED_EXTRA.id, CATALOG_MODEL_ID], extraModels: [DECLARED_EXTRA] }), [DECLARED_EXTRA.id, CATALOG_MODEL_ID])
+  })
+
+  it('keeps a repeated id as one model at its first position', () => {
+    assert.deepEqual(servedIds({ models: [CATALOG_MODEL_ID, CATALOG_MODEL_ID] }), [CATALOG_MODEL_ID])
+  })
+
+  it('serves nothing when the selection is declared empty', () => {
+    // A composition entry never reaches this state: its schema materializes an
+    // undeclared array as an empty one, and the wiring reads an empty
+    // declaration as no selection at all.
+    assert.deepEqual(servedIds({ models: [] }), [])
+  })
+
+  it('refuses a selected id nothing resolves, naming the route and the id', () => {
+    assert.throws(
+      () => buildCodexProfile({ ...route, models: [CATALOG_MODEL_ID, 'no-such-model'] }),
+      (error: unknown) => error instanceof LlmError
+        && /UNKNOWN_MODEL/.test(error.code)
+        && error.message.includes(route.provider)
+        && error.message.includes('no-such-model'),
+    )
+  })
+
+  it('refuses a selected extra whose template does not resolve', () => {
+    assert.throws(
+      () => buildCodexProfile({ ...route, models: [DECLARED_EXTRA.id], extraModels: [{ id: DECLARED_EXTRA.id, template: 'no-such-model' }] }),
+      (error: unknown) => error instanceof LlmError && error.message.includes(DECLARED_EXTRA.id),
+    )
   })
 })
 

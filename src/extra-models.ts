@@ -1,19 +1,23 @@
 /**
- * Settings-declared model additions, shared by every route this plugin owns.
+ * Declared models, shared by every route this plugin owns.
  *
- * The installed catalog stays the authority on wire behavior: an extra only
- * names an id the catalog predates, and clones a template sibling's API quirks,
- * costs, and limits instead of restating them. A declaration that cannot
- * resolve lands in the route's model diagnostics beside its serviceable
- * models, because one mistyped template must not silence a whole route.
+ * Two declarations share this module. An extra adds an id the installed
+ * catalog predates, cloning a template sibling's wire behavior instead of
+ * restating it; a declaration that cannot resolve lands in the route's model
+ * diagnostics beside its serviceable models, because one mistyped template
+ * must not silence a whole route. A whitelist instead selects which of the
+ * resolved models a route serves, and refuses the whole route when it names an
+ * id nothing provides — a configuration typo there is a broken deployment, not
+ * a diagnosable one-model problem.
  *
  * @module dsh-provider-extra/extra-models
  */
 
 import type { Api, Model } from '@earendil-works/pi-ai'
+import { LlmError } from '@deepseek-ai/dsh-llm'
 
 /**
- * One settings-declared model: an id plus the catalog sibling it clones.
+ * One declared model: an id plus the catalog sibling it clones.
  * `template` stays optional because a route may ship its own default; a route
  * that ships none reports the omission rather than guessing a sibling.
  */
@@ -68,4 +72,47 @@ export function resolveExtraModels(
     models.push({ ...template, id: spec.id, name: spec.name ?? template.name })
   }
   return { models, modelErrors }
+}
+
+/**
+ * Narrow one route's resolved models to a declared whitelist and put them in
+ * the declared order. Absent means the route serves everything it resolved;
+ * present means exactly those ids, so the picker and the gateway agree.
+ * Resolution order — the installed catalog, then the route's shipped extras,
+ * then the declared ones — stays the authority on which id exists, and a
+ * whitelist may therefore name a catalog id, a shipped extra, or a declared
+ * extra.
+ * @param route - route id the refusal names.
+ * @param models - resolved catalog and extra models, in resolution order.
+ * @param whitelist - exact ids to serve, or undefined to serve every model.
+ * @returns the selected models in declared order.
+ * @throws {LlmError} when the whitelist names an id nothing resolves; failing
+ * the route loud is the only alternative that cannot silently serve less than
+ * the deployment asked for.
+ */
+export function selectWhitelistedModels(
+  route: string,
+  models: readonly Model<Api>[],
+  whitelist?: readonly string[],
+): Model<Api>[] {
+  if (whitelist === undefined) return [...models]
+  const byId = new Map(models.map(model => [model.id, model]))
+  const selected: Model<Api>[] = []
+  const seen = new Set<string>()
+  for (const id of whitelist) {
+    // A repeated id is one model, kept at its first position: advertising the
+    // same id twice would offer the picker two entries no request distinguishes.
+    if (seen.has(id)) continue
+    seen.add(id)
+    const model = byId.get(id)
+    if (model === undefined) {
+      throw new LlmError(
+        'dsh-provider-extra: route "' + route + '" declares model "' + id + '" in its model selection,'
+        + ' but neither the installed pi-ai catalog nor an extra model declaration provides it',
+        'UNKNOWN_MODEL',
+      )
+    }
+    selected.push(model)
+  }
+  return selected
 }

@@ -23,7 +23,7 @@ import {
 import type { CredentialKey, CredentialRecord } from '@deepseek-ai/dsh-credentials'
 import { LlmError, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
-import { resolveExtraModels } from './extra-models.ts'
+import { resolveExtraModels, selectWhitelistedModels } from './extra-models.ts'
 import type { ExtraModelSpec } from './extra-models.ts'
 
 /** pi-ai catalog id of the ChatGPT-subscription provider this route serves. */
@@ -179,6 +179,8 @@ export interface CodexRouteConfig {
   displayName: string
   /** Extra models served beside the installed catalog; read from settings per request. */
   extraModels?: ExtraModelSpec[]
+  /** Exact model ids to serve, in this order; absent serves the whole catalog plus extras. */
+  models?: readonly string[]
 }
 
 /**
@@ -246,6 +248,10 @@ export function buildCodexProfile(config: CodexRouteConfig): ResolvedPiAiProvide
   // would be dispatched as if the subscription served it, so a declaration
   // that names none is reported instead of cloned.
   const extras = resolveExtraModels(catalog.getModels(), config.extraModels ?? [])
+  // Selection runs last so a whitelist may name a declared extra exactly as it
+  // names a catalog model, and so a typo in either is refused here rather than
+  // served as a route quietly missing a model.
+  const models = selectWhitelistedModels(config.provider, [...catalog.getModels(), ...extras.models], config.models)
   return {
     provider: config.provider,
     displayName: config.displayName,
@@ -256,7 +262,7 @@ export function buildCodexProfile(config: CodexRouteConfig): ResolvedPiAiProvide
     retryPolicy: resolveRetryPolicy(undefined, 'dsh-provider-extra: openai-codex'),
     modelErrors: extras.modelErrors,
     configuredMaxTokens: new Map(),
-    piProvider: routeProvider(config, catalog, [...catalog.getModels(), ...extras.models]),
+    piProvider: routeProvider(config, catalog, models),
   }
 }
 

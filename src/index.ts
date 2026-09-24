@@ -64,45 +64,8 @@ import { PendingCredentialStore, proveApiKey } from './login-verify.ts'
 /** Settings namespace configuration surfaces address this plugin's section by. */
 const SETTINGS_NS = 'dsh-provider-extra'
 
-export interface Config {
-  apiKeyEnv: string
-  routeId: string
-  displayName: string
-  baseURL?: string
-  fallbackSessionId?: string
-  headers?: Record<string, string>
-  codexEnabled: boolean
-  codexRouteId: string
-  codexDisplayName: string
-  loginCommandEnabled: boolean
-  loginCommandName: string
-}
-
-export const Config: Schema<Config> = Schema.object({
-  apiKeyEnv: Schema.string().role('credential-ref').default(DEFAULT_OPENCODE_API_KEY_ENV),
-  routeId: Schema.string().default(OPENCODE_GO_PROVIDER_ID),
-  displayName: Schema.string().default('OpenCode Go'),
-  baseURL: Schema.string(),
-  fallbackSessionId: Schema.string(),
-  headers: Schema.dict(Schema.string()),
-  codexEnabled: Schema.boolean().default(true),
-  codexRouteId: Schema.string().default(DEFAULT_CODEX_ROUTE_ID),
-  codexDisplayName: Schema.string().default(DEFAULT_CODEX_DISPLAY_NAME),
-  loginCommandEnabled: Schema.boolean().default(true),
-  loginCommandName: Schema.string().default(DEFAULT_LOGIN_COMMAND_NAME),
-})
-
-export const name = 'dsh-provider-extra'
-export const inject = ['llm']
-
-/** Restart-free model additions, read from the settings section per request. */
-export interface ProviderExtraSection {
-  /** Extra models served beside the installed catalog; later entries win by id. */
-  extraModels: ExtraModelSpec[]
-  /** Extra models the Codex route serves; each names the catalog sibling it clones. */
-  codexExtraModels: ExtraModelSpec[]
-}
-
+// Declared extra models: the composition entry and the settings section share
+// these two shapes, so one document's declaration is valid in the other.
 const goExtraModelSchema: Schema<ExtraModelSpec> = Schema.object({
   id: Schema.string().required(),
   name: Schema.string(),
@@ -117,6 +80,81 @@ const codexExtraModelSchema: Schema<ExtraModelSpec> = Schema.object({
   name: Schema.string(),
   template: Schema.string(),
 })
+
+export interface Config {
+  apiKeyEnv: string
+  routeId: string
+  displayName: string
+  baseURL?: string
+  fallbackSessionId?: string
+  headers?: Record<string, string>
+  /**
+   * Extra models for the OpenCode Go route. It lives in the composition entry
+   * rather than only in the settings section because a harness without a
+   * settings document can only deliver a profile's declared extras through
+   * its own config; a settings section still overrides this whole array.
+   */
+  extraModels?: readonly ExtraModelSpec[]
+  /** Exact model ids the OpenCode Go route serves, in this order. */
+  models?: readonly string[]
+  codexEnabled: boolean
+  codexRouteId: string
+  codexDisplayName: string
+  /** Extra models for the Codex route, under the same precedence as {@link extraModels}. */
+  codexExtraModels?: readonly ExtraModelSpec[]
+  /** Exact model ids the Codex route serves, in this order. */
+  codexModels?: readonly string[]
+  loginCommandEnabled: boolean
+  loginCommandName: string
+}
+
+// The assertion carries the one thing schemastery cannot state: every array in
+// this entry is read-only to the plugin, which only ever copies it, while an
+// array member schema is typed as the mutable array it validates.
+export const Config: Schema<Config> = Schema.object({
+  apiKeyEnv: Schema.string().role('credential-ref').default(DEFAULT_OPENCODE_API_KEY_ENV),
+  routeId: Schema.string().default(OPENCODE_GO_PROVIDER_ID),
+  displayName: Schema.string().default('OpenCode Go'),
+  baseURL: Schema.string(),
+  fallbackSessionId: Schema.string(),
+  headers: Schema.dict(Schema.string()),
+  extraModels: Schema.array(goExtraModelSchema),
+  models: Schema.array(Schema.string()),
+  codexEnabled: Schema.boolean().default(true),
+  codexRouteId: Schema.string().default(DEFAULT_CODEX_ROUTE_ID),
+  codexDisplayName: Schema.string().default(DEFAULT_CODEX_DISPLAY_NAME),
+  codexExtraModels: Schema.array(codexExtraModelSchema),
+  codexModels: Schema.array(Schema.string()),
+  loginCommandEnabled: Schema.boolean().default(true),
+  loginCommandName: Schema.string().default(DEFAULT_LOGIN_COMMAND_NAME),
+}) as Schema<Config>
+
+/**
+ * One configured model selection, or nothing when the entry declared none.
+ * schemastery materializes an undeclared array member as an empty array, so an
+ * empty declaration is the absence of a selection: the route serves everything
+ * its catalog and extras resolved, exactly as a profile that never named the
+ * field does.
+ */
+function selection(declared: readonly string[] | undefined): readonly string[] | undefined {
+  return declared === undefined || declared.length === 0 ? undefined : declared
+}
+
+export const name = 'dsh-provider-extra'
+export const inject = ['llm']
+
+/**
+ * Restart-free model additions, read from the settings section per request.
+ * The section layer sits over the composition entry, so a harness with a
+ * settings document reshapes these two arrays and one without keeps the
+ * entry's own values (see {@link Config.extraModels}).
+ */
+export interface ProviderExtraSection {
+  /** Extra models served beside the installed catalog; later entries win by id. */
+  extraModels: ExtraModelSpec[]
+  /** Extra models the Codex route serves; each names the catalog sibling it clones. */
+  codexExtraModels: ExtraModelSpec[]
+}
 
 const SectionSchema: Schema<ProviderExtraSection> = Schema.object({
   extraModels: Schema.array(goExtraModelSchema).default([]),
@@ -173,6 +211,8 @@ function catalogLoginProvider(providerId: string): Provider {
 }
 
 export function apply(ctx: Context, config: Config): void {
+  const models = selection(config.models)
+  const codexModels = selection(config.codexModels)
   const route: OpenCodeGoRouteConfig = {
     provider: config.routeId,
     displayName: config.displayName,
@@ -180,12 +220,31 @@ export function apply(ctx: Context, config: Config): void {
     ...config.baseURL === undefined ? {} : { baseURL: config.baseURL },
     ...config.fallbackSessionId === undefined ? {} : { fallbackSessionId: config.fallbackSessionId },
     ...config.headers === undefined ? {} : { headers: { ...config.headers } },
+    ...models === undefined ? {} : { models },
   }
 
   const codex: CodexRouteConfig = {
     provider: config.codexRouteId,
     displayName: config.codexDisplayName,
+    ...codexModels === undefined ? {} : { models: codexModels },
   }
+
+  // The entry's own declarations are the base layer the settings section sits
+  // over, and the value the routes serve on a harness with no settings document
+  // at all — which is why they seed the thunk below instead of only the base.
+  const entry: ProviderExtraSection = {
+    extraModels: [...config.extraModels ?? []],
+    codexExtraModels: [...config.codexExtraModels ?? []],
+  }
+
+  // A declared selection is configuration, not a request fact, so it is proven
+  // once here. Registration resolves a profile for its route metadata and
+  // reports a failure as a refused route, which would bury the one message that
+  // names the misconfigured id; resolving per request would bury it the same
+  // way. The extras a selection resolves against at this point are the entry's
+  // own, because a settings document may not have arrived yet.
+  if (models !== undefined) buildOpenCodeGoProfile({ ...route, extraModels: entry.extraModels })
+  if (codexModels !== undefined) buildCodexProfile({ ...codex, extraModels: entry.codexExtraModels })
 
   // The catalog check stays boot-time even though settings can now extend the
   // profile per request: a catalog drift (pi-ai no longer shipping Codex) must
@@ -194,7 +253,9 @@ export function apply(ctx: Context, config: Config): void {
   let codexServable = false
   if (config.codexEnabled) {
     try {
-      buildCodexProfile(codex)
+      // Catalog drift alone: the selection was already proven above, so it
+      // cannot be what this check reports.
+      buildCodexProfile({ provider: codex.provider, displayName: codex.displayName })
       codexServable = true
     } catch (error) {
       ctx.logger.error('dsh-provider-extra: codex route "' + codex.provider + '" disabled; the installed pi-ai catalog cannot serve it')
@@ -205,7 +266,7 @@ export function apply(ctx: Context, config: Config): void {
   // Route wiring is boot-time, but the model list is per-request: the section
   // thunk below tracks the settings overlay, so a committed extras change
   // reaches the next operation with no rebuild and no restart.
-  let currentSection: () => ProviderExtraSection = () => ({ extraModels: [], codexExtraModels: [] })
+  let currentSection: () => ProviderExtraSection = () => entry
   const profiles = (): Map<string, ResolvedPiAiProviderProfile> => {
     const section = currentSection()
     const entries: [string, ResolvedPiAiProviderProfile][] = [
@@ -298,7 +359,10 @@ export function apply(ctx: Context, config: Config): void {
     ctx.logger.warn(error)
   }
   ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.settings.installSection(ctx, SETTINGS_NS, SectionSchema, { extraModels: [], codexExtraModels: [] }, {
+    // The section overrides the entry where a settings document exists and
+    // stands in for it where none does; the settings service falls back to this
+    // same value when it detaches.
+    settingsCtx.settings.installSection(ctx, SETTINGS_NS, SectionSchema, entry, {
       setSource: (source) => { currentSection = source },
       // No registration facts derive from the section: the route set is fixed
       // at composition and the adapter rebuilds its snapshot on every

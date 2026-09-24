@@ -66,6 +66,10 @@ To customize them, add an ID-targeted override to `$DSH_HOME/profiles/web/cordis
     apiKeyEnv: OPENCODE_GO_API_KEY
     routeId: opencode-go-session
     displayName: OpenCode Go (session)
+    # extraModels: [...]         # models served beside the installed catalog
+    # models: [...]              # exact model IDs to serve, in this order
+    # codexExtraModels: [...]    # the same two knobs for the Codex route
+    # codexModels: [...]
     # codexEnabled: false
     # loginCommandEnabled: false
     # loginCommandName: dsh-provider-extra-login
@@ -93,31 +97,41 @@ Store the API key through the harness credential service, using the reference na
 
 The plugin reuses `PiAiAdapter` and pi-ai's `opencode-go` catalog. It injects the routing header on both `prepareCall()` and direct stream dispatch. The request's session ID takes precedence over `fallbackSessionId` and static headers. Without a request ID or configured fallback, the plugin sends no session header.
 
-The pinned catalog is extended with `deepseek-flash` (DeepSeek V4.1 Flash), cloned from `deepseek-v4-flash`. Add other models in `$DSH_HOME/settings.yaml` without rebuilding or restarting:
+The pinned catalog is extended with `deepseek-flash` (DeepSeek V4.1 Flash), cloned from `deepseek-v4-flash`. Add other models to the profile override without rebuilding or restarting:
 
 ```yaml
-dsh-provider-extra:
-  extraModels:
-    - id: deepseek-flash
-      name: DeepSeek V4.1 Flash
-      template: deepseek-v4-flash
+- id: dsh-provider-extra
+  config:
+    extraModels:
+      - id: space-bunny-free
+        name: Space Bunny (free)
+        template: mimo-v2.5
+    models:
+      - space-bunny-free
+      - mimo-v2.6-pro
 ```
 
-Each entry clones wire behavior from its template. Later entries win by ID. A catalog-owned ID is not replaced. An unknown template becomes a model diagnostic without disabling the route.
+Each entry clones wire behavior from its template. Later entries win by ID. A catalog-owned ID is not replaced. An unknown template becomes a model diagnostic without disabling the route. The declarations live in the entry because a harness reads a model's configuration from the profile entry it mounts; a `dsh-provider-extra` section in `$DSH_HOME/settings.yaml` still wins where a harness reads one, replacing both arrays wholesale.
+
+`models` serves exactly the IDs it lists, in that order, and advertises them. Every ID must resolve when the profile composes — from the installed pi-ai catalog, a shipped extra, or `extraModels` in this same entry, because a settings document is read after composition. An ID that resolves to nothing fails the composition with `UNKNOWN_MODEL` naming the route and the ID, never a route quietly serving less. Leave the field out to serve everything the route resolved; an empty declaration means the same, because the entry schema materializes an undeclared array as an empty one.
 
 ## Codex models
 
 The Codex route serves pi-ai's installed `openai-codex` catalog for the signed-in subscription. Extend it the same way when the subscription serves an ID the installed catalog predates:
 
 ```yaml
-dsh-provider-extra:
-  codexExtraModels:
-    - id: gpt-6-luna
-      name: GPT-6 Luna
-      template: gpt-5.6-luna
+- id: dsh-provider-extra
+  config:
+    codexExtraModels:
+      - id: gpt-6-luna
+        name: GPT-6 Luna
+        template: gpt-5.6-luna
+    codexModels:
+      - gpt-6-luna
+      - gpt-5.6-sol
 ```
 
-Unlike the Go route, these entries must name their `template`: Codex ships no default sibling, so a declaration that names none is reported as a model diagnostic instead of cloned from another vendor's catalog. Later entries win by ID, a catalog-owned ID is not replaced, and an unknown template becomes a diagnostic without disabling the route. Both settings sections are read per request, so a committed change reaches the next turn with no restart.
+Unlike the Go route, these entries must name their `template`: Codex ships no default sibling, so a declaration that names none is reported as a model diagnostic instead of cloned from another vendor's catalog. Later entries win by ID, a catalog-owned ID is not replaced, and an unknown template becomes a diagnostic without disabling the route. `codexModels` narrows this route exactly as `models` narrows the Go route, under the same composition-time proof. Both declarations are read per request, so a committed settings change reaches the next turn with no restart.
 
 ## Provider sign-in
 

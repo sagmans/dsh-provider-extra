@@ -18,7 +18,7 @@ import type { Api, AuthContext, Credential, CredentialInfo, CredentialStore, Mod
 import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
 import { resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
-import { resolveExtraModels } from './extra-models.ts'
+import { resolveExtraModels, selectWhitelistedModels } from './extra-models.ts'
 import type { ExtraModelSpec } from './extra-models.ts'
 
 /** pi-ai catalog id of the OpenCode Go provider this route mirrors. */
@@ -71,6 +71,8 @@ export interface OpenCodeGoRouteConfig {
   headers?: Record<string, string>
   /** Extra models served beside the installed catalog; read from settings per request. */
   extraModels?: ExtraModelSpec[]
+  /** Exact model ids to serve, in this order; absent serves the whole catalog plus extras. */
+  models?: readonly string[]
 }
 
 /**
@@ -126,11 +128,11 @@ function withRoutingHeader<T extends RoutingStreamOptions>(options: T | undefine
  * every dispatch path funnels through them with the request's own options.
  * @param config - the route configuration.
  * @param catalog - the installed catalog provider to reuse.
- * @param extras - resolved extra models, re-keyed here like catalog models.
+ * @param resolved - catalog and extra models already resolved and selected.
  * @returns the provider to register into the adapter's model collection.
  */
-function routeProvider(config: OpenCodeGoRouteConfig, catalog: Provider, extras: readonly Model<Api>[]): Provider {
-  const models = [...catalog.getModels(), ...extras].map(model => ({
+function routeProvider(config: OpenCodeGoRouteConfig, catalog: Provider, resolved: readonly Model<Api>[]): Provider {
+  const models = resolved.map(model => ({
     ...model,
     ...config.baseURL === undefined ? {} : { baseUrl: config.baseURL },
     provider: config.provider,
@@ -159,6 +161,10 @@ export function buildOpenCodeGoProfile(config: OpenCodeGoRouteConfig): ResolvedP
     [...DEFAULT_EXTRA_MODELS, ...(config.extraModels ?? [])],
     DEFAULT_EXTRA_MODEL_TEMPLATE,
   )
+  // Selection runs last so a whitelist may name a shipped or declared extra
+  // exactly as it names a catalog model, and so a typo in either is refused
+  // here rather than served as a route quietly missing a model.
+  const models = selectWhitelistedModels(config.provider, [...catalog.getModels(), ...extras.models], config.models)
   return {
     provider: config.provider,
     displayName: config.displayName,
@@ -170,7 +176,7 @@ export function buildOpenCodeGoProfile(config: OpenCodeGoRouteConfig): ResolvedP
     retryPolicy: resolveRetryPolicy(undefined, 'dsh-provider-extra: opencode-go'),
     modelErrors: extras.modelErrors,
     configuredMaxTokens: new Map(),
-    piProvider: routeProvider(config, catalog, extras.models),
+    piProvider: routeProvider(config, catalog, models),
   }
 }
 
