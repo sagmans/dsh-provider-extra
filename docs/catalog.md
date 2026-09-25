@@ -152,7 +152,17 @@ The custom models' zero cost fields materialize legacy `NO_COST`; they mean unkn
 These defaults come from released `dsh-llm-pi-ai`'s `resolveRouteModels` and `DEFAULT_MAX_TOKENS`; no private function is called.
 Credential references in the example must match the target profile's existing authentication setup.
 
-The example proves exact configuration and loader behavior only.
-No provider request has verified endpoint availability, names, pricing, limits, or template capability equivalence.
-Parent-owned runtime tests must check the source editor and restart persistence in private clones.
-Provider smoke tests require separately authorized credentials and requests.
+The example defines configuration, not a guarantee of endpoint support.
+Private-clone smoke tests completed requests for these routes:
+
+- `opencode-go-session/deepseek-flash`, with `max`.
+- `openai-codex/gpt-6-astra`, with `max` over SSE.
+- `qwen-token-plan/qwen3.8-max`.
+- `qwen-token-plan/deepseek-v4.1-flash`, with `max` and a wire output cap of 384000 tokens.
+
+OpenAI and XAI requests stopped before HTTP because `OPENAI_API_KEY` and `XAI_API_KEY` were unresolved in the clones.
+These results do not establish availability for every selected model or account.
+They do not establish authoritative names, pricing, maximum capacities, or template capability equivalence.
+Source `0.1.7-alpha.2` tests passed for canonical saves, restart persistence, and field-scoped default rollback preserving newer privacy opt-outs.
+Released `0.1.5-rc.3` tests returned the explicit `CONFIG_PERSISTENCE_UNAVAILABLE` refusal.
+Repeat smoke tests with authorized credentials before activating another profile.
