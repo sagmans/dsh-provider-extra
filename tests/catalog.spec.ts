@@ -199,6 +199,12 @@ describe('managed catalog compilation', () => {
     assert.equal(captured.at(-1)!.headers.get('x-generation'), NEXT_GENERATION)
   })
 
+  it('lets a declared endpoint outrank the installed one', () => {
+    for (const source of SOURCES) {
+      assert.equal(served(config({ ...provider(source), baseURL: endpoint }))[0]!.baseUrl, endpoint, source)
+    }
+  })
+
   for (const source of SOURCES) {
     it('serves exactly the selected canonical model for ' + source, () => {
       const input = config(provider(source))
