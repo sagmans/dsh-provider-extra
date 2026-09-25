@@ -72,6 +72,9 @@ export function mountCatalog(ctx: Context, snapshot: CatalogSnapshot, config: Lo
           return auth.credentials.delete(credentialId(route))
         },
         list: async () => {
+          // Stored grants are part of the same owned membership: a conflicting
+          // composition must not report routes it can no longer dispatch to.
+          requireOwnership()
           const stored = await auth.credentials.list()
           return [...snapshot.providers.values()].flatMap(provider => {
             if (!('credentialProvider' in provider.auth)) return []
