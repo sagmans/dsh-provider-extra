@@ -15,7 +15,8 @@ import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands
 import type { AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions'
 import { renderEvent } from './codex-login.ts'
 import type { RouteDeclaration } from './login-route.ts'
-import type { LoginChoice, LoginCommandHost } from './login-contract.ts'
+import { StoredCredentialError } from './login-contract.ts'
+import type { LoginAuthType, LoginChoice, LoginCommandHost } from './login-contract.ts'
 import { answerLabels, answerText } from './login-choice.ts'
 
 /** Question ids belong to the caller; the answer echoes them back. */
@@ -58,6 +59,9 @@ const DECLARED_ROUTE_NOTICE = ' The provider was added to the llm-pi-ai settings
 /** Said when a configured route already carried the sign-in. */
 const PRESENT_ROUTE_NOTICE = ' The credential is stored and the route reads it on its next request.'
 
+/** A failed confirmation cannot imply that a completed host login rolled back. */
+const READBACK_FAILURE_PREFIX = 'The sign-in completed, but credential readback failed: '
+
 /**
  * Said when nothing here can serve the provider. A stored credential with no
  * route is the state that later fails a turn, so the failure belongs to the
@@ -72,6 +76,8 @@ const ATTEMPT_DEADLINE_MS = 15 * 60_000
 interface Attempt {
   /** Aborts the whole sign-in, whether the human declined or the clock ran out. */
   readonly abort: AbortController
+  /** Caller cancellation and local cancellation must reach the same pending work. */
+  readonly signal: AbortSignal
   /** Rendered notices so far, newest last. */
   readonly notices: string[]
   /** The question holding the page or device code open, while it is open. */
@@ -107,7 +113,7 @@ function openWait(host: LoginCommandHost, invocation: CommandInvocation, choice:
       detail: [...attempt.notices, WAIT_DETAIL].join('\n'),
       options: [{ label: DONE_LABEL }, { label: CANCEL_LABEL }],
     }],
-    signal: abort.signal,
+    signal: AbortSignal.any([attempt.signal, abort.signal]),
   })
   const settled = asked.then((answer) => {
     if (answerLabels(answer, NOTICE_QUESTION_ID).includes(CANCEL_LABEL)) {
@@ -177,7 +183,7 @@ async function askPrompt(
   const ask = host.ask({
     agent: invocation.agent,
     questions: [promptQuestion(prompt, choice)],
-    signal: attempt.abort.signal,
+    signal: attempt.signal,
   })
   if (prompt.type === 'select') {
     const options = prompt.options
@@ -225,7 +231,7 @@ function attemptInteraction(
   attempt: Attempt,
 ): AuthInteraction {
   return {
-    signal: attempt.abort.signal,
+    signal: attempt.signal,
     notify: (event: AuthEvent) => {
       attempt.notices.push(...renderEvent(event))
       if (attempt.wait === undefined) openWait(host, invocation, choice, attempt)
@@ -245,9 +251,10 @@ function successText(choice: LoginChoice, route: RouteDeclaration): string {
   return signedIn + PRESENT_ROUTE_NOTICE
 }
 
-/** Why one attempt ended without a credential, as the human should read it. */
+/** Failed attempts must distinguish cancelled work from credentials already committed. */
 function describeFailure(error: unknown, attempt: Attempt, choice: LoginChoice): string {
-  if (attempt.declined) return 'The ' + choice.providerName + ' sign-in was cancelled.'
+  if (error instanceof StoredCredentialError) return error.message
+  if (attempt.declined || (attempt.signal.aborted && !attempt.expired)) return 'The ' + choice.providerName + ' sign-in was cancelled.'
   if (attempt.expired) return 'The ' + choice.providerName + ' sign-in timed out; start it again to get a fresh code.'
   const message = error instanceof Error ? error.message : String(error)
   return 'The ' + choice.providerName + ' sign-in failed: ' + message
@@ -259,19 +266,35 @@ export async function runChoice(
   invocation: CommandInvocation,
   choice: LoginChoice,
 ): Promise<CommandResult> {
-  const attempt: Attempt = { abort: new AbortController(), notices: [], wait: undefined, declined: false, expired: false }
+  const abort = new AbortController()
+  const attempt: Attempt = {
+    abort,
+    signal: AbortSignal.any([invocation.signal, abort.signal]),
+    notices: [],
+    wait: undefined,
+    declined: false,
+    expired: false,
+  }
   const deadline = setTimeout(() => {
     attempt.expired = true
     attempt.abort.abort()
   }, ATTEMPT_DEADLINE_MS)
   if (typeof deadline === 'object') deadline.unref()
   try {
+    attempt.signal.throwIfAborted()
     const route = await host.login(choice, attemptInteraction(host, invocation, choice, attempt))
+    // A resolved host may already have committed credentials; late cancellation cannot undo them.
     await closeWait(attempt)
     // pi-ai persists during login, so resolving is not yet proof: only a
     // record read back is. A flow that resolves without one is a catalog bug
     // the human must hear about rather than a silent no-op sign-in.
-    const stored = await host.stored(choice.providerId)
+    let stored: LoginAuthType | undefined
+    try {
+      stored = await host.stored(choice.providerId)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new StoredCredentialError(READBACK_FAILURE_PREFIX + message, { cause: error })
+    }
     if (stored === undefined) {
       return {
         kind: 'error',

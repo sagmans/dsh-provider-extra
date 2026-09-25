@@ -23,6 +23,9 @@ const PROBE_TIMEOUT = 'the provider did not answer in time'
 /** Prefix that turns a provider's own words into the sentence a human reads. */
 const REJECTED_PREFIX = 'the provider did not accept this API key: '
 
+/** No model means no evidence, not a provider rejection or a successful proof. */
+const NO_MODELS_PREFIX = 'cannot verify this API key: no models are available for provider '
+
 /** The part of the collection a proof needs, so a test can answer for a provider. */
 export type KeyProbe = Pick<Models, 'getModels' | 'completeSimple'>
 
@@ -64,16 +67,19 @@ export class PendingCredentialStore implements CredentialStore {
  * Throws the provider's own explanation when it refuses, so the human can tell
  * a mistyped key from a key that lacks a plan or a region.
  */
-export async function proveApiKey(models: KeyProbe, providerId: string): Promise<void> {
+export async function proveApiKey(models: KeyProbe, providerId: string, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted()
   const model = models.getModels(providerId)[0]
-  // A provider with no catalog model cannot be asked anything, and refusing a
-  // key nothing has disproved would block a sign-in that may be perfectly good.
-  if (model === undefined) return
+  if (model === undefined) throw new Error(NO_MODELS_PREFIX + providerId)
+  const deadline = AbortSignal.timeout(PROBE_TIMEOUT_MS)
+  const probeSignal = signal === undefined ? deadline : AbortSignal.any([signal, deadline])
   const answer = await models.completeSimple(
     model,
     { messages: [{ role: 'user', content: PROBE_PROMPT, timestamp: Date.now() }] },
-    { maxTokens: PROBE_MAX_TOKENS, signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) },
+    { maxTokens: PROBE_MAX_TOKENS, signal: probeSignal },
   )
+  // A transport may finish despite cancellation; that answer must not authorize a key write.
+  probeSignal.throwIfAborted()
   if (answer.stopReason !== 'error' && answer.stopReason !== 'aborted') return
   throw new Error(REJECTED_PREFIX + (answer.errorMessage ?? PROBE_TIMEOUT))
 }

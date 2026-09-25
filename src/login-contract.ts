@@ -13,6 +13,9 @@ import type { CommandInvocation } from '@deepseek-ai/dsh-commands'
 import type { AskUserQuestionAnswer, AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions'
 import type { RouteDeclaration } from './login-route.ts'
 
+/** Post-commit facts must remain visible even when cancellation or a deadline also wins. */
+export class StoredCredentialError extends Error {}
+
 /** pi-ai's auth type ids: a subscription login, or a stored API key. */
 export type LoginAuthType = 'oauth' | 'api_key'
 

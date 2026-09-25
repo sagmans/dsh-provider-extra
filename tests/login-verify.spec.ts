@@ -1,7 +1,7 @@
 /**
  * Proving a key against fakes: the provider answers with the one field the
  * decision reads, so a refusal stays distinguishable from a timeout and a
- * provider with nothing to ask about is never refused on a guess.
+ * provider with no model never turns an unverified key into a stored credential.
  */
 
 import assert from 'node:assert/strict'
@@ -9,6 +9,14 @@ import { describe, it } from 'node:test'
 import type { Api, AssistantMessage, Credential, Model } from '@earendil-works/pi-ai'
 import { PendingCredentialStore, proveApiKey } from '../src/login-verify.ts'
 import type { KeyProbe } from '../src/login-verify.ts'
+
+const MODEL = { id: 'some-model' } as Model<Api>
+const PROVIDER_ID = 'anthropic'
+const EMPTY_PROVIDER_ID = 'radius'
+const PROBE_TIMEOUT_MS = 20_000
+const NO_MODELS_ERROR = 'cannot verify this API key: no models are available for provider radius'
+const CANCELLED = new Error('caller cancelled verification')
+const TIMED_OUT = new DOMException('probe timed out', 'TimeoutError')
 
 /** The province of an assistant message this decision reads; the rest is noise. */
 function answer(stopReason: AssistantMessage['stopReason'], errorMessage?: string): AssistantMessage {
@@ -26,8 +34,6 @@ function probeOf(models: readonly Model<Api>[], answered: AssistantMessage, aske
   } as unknown as KeyProbe
 }
 
-const MODEL = { id: 'some-model' } as Model<Api>
-
 describe('proveApiKey', () => {
   it('accepts the answer a working key draws, whatever the model chose to do with the token', async () => {
     await proveApiKey(probeOf([MODEL], answer('length')), 'anthropic')
@@ -44,10 +50,77 @@ describe('proveApiKey', () => {
     await assert.rejects(proveApiKey(probeOf([MODEL], answer('aborted')), 'anthropic'), /did not answer in time/u)
   })
 
-  it('keeps a key no model can be asked about, since nothing disproved it', async () => {
+  it('rejects a key that no model can verify without blaming the key', async () => {
     const asked = { count: 0 }
-    await proveApiKey(probeOf([], answer('error', 'never sent'), asked), 'radius')
+    await assert.rejects(
+      proveApiKey(probeOf([], answer('error', 'never sent'), asked), EMPTY_PROVIDER_ID),
+      { message: NO_MODELS_ERROR },
+    )
     assert.equal(asked.count, 0)
+  })
+
+  it('does not inspect models or send a request when already cancelled', async (t) => {
+    const controller = new AbortController()
+    const models = probeOf([MODEL], answer('stop'))
+    const listed = t.mock.method(models, 'getModels')
+    const completed = t.mock.method(models, 'completeSimple')
+    controller.abort(CANCELLED)
+    await assert.rejects(proveApiKey(models, PROVIDER_ID, controller.signal), error => error === CANCELLED)
+    assert.equal(listed.mock.callCount(), 0)
+    assert.equal(completed.mock.callCount(), 0)
+  })
+
+  it('passes caller cancellation and its reason to the probe', async (t) => {
+    const controller = new AbortController()
+    const models = probeOf([MODEL], answer('stop'))
+    let probeSignal: AbortSignal | undefined
+    t.mock.method(models, 'completeSimple', async (...[_model, _context, options]: Parameters<KeyProbe['completeSimple']>) => {
+      probeSignal = options?.signal
+      controller.abort(CANCELLED)
+      return answer('aborted')
+    })
+    await assert.rejects(proveApiKey(models, PROVIDER_ID, controller.signal), error => error === CANCELLED)
+    assert.equal(probeSignal?.aborted, true)
+    assert.equal(probeSignal?.reason, CANCELLED)
+  })
+
+  it('rejects a successful answer when the transport ignored caller cancellation', async (t) => {
+    const controller = new AbortController()
+    const models = probeOf([MODEL], answer('stop'))
+    t.mock.method(models, 'completeSimple', async () => {
+      controller.abort(CANCELLED)
+      return answer('stop')
+    })
+    await assert.rejects(proveApiKey(models, PROVIDER_ID, controller.signal), error => error === CANCELLED)
+  })
+
+  it('retains the 20-second deadline when a caller signal is present', async (t) => {
+    const controller = new AbortController()
+    const deadline = new AbortController()
+    const timeout = t.mock.method(AbortSignal, 'timeout', () => deadline.signal)
+    const models = probeOf([MODEL], answer('stop'))
+    let probeSignal: AbortSignal | undefined
+    t.mock.method(models, 'completeSimple', async (...[_model, _context, options]: Parameters<KeyProbe['completeSimple']>) => {
+      probeSignal = options?.signal
+      deadline.abort(TIMED_OUT)
+      return answer('stop')
+    })
+    await assert.rejects(proveApiKey(models, PROVIDER_ID, controller.signal), error => error === TIMED_OUT)
+    assert.equal(timeout.mock.calls[0]?.arguments[0], PROBE_TIMEOUT_MS)
+    assert.equal(probeSignal?.aborted, true)
+    assert.equal(probeSignal?.reason, TIMED_OUT)
+    assert.equal(controller.signal.aborted, false)
+  })
+
+  it('rechecks the deadline without an optional caller signal', async (t) => {
+    const deadline = new AbortController()
+    t.mock.method(AbortSignal, 'timeout', () => deadline.signal)
+    const models = probeOf([MODEL], answer('stop'))
+    t.mock.method(models, 'completeSimple', async () => {
+      deadline.abort(TIMED_OUT)
+      return answer('stop')
+    })
+    await assert.rejects(proveApiKey(models, PROVIDER_ID), error => error === TIMED_OUT)
   })
 })
 
