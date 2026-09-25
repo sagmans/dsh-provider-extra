@@ -1,7 +1,9 @@
 /**
  * dsh-provider-extra: extra LLM provider routes for DeepSeek Harness.
  *
- * Mounts two routes today. OpenCode Go stamps the x-opencode-session header
+ * Without a catalog, mounts two additive routes. An opted-in catalog owns
+ * the profile's complete model selection and default instead.
+ * OpenCode Go stamps the x-opencode-session header
  * from the live dsh session id, which the gateway requires for routing and
  * prompt-cache affinity and which the shipped adapters do not send. OpenAI
  * Codex serves a ChatGPT subscription through pi-ai's OAuth: the grant lives
@@ -61,6 +63,13 @@ import { DEFAULT_LOGIN_COMMAND_NAME, createLoginCommand } from './login-command.
 import type { LoginChoice, LoginCommandHost } from './login-contract.ts'
 import { declareProviderRoute, declaredCredentialRef } from './login-route.ts'
 import { PendingCredentialStore, proveApiKey } from './login-verify.ts'
+import { compileCatalog } from './catalog.ts'
+import type { CatalogConfig } from './catalog.ts'
+import { mountCatalog } from './catalog-runtime.ts'
+
+export { compileCatalog } from './catalog.ts'
+export type { CatalogConfig, CatalogProvider, CatalogModel, CatalogSelection, CatalogSnapshot } from './catalog.ts'
+export { buildCatalogProfile } from './catalog-routes.ts'
 
 /** Settings namespace configuration surfaces address this plugin's section by. */
 const SETTINGS_NS = 'dsh-provider-extra'
@@ -83,6 +92,8 @@ const codexExtraModelSchema: Schema<ExtraModelSpec> = Schema.object({
 })
 
 export interface Config {
+  /** Presence opts this profile into exclusive, validated catalog ownership. */
+  catalog?: CatalogConfig
   apiKeyEnv: string
   routeId: string
   displayName: string
@@ -118,7 +129,9 @@ export interface Config {
 // The assertion carries the one thing schemastery cannot state: every array in
 // this entry is read-only to the plugin, which only ever copies it, while an
 // array member schema is typed as the mutable array it validates.
-export const Config: Schema<Config> = Schema.object({
+export const Config: Schema<Config> = Schema.transform(Schema.object({
+  // Keep raw catalog presence: schemastery otherwise materializes absent arrays.
+  catalog: Schema.any(),
   apiKeyEnv: Schema.string().role('credential-ref').default(DEFAULT_OPENCODE_API_KEY_ENV),
   routeId: Schema.string().default(OPENCODE_GO_PROVIDER_ID),
   displayName: Schema.string().default('OpenCode Go'),
@@ -135,7 +148,12 @@ export const Config: Schema<Config> = Schema.object({
   codexTransport: Schema.union(CODEX_TRANSPORTS),
   loginCommandEnabled: Schema.boolean().default(true),
   loginCommandName: Schema.string().default(DEFAULT_LOGIN_COMMAND_NAME),
-}) as Schema<Config>
+}), (value) => {
+  // Object-level validation also sees explicit null, which field transforms skip.
+  // Loader validates before disposal, retaining the previous snapshot on failure.
+  compileCatalog(value.catalog)
+  return value
+}, true) as Schema<Config>
 
 /**
  * One configured model selection, or nothing when the entry declared none.
@@ -219,6 +237,11 @@ function catalogLoginProvider(providerId: string): Provider {
 }
 
 export function apply(ctx: Context, config: Config): void {
+  const snapshot = compileCatalog(config.catalog)
+  if (snapshot !== undefined) {
+    mountCatalog(ctx, snapshot)
+    return
+  }
   const models = selection(config.models)
   const codexModels = selection(config.codexModels)
   const route: OpenCodeGoRouteConfig = {

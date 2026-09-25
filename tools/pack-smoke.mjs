@@ -23,6 +23,8 @@ const REQUIRED = [
   'package/package.json',
   'package/cordis.patch.yml',
   'package/README.md',
+  'package/docs/catalog.md',
+  'package/docs/catalog-v1.example.json',
   'package/LICENSE',
   'package/dist/index.js',
   'package/dist/codex.js',

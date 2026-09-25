@@ -7,6 +7,21 @@ Extra provider routes for [DeepSeek Harness](https://github.com/deepseek-ai/deep
 
 Published on npm as [`@sagmans/dsh-provider-extra`](https://www.npmjs.com/package/@sagmans/dsh-provider-extra); every release carries a provenance attestation built by the tag workflow, and no npm token is stored. The code is [MIT licensed](LICENSE).
 
+## Opt-in canonical catalog
+
+Provider-extra remains optional. With no `catalog` Config, existing additive behavior stays unchanged.
+An opted-in profile can select ordered OpenAI API, Codex, Go, Qwen Token Plan, and XAI routes.
+One validated snapshot owns listings, dispatch, and `agentDefaultModel`; managed settings overlays do not apply.
+
+Read [catalog configuration and activation](docs/catalog.md) before adoption.
+The [exact 16-pair example](docs/catalog-v1.example.json) supplies the approved selection and explicit migration declarations.
+Copy it into the existing profile Config; it is not another runtime settings file.
+Only the adopted profile disables competing provider/default rows. TUI and ordinary profiles require no changes.
+
+Canonical default saves use the host profile `configEditor` when available.
+Unsupported hosts reject with `CONFIG_PERSISTENCE_UNAVAILABLE`, rather than writing legacy settings.
+Catalog presence does not prove endpoint availability, pricing, or metadata accuracy.
+
 ## Requirements
 
 - Node.js 24 LTS (verified with 24.20.0).
