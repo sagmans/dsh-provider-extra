@@ -5,9 +5,17 @@ import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
 import { recordKeyFor } from '../src/codex.ts'
 import { ENDPOINT, KEY, OLD_KEY, REF, SESSION, MemoryCredentials, completionResponse, mountLogin } from './login-host-fixture.ts'
 
-const SOURCES = ['openai', 'opencode-go', 'qwen-token-plan', 'xai']
 const COMPLETIONS = 'openai-completions'
 const RESPONSES = 'openai-responses'
+/**
+ * Any installed backend that offers key entry must survive the same login path.
+ * The fixture stubs one endpoint, so backends that build their URL from extra
+ * fields (Cloudflare account, Vertex project) stay out of this sample.
+ */
+const SOURCES = builtinProviders()
+  .filter(provider => provider.auth?.apiKey?.login !== undefined && provider.baseUrl !== undefined
+    && provider.getModels().some(model => model.api === COMPLETIONS || model.api === RESPONSES))
+  .map(provider => provider.id)
 const RESPONSE_ID = 'local-login-response'
 const MESSAGE_ID = 'local-login-message'
 
@@ -58,6 +66,12 @@ for (const source of SOURCES) for (const mode of ['reference', 'record'] as cons
     if (mode === 'reference') {
       assert.equal(store.values.get(REF), KEY)
       assert.deepEqual(store.records.get(recordKeyFor(source)), { kind: 'api-key', key: OLD_KEY })
-    } else assert.deepEqual(store.records.get(recordKeyFor(source)), { kind: 'api-key', key: KEY })
+    } else {
+      // Providers that also collect endpoint fields keep them beside the key, so the
+      // mode contract is where the key lands, not the record's exact shape.
+      const stored = store.records.get(recordKeyFor(source))
+      assert.equal(stored?.kind, 'api-key')
+      assert.equal(stored?.key, KEY)
+    }
   })
 }

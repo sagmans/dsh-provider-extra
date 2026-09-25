@@ -62,22 +62,32 @@ The plugin reads the profile Config, not this example or another catalog file.
 - `catalog.default`: one `{ provider, model, reasoningEffort? }` selection, or `null` when no models are selected.
 - Provider `id`: unique route ID used by the host.
 - Provider `name`: explicit display name.
-- Provider `source`: supported installed pi-ai backend: `openai`, `openai-codex`, `opencode-go`, `qwen-token-plan`, or `xai`.
-- Provider `auth`: exactly one of `{ apiKeyRef }` or `{ credentialProvider }`.
+- Provider `source`: any backend the installed pi-ai catalog provides (`openai`, `openai-codex`, `anthropic`, `zai`, a gateway, …); an id nothing installs rejects the candidate.
+  Omit it to declare your own endpoint instead.
+- Provider `api`: wire protocol of a route that names no `source`; required there and rejected beside `source`.
+  This build implements `anthropic-messages`, `azure-openai-responses`, `google-generative-ai`, `mistral-conversations`, `openai-completions`, and `openai-responses`.
+  A declared protocol also supplies every model's `metadata.api`.
+- Provider `auth`: optional. Exactly one of `{ apiKeyRef }` or `{ credentialProvider }` when present.
+  Absent means the route carries no key of its own, as a local endpoint does.
+  `credentialProvider` needs an installed `source` to own the grant.
 - `apiKeyRef`: host credential reference, not a secret value. Without a credential service, the route reads that environment variable.
 - `credentialProvider`: the source provider ID. Route aliases share that source's existing `llm-pi-ai` credential record.
-- Provider `models`: required ordered array. Each model requires a wire `id` and explicit `name`.
+- Provider `models`: ordered selection entries; each requires a wire `id` and explicit `name`. Declare exactly one of `models` and `filter`.
+- Provider `filter`: `{ include?, exclude? }` patterns over the installed `source` catalog. `*` is the only wildcard; every other character matches itself.
+  An absent `include` starts from every installed model, and each match keeps its installed ID, name, cost, capacity, protocol, and endpoint.
+  Matches keep installed order; the route serves them minus `exclude`.
+  Curating with `filter` needs an installed `source`; `models: []` remains the explicit empty selection.
 - Model `aliases`: optional unique selector inputs. Aliases never create additional listing rows.
 - Model `template`: optional explicit installed model ID from the same source.
 - Model `metadata`: optional public pi-ai model facts. Overrides apply even when pi-ai already ships the requested ID.
 - Model `defaultMaxTokens`: optional explicit request default, used only when the request supplies no output cap.
   It must be a positive safe integer no greater than the resolved model capacity.
-- Provider `baseURL`: optional HTTP(S) endpoint override, without embedded credentials or fragments.
+- Provider `baseURL`: required when no installed `source` is named, an optional override otherwise; no embedded credentials or fragments.
 - Provider `headers`: optional static HTTP headers. Keep secrets in credential references.
 - Provider `transport`: optional Codex transport: `sse`, `websocket`, `websocket-cached`, or `auto`.
 - Provider `fallbackSessionId`: optional OpenCode Go identity for requests without a session ID.
 
-Unknown fields, duplicate IDs or aliases, unknown sources, malformed metadata, and unsupported default effort reject the whole candidate.
+Unknown fields, duplicate IDs or aliases, unknown sources or protocols, missing endpoints, malformed metadata and patterns, and unsupported default effort reject the whole candidate.
 Omitting `catalog` differs from `providers: []`. Empty provider or model arrays select nothing; they never expand a source catalog.
 An empty provider list requires `default: null`. A nonempty model selection requires one valid default.
 A selected route with `models: []` remains empty even when pi-ai ships models for its source.
@@ -90,7 +100,7 @@ Templates express operator intent, not endpoint support or verified capability e
 
 An unknown model without a template requires all these metadata fields:
 
-- `api`: a protocol implemented by the source.
+- `api`: a protocol the installed source implements, or the route's declared `api`.
 - `reasoning`: boolean.
 - `input`: nonempty list of `text` and/or `image`.
 - `cost`: finite nonnegative `input`, `output`, `cacheRead`, and `cacheWrite` rates.

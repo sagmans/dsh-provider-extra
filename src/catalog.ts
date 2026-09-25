@@ -35,13 +35,26 @@ export interface CatalogSelection {
   model: string
   reasoningEffort?: ModelThinkingLevel
 }
-/** An installed source supplies protocol behavior, not permission to expand the selection. */
+/** Curated membership without restating every entry the installed source publishes. */
+export interface CatalogFilter {
+  include?: string[]
+  exclude?: string[]
+}
+/**
+ * Membership is the profile's alone. A route either borrows an installed
+ * backend's protocol, or declares its own protocol and endpoint; `models`
+ * lists the selection and `filter` curates it by pattern.
+ */
 export interface CatalogProvider {
   id: string
   name: string
-  source: string
-  auth: CatalogAuth
-  models: CatalogModel[]
+  source?: string
+  /** Wire protocol of a route that names no installed source. */
+  api?: string
+  /** Absent means the route carries no key of its own, as a local endpoint does. */
+  auth?: CatalogAuth
+  models?: CatalogModel[]
+  filter?: CatalogFilter
   baseURL?: string
   headers?: Record<string, string>
   transport?: Transport
@@ -80,10 +93,13 @@ export function compileCatalog(config: unknown): CatalogSnapshot | undefined {
   let count = 0
   for (const provider of normalized.providers) {
     const routeAliases = new Map<string, string>()
-    for (const model of provider.models) {
+    // Served models, not declarations: a filtered route owns ids it never spells out.
+    for (const model of profiles.get(provider.id)!.piProvider!.getModels()) {
       routeAliases.set(model.id, model.id)
-      for (const alias of model.aliases ?? []) routeAliases.set(alias, model.id)
       count++
+    }
+    for (const model of provider.models ?? []) {
+      for (const alias of model.aliases ?? []) routeAliases.set(alias, model.id)
     }
     aliases.set(provider.id, routeAliases)
   }

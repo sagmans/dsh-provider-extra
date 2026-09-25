@@ -10,7 +10,8 @@ Published on npm as [`@sagmans/dsh-provider-extra`](https://www.npmjs.com/packag
 ## Opt-in canonical catalog
 
 Provider-extra remains optional. With no `catalog` Config, existing additive behavior stays unchanged.
-An opted-in profile can select ordered OpenAI API, Codex, Go, Qwen Token Plan, and XAI routes.
+An opted-in profile can select ordered routes from any backend the installed pi-ai catalog provides, or from an endpoint you declare with its own protocol and base URL.
+A route lists its models explicitly, or curates the installed source catalog with `include`/`exclude` patterns that keep every installed fact.
 One validated snapshot owns listings, dispatch, and `agentDefaultModel`; managed settings overlays do not apply.
 
 Read [catalog configuration and activation](docs/catalog.md) before adoption.

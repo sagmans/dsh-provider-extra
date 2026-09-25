@@ -194,7 +194,7 @@ test('invalid catalog never replaces the copied patch or reports success', async
   await writeFile(f.catalog, JSON.stringify(invalid))
   const result = run(f)
   assert.notEqual(result.status, 0)
-  assert.match(result.stderr, /unsupported managed source/)
+  assert.match(result.stderr, /unknown installed provider/)
   assert.doesNotMatch(result.stdout, /composition-verified/)
   assert.equal(await readFile(join(f.home, 'profiles', PROFILE, 'cordis.patch.yml'), 'utf8'), ORIGINAL)
 })
