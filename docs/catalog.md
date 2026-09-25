@@ -33,7 +33,7 @@ Mount provider-extra after those rows so its preflight can detect existing owner
 Preflight rejects any existing adapter, provider directory, or default owner before registering managed routes.
 It never disables another plugin. The public registry cannot veto a later unrelated adapter or directory registration.
 The public `llm/adapters-updated` notification detects that conflict immediately and logs `CATALOG_OWNER_COLLISION`.
-Managed model listing, selection resolution, request preparation, default reads and saves, credential listing, and new dispatch fail closed while the conflict exists. The sign-in command's status and route choices read metadata only, and signing in refuses to start while the conflict exists.
+Managed model listing, selection resolution, request preparation, default reads and saves, and new dispatch fail closed while the conflict exists, and the adapter's own credential hooks check ownership as well. The sign-in command's status and route choices read metadata only, and signing in refuses to start while the conflict exists.
 A captured request checks ownership before and after API-key or OAuth grant lookup.
 OAuth modification checks again before entering the store and its locked updater, then after completion.
 A successful refresh already started under valid ownership persists its rotated grant, even if a conflict appears before completion.
