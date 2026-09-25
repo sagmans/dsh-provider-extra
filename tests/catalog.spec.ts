@@ -9,10 +9,11 @@ import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
 import { getSupportedThinkingLevels, defaultProviderAuthContext, InMemoryCredentialStore } from '@earendil-works/pi-ai'
 import type { Api, Model } from '@earendil-works/pi-ai'
 import { compileCatalog } from '../src/catalog.ts'
-import type { CatalogConfig, CatalogProvider, CatalogModel } from '../src/catalog.ts'
+import type { CatalogAuth, CatalogConfig, CatalogFilter, CatalogProvider, CatalogModel } from '../src/catalog.ts'
 import { buildCatalogProfile } from '../src/catalog-routes.ts'
 
-const SOURCES = ['openai', 'openai-codex', 'opencode-go', 'qwen-token-plan', 'xai']
+/** Membership is the profile's, so coverage ranges over every installed backend. */
+const SOURCES = builtinProviders().filter(provider => provider.getModels().length > 0).map(provider => provider.id)
 const WIRE_ID = 'managed-wire-id'
 const ROUTE = 'managed-route'
 const NAME = 'Managed model'
@@ -65,7 +66,10 @@ function sourceModel(source = 'openai'): Model<Api> {
   return builtinProviders().find(provider => provider.id === source)!.getModels()[0]!
 }
 
-function provider(source = 'openai', models?: CatalogModel[]): CatalogProvider {
+/** Declared routes keep membership and credential mode required, so specs read them without re-checking. */
+type DeclaredRoute = CatalogProvider & { auth: CatalogAuth; models: CatalogModel[] }
+
+function provider(source = 'openai', models?: CatalogModel[]): DeclaredRoute {
   const model = sourceModel(source)
   return {
     id: ROUTE, name: 'Managed provider', source,
@@ -74,7 +78,7 @@ function provider(source = 'openai', models?: CatalogModel[]): CatalogProvider {
   }
 }
 
-function config(route = provider()): CatalogConfig {
+function config(route: DeclaredRoute = provider()): CatalogConfig {
   return { version: 1, providers: [route], default: route.models.length ? { provider: route.id, model: route.models[0]!.id } : null }
 }
 
@@ -107,9 +111,9 @@ describe('managed catalog compilation', () => {
     const snapshot = compileCatalog(input)!
     const profile = snapshot.profiles.get(ROUTE)!
     const model = profile.piProvider!.getModels()[0]!
-    input.providers[0]!.models[0]!.metadata!.cost!.input = 9
+    input.providers[0]!.models![0]!.metadata!.cost!.input = 9
     input.providers[0]!.headers!['x-generation'] = NEXT_GENERATION
-    input.providers[0]!.models[0]!.aliases!.push('later-alias')
+    input.providers[0]!.models![0]!.aliases!.push('later-alias')
     assert.equal(model.cost.input, 1)
     assert.equal(profile.headers!['x-generation'], FIRST_GENERATION)
     assert.throws(() => snapshot.resolveSelection({ provider: ROUTE, model: 'later-alias' }))
@@ -207,8 +211,8 @@ describe('managed catalog compilation', () => {
     })
   }
 
-  it('rejects sources outside the five managed routes without a fallback', () => {
-    for (const source of ['anthropic', UNKNOWN, 'alibaba']) {
+  it('rejects a source nothing installs without a fallback', () => {
+    for (const source of [UNKNOWN, 'not-a-backend']) {
       assert.throws(() => compileCatalog(config({ ...provider(), source })), /source/)
     }
   })
@@ -341,5 +345,133 @@ describe('managed catalog compilation', () => {
     assert.equal(snapshot.providers.size, 0)
     assert.equal(snapshot.selection, null)
     assert.throws(() => snapshot.resolveSelection({ provider: 'missing', model: 'missing' }))
+  })
+})
+
+describe('declared endpoints without an installed source', () => {
+  const CUSTOM_MODEL = 'local-model'
+  const CUSTOM_KEY = 'local-gateway-key'
+
+  /** A source-less route states its own protocol, endpoint, and every model fact. */
+  function custom(overrides: Partial<CatalogProvider> = {}): DeclaredRoute {
+    return {
+      id: ROUTE, name: 'Local gateway', api: 'openai-completions', baseURL: endpoint,
+      auth: { apiKeyRef: 'MANAGED_API_KEY' },
+      models: [{ id: CUSTOM_MODEL, name: NAME, metadata: {
+        reasoning: false, input: ['text'], contextWindow: 8192, maxTokens: 4096,
+        cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 },
+      } }],
+      ...overrides,
+    } as DeclaredRoute
+  }
+
+  function config(route: CatalogProvider): CatalogConfig {
+    return { version: 1, providers: [route], default: { provider: route.id!, model: CUSTOM_MODEL } }
+  }
+
+  it('streams the declared protocol against the declared endpoint', async () => {
+    const snapshot = compileCatalog(config(custom()))!
+    const model = snapshot.profiles.get(ROUTE)!.piProvider!.getModels()[0]!
+    assert.equal(model.api, 'openai-completions')
+    assert.equal(model.baseUrl, endpoint)
+    assert.equal(model.provider, ROUTE)
+    const adapter = new PiAiAdapter({ profiles: () => snapshot.profiles, resolveApiKey: async () => CUSTOM_KEY,
+      auth: { credentials: new InMemoryCredentialStore(), authContext: defaultProviderAuthContext() } })
+    const prepared = await adapter.prepareCall(ROUTE, CUSTOM_MODEL)
+    const request: GenerateOptions = { provider: ROUTE, model: CUSTOM_MODEL, messages: [] }
+    let chunks = 0
+    for await (const _chunk of prepared.stream(request)) chunks++
+    const received = captured.at(-1)!
+    assert.equal(received.body.model, CUSTOM_MODEL)
+    assert.equal(received.headers.get('authorization'), 'Bearer ' + CUSTOM_KEY)
+    assert.ok(chunks > 0)
+  })
+
+  it('refuses a protocol this build cannot implement', () => {
+    assert.throws(() => compileCatalog(config(custom({ api: 'not-a-protocol' }))), /unsupported protocol/)
+  })
+
+  it('refuses to inherit the protocol or the endpoint it has no source for', () => {
+    const noProtocol = custom()
+    delete noProtocol.api
+    assert.throws(() => compileCatalog(config(noProtocol)), /must declare its protocol/)
+    const noEndpoint = custom()
+    delete noEndpoint.baseURL
+    assert.throws(() => compileCatalog(config(noEndpoint)), /must declare its endpoint/)
+    assert.throws(() => compileCatalog(config(custom({ source: UNKNOWN }))), /unknown installed provider/)
+  })
+
+  it('refuses to move a declared model off its declared protocol', () => {
+    const route = custom()
+    route.models[0]!.metadata = { ...route.models[0]!.metadata, api: 'openai-responses' }
+    assert.throws(() => compileCatalog(config(route)), /speaks its declared protocol/)
+  })
+
+  it('refuses a credential provider that no installed source owns', () => {
+    assert.throws(() => compileCatalog(config(custom({ auth: { credentialProvider: 'local-gateway' } }))), /needs an installed source/)
+  })
+})
+
+describe('filtered membership', () => {
+  const SOURCE = 'openai'
+  const INSTALLED = builtinProviders().find(provider => provider.id === SOURCE)!.getModels()
+  const IDS = INSTALLED.map(model => model.id)
+  /** One family prefix keeps the expectation readable while still exercising real patterns. */
+  const PREFIX = IDS[0]!.split('-')[0]!
+  const MATCHED = IDS.filter(id => id.startsWith(PREFIX))
+
+  function config(filter: CatalogFilter, served: readonly string[]): CatalogConfig {
+    return { version: 1, providers: [{ id: ROUTE, name: 'Curated catalog', source: SOURCE, auth: { apiKeyRef: 'MANAGED_API_KEY' }, filter }],
+      default: served.length === 0 ? null : { provider: ROUTE, model: served[0]! } }
+  }
+
+  const servedIds = (input: CatalogConfig): string[] =>
+    compileCatalog(input)!.profiles.get(ROUTE)!.piProvider!.getModels().map(model => model.id)
+
+  it('serves only the installed models its include patterns match', () => {
+    assert.ok(MATCHED.length > 0)
+    assert.deepEqual(servedIds(config({ include: [PREFIX + '*'] }, MATCHED)), MATCHED)
+  })
+
+  it('subtracts excluded ids without restating the ones it keeps', () => {
+    const kept = MATCHED.filter(id => id !== MATCHED[0])
+    assert.deepEqual(servedIds(config({ include: [PREFIX + '*'], exclude: [MATCHED[0]!] }, kept)), kept)
+  })
+
+  it('keeps every installed fact on an expanded entry', () => {
+    const source = INSTALLED.find(model => model.id === MATCHED[0])!
+    const model = compileCatalog(config({ include: [MATCHED[0]!] }, MATCHED))!.profiles.get(ROUTE)!.piProvider!.getModels()[0]!
+    assert.equal(model.id, source.id)
+    assert.equal(model.name, source.name)
+    assert.equal(model.api, source.api)
+    assert.deepEqual(model.cost, source.cost)
+    assert.equal(model.contextWindow, source.contextWindow)
+    assert.equal(model.maxTokens, source.maxTokens)
+    assert.equal(model.baseUrl, source.baseUrl)
+    assert.equal(model.provider, ROUTE)
+  })
+
+  it('resolves a filtered id for selection and refuses everything else', () => {
+    const snapshot = compileCatalog(config({ include: [PREFIX + '*'] }, MATCHED))!
+    assert.equal(snapshot.resolveSelection({ provider: ROUTE, model: MATCHED.at(-1)! }).model, MATCHED.at(-1))
+    assert.equal(snapshot.selection!.model, MATCHED[0])
+    const outside = IDS.find(id => !MATCHED.includes(id))
+    if (outside !== undefined) assert.throws(() => snapshot.resolveSelection({ provider: ROUTE, model: outside }), /outside the managed selection/)
+  })
+
+  it('refuses declarations that mix, omit, or empty the membership', () => {
+    const declared: CatalogProvider = { id: ROUTE, name: 'Curated catalog', source: SOURCE, auth: { apiKeyRef: 'MANAGED_API_KEY' } }
+    assert.throws(() => compileCatalog({ version: 1, providers: [declared], default: null }), /declare exactly one of models or filter/)
+    assert.throws(() => compileCatalog(config({}, [])), /declare include, exclude, or both/)
+    assert.throws(() => compileCatalog(config({ include: [] }, [])), /expected at least one pattern/)
+    assert.throws(() => compileCatalog({
+      version: 1, default: null,
+      providers: [{ ...declared, models: [{ id: IDS[0]!, name: NAME }], filter: { include: [PREFIX + '*'] } }],
+    }), /declare exactly one of models or filter/)
+  })
+
+  it('refuses to filter a route that installs no catalog', () => {
+    const route: CatalogProvider = { id: ROUTE, name: 'Local gateway', api: 'openai-completions', baseURL: endpoint, filter: { include: ['*'] } }
+    assert.throws(() => compileCatalog({ version: 1, providers: [route], default: null }), /filter expands the catalog of an installed source/)
   })
 })

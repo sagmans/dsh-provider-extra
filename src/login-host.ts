@@ -34,7 +34,8 @@ interface Credentials extends CodexCredentialService {
 interface Target {
   id: string
   provider: Provider
-  auth: { apiKeyRef: string } | { credentialProvider: string }
+  /** Absent for a catalog route that carries no credential of its own. */
+  auth?: { apiKeyRef: string } | { credentialProvider: string }
   served: boolean
 }
 
@@ -91,7 +92,7 @@ function choicesFor(targets: readonly Target[]): LoginChoice[] {
   return targets.flatMap(target => {
     const choices: LoginChoice[] = []
     const oauth = target.provider.auth?.oauth
-    if ('credentialProvider' in target.auth && oauth?.login !== undefined) {
+    if (target.auth !== undefined && 'credentialProvider' in target.auth && oauth?.login !== undefined) {
       choices.push({ providerId: target.id, providerName: target.provider.name, authType: 'oauth', methodLabel: oauth.loginLabel ?? oauth.name })
     }
     const apiKey = target.provider.auth?.apiKey
@@ -106,6 +107,7 @@ function choicesFor(targets: readonly Target[]): LoginChoice[] {
 async function writableStore(ctx: Context, target: Target): Promise<Credentials> {
   const credentials = ctx.get('credentials') as Credentials | undefined
   if (credentials === undefined) throw new LlmError(MISSING_STORE, 'NO_CREDENTIAL_STORE')
+  if (target.auth === undefined) throw new LlmError('This route names no credential to store', 'UNSUPPORTED_CREDENTIAL')
   if ('apiKeyRef' in target.auth) {
     if (typeof credentials.set !== 'function' || typeof credentials.describe !== 'function') {
       throw new LlmError(MISSING_STORE, 'NO_CREDENTIAL_STORE')
@@ -127,7 +129,7 @@ async function authenticate(target: Target, method: LoginAuthType, credentials: 
   const signal = interaction.signal ?? new AbortController().signal
   signal.throwIfAborted()
   guard()
-  if (method === 'oauth' && 'credentialProvider' in target.auth) {
+  if (method === 'oauth' && target.auth !== undefined && 'credentialProvider' in target.auth) {
     // The flow owns cancellation until it returns a grant; then persistence owns completion.
     const grant = await target.provider.auth.oauth!.login!({ ...interaction, signal })
     await auth.credentials.modify(target.auth.credentialProvider, async () => grant)
@@ -140,7 +142,7 @@ async function authenticate(target: Target, method: LoginAuthType, credentials: 
   await proveApiKey(pending, target.provider.id, signal)
   signal.throwIfAborted()
   guard()
-  if ('apiKeyRef' in target.auth) {
+  if (target.auth !== undefined && 'apiKeyRef' in target.auth) {
     if (credential.type !== 'api_key' || credential.key === undefined) {
       throw new LlmError('This login did not return a single API key for ' + target.auth.apiKeyRef, 'UNSUPPORTED_CREDENTIAL')
     }
@@ -156,6 +158,7 @@ async function authenticate(target: Target, method: LoginAuthType, credentials: 
       throw new StoredCredentialError('The credential was stored, but readback failed: ' + (error instanceof Error ? error.message : String(error)))
     }
   } else {
+    if (target.auth === undefined) throw new LlmError('This route names no credential to store', 'UNSUPPORTED_CREDENTIAL')
     await auth.credentials.modify(target.auth.credentialProvider, async () => {
       // A queued record update can still stop before its locked mutation begins.
       signal.throwIfAborted()
@@ -193,6 +196,7 @@ export function mountLoginCommand(ctx: Context, config: LoginConfig, routes: Log
       stored: async id => {
         const target = targetFor(id)
         const credentials = ctx.get('credentials') as Credentials | undefined
+        if (target.auth === undefined) return undefined
         if ('apiKeyRef' in target.auth) {
           return (await credentials?.resolve(target.auth.apiKeyRef)) === undefined ? undefined : 'api_key'
         }
@@ -201,7 +205,7 @@ export function mountLoginCommand(ctx: Context, config: LoginConfig, routes: Log
       },
       reference: async id => {
         const target = targetFor(id)
-        if (!('apiKeyRef' in target.auth)) return undefined
+        if (target.auth === undefined || !('apiKeyRef' in target.auth)) return undefined
         const ref = target.auth.apiKeyRef
         const credentials = ctx.get('credentials') as Credentials | undefined
         if (credentials === undefined) return { ref, ...(process.env[ref] ? { source: 'env' } : {}) }

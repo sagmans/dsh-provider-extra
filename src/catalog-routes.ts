@@ -1,13 +1,15 @@
-/** Installed providers retain protocol and auth ownership; managed routes own selected model facts. */
+/** A route borrows an installed backend's protocol or declares its own; either way it owns its model facts. */
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
-import type { Api, Model, Provider, StreamOptions } from '@earendil-works/pi-ai'
+import { createProvider } from '@earendil-works/pi-ai'
+import type { Api, ApiKeyAuth, Model, Provider, StreamOptions } from '@earendil-works/pi-ai'
 import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
-import type { CatalogProvider } from './catalog.ts'
+import type { CatalogFilter, CatalogProvider } from './catalog.ts'
+import { PROTOCOL_STREAMS } from './catalog-protocols.ts'
 
 const ERROR_PREFIX = 'dsh-provider-extra: catalog '
-const ROUTE_FIELDS = ['id', 'name', 'source', 'auth', 'models', 'baseURL', 'headers', 'transport', 'fallbackSessionId']
+const ROUTE_FIELDS = ['id', 'name', 'source', 'api', 'auth', 'models', 'filter', 'baseURL', 'headers', 'transport', 'fallbackSessionId']
 const MODEL_FIELDS = ['id', 'name', 'aliases', 'template', 'metadata', 'defaultMaxTokens']
 const METADATA_FIELDS = ['api', 'reasoning', 'input', 'cost', 'contextWindow', 'maxTokens', 'thinkingLevelMap', 'headers', 'compat']
 const REQUIRED_METADATA = ['api', 'reasoning', 'input', 'cost', 'contextWindow', 'maxTokens']
@@ -16,7 +18,6 @@ const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'ma
 const TRANSPORTS = ['sse', 'websocket', 'websocket-cached', 'auto']
 const GO_SOURCE = 'opencode-go'
 const CODEX_SOURCE = 'openai-codex'
-const SOURCES = ['openai', CODEX_SOURCE, GO_SOURCE, 'qwen-token-plan', 'xai']
 const SESSION_HEADER = 'x-opencode-session'
 const STREAM_IDLE_TIMEOUT_MS = 300_000
 const MAX_REQUEST_IMAGE_BYTES = 20 * 1024 * 1024
@@ -169,21 +170,65 @@ function routeOptions<T extends StreamOptions>(options: T | undefined, config: C
   return { ...options, headers, ...(config.transport === undefined ? {} : { transport: config.transport }) } as T
 }
 
+/** `*` is the only wildcard; every other character matches itself. */
+function patterns(value: unknown, path: string): RegExp[] {
+  const list = strings(value, path)
+  if (list.length === 0) catalogError(path, 'expected at least one pattern')
+  return list.map(pattern => new RegExp('^' + pattern.split('*').map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$'))
+}
+
+/** Expansion keeps every installed fact, so curating a catalog costs no restatement. */
+function filteredModels(filter: unknown, source: Provider, input: CatalogProvider, path: string): Model<Api>[] {
+  const data = catalogRecord(filter, ['include', 'exclude'], path)
+  const include = 'include' in data ? patterns(data.include, path + '.include') : undefined
+  const exclude = 'exclude' in data ? patterns(data.exclude, path + '.exclude') : undefined
+  if (include === undefined && exclude === undefined) catalogError(path, 'declare include, exclude, or both')
+  return source.getModels()
+    .filter(model => (include === undefined || include.some(pattern => pattern.test(model.id)))
+      && !(exclude ?? []).some(pattern => pattern.test(model.id)))
+    .map(model => {
+      const baseUrl = input.baseURL ?? model.baseUrl ?? source.baseUrl
+      if (baseUrl === undefined) catalogError(path, 'model "' + model.id + '" publishes no endpoint; declare baseURL')
+      return structuredClone({ ...model, provider: input.id, baseUrl })
+    })
+}
+
+/** pi-ai requires auth semantics on every provider; the harness resolves this route's key before dispatch. */
+function harnessApiKeyAuth(name: string): ApiKeyAuth {
+  return {
+    name,
+    resolve: ({ credential }) => Promise.resolve({
+      auth: credential?.key === undefined ? {} : { apiKey: credential.key },
+      source: name,
+    }),
+  }
+}
+
 /** A standalone builder validates its complete declaration before constructing any adapter profile. */
 export function buildCatalogProfile(input: CatalogProvider): ResolvedPiAiProviderProfile {
   const path = 'provider'
   const raw = catalogRecord(input, ROUTE_FIELDS, path)
-  for (const key of ['id', 'name', 'source']) catalogString(raw[key], path + '.' + key)
-  if (!SOURCES.includes(raw.source as string)) catalogError(path + '.source', 'unsupported managed source ' + raw.source)
-  const source = builtinProviders().find(provider => provider.id === raw.source)
-  if (!source) catalogError(path + '.source', 'unknown installed provider ' + raw.source)
-  const auth = catalogRecord(raw.auth, ['apiKeyRef', 'credentialProvider'], path + '.auth')
-  if (Object.keys(auth).length !== 1) catalogError(path + '.auth', 'choose exactly one credential mode')
-  if ('apiKeyRef' in auth) {
-    if (source.id === CODEX_SOURCE) catalogError(path + '.auth', 'openai-codex requires credentialProvider OAuth')
-    catalogString(auth.apiKeyRef, path + '.auth.apiKeyRef')
-    credentialRef(auth.apiKeyRef)
-  } else if (auth.credentialProvider !== source.id) catalogError(path + '.auth', 'credentialProvider must equal source')
+  catalogString(raw.id, path + '.id')
+  catalogString(raw.name, path + '.name')
+  // No backend list gates a profile: `source` names an installed pi-ai provider and
+  // anything else is the user's own endpoint, whose protocol they declare.
+  const source = 'source' in raw ? (catalogString(raw.source, path + '.source'), builtinProviders().find(provider => provider.id === raw.source)) : undefined
+  if ('source' in raw && source === undefined) catalogError(path + '.source', 'unknown installed provider ' + raw.source)
+  const declaredApi = 'api' in raw ? (catalogString(raw.api, path + '.api'), raw.api as string) : undefined
+  if (source === undefined) {
+    if (declaredApi === undefined) catalogError(path + '.api', 'a route with no installed source must declare its protocol')
+    if (!(declaredApi in PROTOCOL_STREAMS)) catalogError(path + '.api', 'unsupported protocol ' + declaredApi + '; this build implements ' + Object.keys(PROTOCOL_STREAMS).join(', '))
+  } else if (declaredApi !== undefined) catalogError(path + '.api', 'api belongs to a route with no installed source')
+  const auth = 'auth' in raw ? catalogRecord(raw.auth, ['apiKeyRef', 'credentialProvider'], path + '.auth') : undefined
+  if (auth !== undefined) {
+    if (Object.keys(auth).length !== 1) catalogError(path + '.auth', 'choose exactly one credential mode')
+    if ('apiKeyRef' in auth) {
+      if (source?.id === CODEX_SOURCE) catalogError(path + '.auth', 'openai-codex requires credentialProvider OAuth')
+      catalogString(auth.apiKeyRef, path + '.auth.apiKeyRef')
+      credentialRef(auth.apiKeyRef)
+    } else if (source === undefined) catalogError(path + '.auth', 'credentialProvider needs an installed source to own the grant')
+    else if (auth.credentialProvider !== source.id) catalogError(path + '.auth', 'credentialProvider must equal source')
+  }
   if ('baseURL' in raw) {
     catalogString(raw.baseURL, path + '.baseURL')
     let url: URL
@@ -191,18 +236,24 @@ export function buildCatalogProfile(input: CatalogProvider): ResolvedPiAiProvide
     if (!HTTP_PROTOCOLS.includes(url.protocol) || url.username || url.password || url.hash) catalogError(path, 'invalid baseURL')
   }
   if ('headers' in raw) headers(raw.headers, path + '.headers')
-  if ('transport' in raw && (!TRANSPORTS.includes(raw.transport as string) || source.id !== CODEX_SOURCE)) {
+  if ('transport' in raw && (!TRANSPORTS.includes(raw.transport as string) || source?.id !== CODEX_SOURCE)) {
     catalogError(path + '.transport', 'transport requires openai-codex and a supported mode')
   }
   if ('fallbackSessionId' in raw) {
     catalogString(raw.fallbackSessionId, path + '.fallbackSessionId')
-    if (source.id !== GO_SOURCE) catalogError(path, 'fallbackSessionId requires opencode-go source')
+    if (source?.id !== GO_SOURCE) catalogError(path, 'fallbackSessionId requires opencode-go source')
   }
-  if (!Array.isArray(raw.models)) catalogError(path + '.models', 'expected an explicit array')
-  const installed = source.getModels()
+  if (source === undefined && !('baseURL' in raw)) catalogError(path + '.baseURL', 'a route with no installed source must declare its endpoint')
+  if (('models' in raw) === ('filter' in raw)) catalogError(path, 'declare exactly one of models or filter')
+  const declarations = 'filter' in raw ? undefined : raw.models
+  if (declarations !== undefined && !Array.isArray(declarations)) catalogError(path + '.models', 'expected an explicit array')
+  if ('filter' in raw && source === undefined) catalogError(path + '.filter', 'filter expands the catalog of an installed source')
+  const installed = source?.getModels()
   const names = new Set<string>()
   const configuredMaxTokens = new Map<string, number>()
-  const models = raw.models.map((entry, index): Model<Api> => {
+  const models = declarations === undefined
+    ? filteredModels(raw.filter, source!, input, path + '.filter')
+    : declarations.map((entry, index): Model<Api> => {
     const location = path + '.models[' + index + ']'
     const spec = catalogRecord(entry, MODEL_FIELDS, location)
     catalogString(spec.id, location + '.id')
@@ -213,12 +264,14 @@ export function buildCatalogProfile(input: CatalogProvider): ResolvedPiAiProvide
       names.add(name)
     }
     if ('template' in spec) catalogString(spec.template, location + '.template')
-    const template = installed.find(model => model.id === (spec.template ?? spec.id))
+    const template = installed?.find(model => model.id === (spec.template ?? spec.id))
     if ('template' in spec && !template) catalogError(location, 'unknown template ' + spec.template)
-    if ('metadata' in spec) metadata(spec.metadata, template?.api, location + '.metadata')
+    if ('metadata' in spec) metadata(spec.metadata, template?.api ?? declaredApi, location + '.metadata')
     const overrides = spec.metadata as Partial<Model<Api>> | undefined
     if (!template) {
       for (const key of REQUIRED_METADATA) {
+        // A route with no installed source states the protocol once, for every model it serves.
+        if (key === 'api' && declaredApi !== undefined) continue
         if (!overrides || !(key in overrides)) catalogError(location, 'unknown model requires complete metadata: missing ' + key)
       }
     }
@@ -230,25 +283,34 @@ export function buildCatalogProfile(input: CatalogProvider): ResolvedPiAiProvide
       }
       configuredMaxTokens.set(spec.id, limit)
     }
-    const api = overrides?.api ?? template?.api
+    const api = overrides?.api ?? template?.api ?? declaredApi
     // Inherited compatibility and thinking metadata belong to the template's protocol.
     if (template && api !== template.api) catalogError(location + '.metadata.api', 'cannot change a template-backed protocol')
-    if (!installed.some(model => model.api === api)) catalogError(location, 'source does not describe API ' + api)
-    const baseUrl = input.baseURL ?? template?.baseUrl ?? source.baseUrl
+    if (declaredApi !== undefined && api !== declaredApi) catalogError(location + '.metadata.api', 'a route with no installed source speaks its declared protocol')
+    if (installed !== undefined && !installed.some(model => model.api === api)) catalogError(location, 'source does not describe API ' + api)
+    const baseUrl = input.baseURL ?? template?.baseUrl ?? source?.baseUrl
     if (baseUrl === undefined) catalogError(location, 'unknown model requires provider baseURL')
-    return freezeCatalogValue(structuredClone({ ...template, ...overrides, id: spec.id, name: spec.name, provider: input.id, baseUrl }) as Model<Api>)
+    return freezeCatalogValue(structuredClone({ ...template, ...overrides, id: spec.id, name: spec.name, api, provider: input.id, baseUrl }) as Model<Api>)
   })
   const config = freezeCatalogValue(structuredClone(input))
-  const routed: Provider = {
-    id: config.id, name: config.name, baseUrl: config.baseURL ?? source.baseUrl,
-    auth: detachedAuth(source.auth),
-    getModels: () => freezeCatalogValue(models),
-    stream: (model, context, options) => source.stream(model, context, routeOptions(options, config)),
-    streamSimple: (model, context, options) => source.streamSimple(model, context, routeOptions(options, config)),
-  }
+  // A route with no installed source borrows no vendor behavior: pi-ai's own
+  // implementation for the declared protocol streams it, under this route's facts.
+  const routed: Provider = source === undefined
+    ? createProvider({
+        id: config.id, name: config.name, baseUrl: config.baseURL, headers: config.headers,
+        auth: { apiKey: harnessApiKeyAuth(config.name) },
+        models: freezeCatalogValue(models), api: PROTOCOL_STREAMS[declaredApi!]!,
+      })
+    : {
+        id: config.id, name: config.name, baseUrl: config.baseURL ?? source.baseUrl,
+        auth: detachedAuth(source.auth),
+        getModels: () => freezeCatalogValue(models),
+        stream: (model, context, options) => source.stream(model, context, routeOptions(options, config)),
+        streamSimple: (model, context, options) => source.streamSimple(model, context, routeOptions(options, config)),
+      }
   return freezeCatalogValue({
     provider: config.id, displayName: config.name,
-    ...('apiKeyRef' in config.auth ? { apiKeyEnv: credentialRef(config.auth.apiKeyRef) } : {}),
+    ...(config.auth !== undefined && 'apiKeyRef' in config.auth ? { apiKeyEnv: credentialRef(config.auth.apiKeyRef) } : {}),
     ...(config.baseURL === undefined ? {} : { baseURL: config.baseURL }),
     ...(config.headers === undefined ? {} : { headers: config.headers }),
     ...(config.transport === undefined ? {} : { transport: config.transport }),

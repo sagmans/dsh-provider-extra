@@ -77,7 +77,7 @@ export function mountCatalog(ctx: Context, snapshot: CatalogSnapshot, config: Lo
           requireOwnership()
           const stored = await auth.credentials.list()
           return [...snapshot.providers.values()].flatMap(provider => {
-            if (!('credentialProvider' in provider.auth)) return []
+            if (provider.auth === undefined || !('credentialProvider' in provider.auth)) return []
             const record = stored.find(item => item.providerId === credentialId(provider.id))
             return record === undefined ? [] : [{ ...record, providerId: provider.id }]
           })
@@ -90,7 +90,7 @@ export function mountCatalog(ctx: Context, snapshot: CatalogSnapshot, config: Lo
       requireOwnership()
       const configured = snapshot.providers.get(route)
       if (configured === undefined) throw new LlmError('dsh-provider-extra: unknown catalog route "' + route + '"', 'UNKNOWN_PROVIDER')
-      if (!('apiKeyRef' in configured.auth)) return undefined
+      if (configured.auth === undefined || !('apiKeyRef' in configured.auth)) return undefined
       const ref = configured.auth.apiKeyRef
       const credentials = ctx.get('credentials') as Credentials | undefined
       const key = credentials === undefined ? process.env[ref] : (await credentials.resolve(ref))?.value
