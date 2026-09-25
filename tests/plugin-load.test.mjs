@@ -9,7 +9,7 @@ const CODEX_ROUTE = 'openai-codex'
 const EXTRA_MODEL = 'deepseek-flash'
 const CATALOG_MODEL = 'deepseek-v4-flash'
 const ENTRY_EXTRA_MODEL = 'entry-flash'
-const CODEX_EXTRA_MODEL = 'gpt-6-luna'
+const CODEX_EXTRA_MODEL = 'example-codex-model'
 const CODEX_EXTRA_TEMPLATE = 'gpt-5.6-luna'
 
 /**

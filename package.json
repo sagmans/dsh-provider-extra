@@ -56,6 +56,7 @@
     }
   },
   "scripts": {
+    "catalog:setup": "node tools/catalog-setup.mjs",
     "codex:login": "node --import tsx/esm src/login-cli.ts",
     "test": "node --import tsx/esm --test \"tests/*.spec.ts\"",
     "typecheck": "tsc --noEmit",

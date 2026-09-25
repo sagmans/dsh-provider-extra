@@ -7,7 +7,7 @@ With `catalog`, the profile Config becomes the only owner of model membership an
 ## Activate one profile
 
 1. Back up the profile patch and legacy settings before migration.
-2. Copy the generated `catalog` object into the existing `dsh-provider-extra` row's `config`.
+2. Copy your validated `catalog` object into the existing `dsh-provider-extra` row's `config`.
 3. Disable competing provider rows and `agent-default-model` in that profile only.
 4. Restart the profile after a successful build.
 
@@ -45,14 +45,17 @@ It logs once per transition into conflict, not once per failed operation.
 Unrelated global rows remain observable through the public registry; the plugin never filters or rewrites that directory.
 Therefore activation must remove competing rows from the entire profile, not only the earlier rows.
 
-Managed mode does not install the legacy settings section or the route-declaring login command.
+Managed mode does not install the legacy settings section or declare generic routes during sign-in.
 Where supported, it disables automatic settings projection for its own Config.
-Use the existing attended login CLI to store grants; credentials remain separate from configuration.
+The existing sign-in command uses the selected catalog routes and their configured credential references.
+Credentials remain separate from configuration. The attended CLI supports Codex only.
 
 ## Version 1 shape
 
-[Exact 16-pair example](catalog-v1.example.json) contains the complete provider-extra Config, not a new settings file.
-Copy its contents into the profile row. The plugin does not read the example file at runtime.
+[Shape example](catalog-v1.example.json) validates with synthetic `example-` identifiers and illustrative metadata.
+Its model does not identify a real endpoint model. Replace the model, metadata, and credential reference before dispatch.
+The supported `openai` source illustrates the schema; it is not a recommended provider selection.
+The plugin reads the profile Config, not this example or another catalog file.
 
 - `catalog.version`: required integer `1`.
 - `catalog.providers`: required ordered array of selected routes.
@@ -107,6 +110,8 @@ Public `compileCatalog(config)` returns a detached, immutable snapshot, or `unde
 Public `buildCatalogProfile(provider)` constructs a validated route through installed pi-ai delegates.
 No private generic resolver is used.
 The snapshot supplies listings, exact model resolution, prepared dispatch, and `agentDefaultModel.currentSelection()`.
+On the pinned host matrix, the catalog default contributes only provider and model to new sessions.
+That host ignores `catalog.default.reasoningEffort`; choose reasoning effort in the session surface.
 `resolveSelection()` canonicalizes aliases for defaults and saves; host calls use listed wire IDs.
 An empty catalog's `currentSelection()` rejects with `NO_DEFAULT_MODEL`.
 
@@ -128,41 +133,76 @@ A pre-disposal update check also retains that state if a competing adapter appea
 Prepared calls retain their captured adapter revision across successful reloads.
 External lifecycle failures and startup ordering still depend on the host; parent runtime tests cover profile reconciliation.
 
-## Migration inputs and example provenance
+## Migration inputs
 
-Migration is explicit, not automatic. This package never edits live homes during installation.
-Inputs are the composed profile Config, explicit provider-extra extra-model templates and selections,
-legacy `llm-pi-ai` route declarations, existing credential references, and the current default selection.
-Read legacy settings only to identify previously effective values; resolve conflicting owners before generating the new Config.
-Preserve unrelated profile rows, comments, credentials, and user preferences.
-Keep backups until restart, rollback, exact membership, and default persistence checks pass.
+Migration is explicit. Installation never activates a catalog or edits a live home.
+Use the composed profile, declared templates, credential references, and current default as migration inputs.
+Read legacy settings only to identify previously effective values. Resolve conflicting owners before activation.
+Preserve unrelated rows, comments, credentials, and preferences.
+Keep backups until restart, rollback, membership, and default persistence checks pass.
 
-The example records the approved operator-specific selection of 16 pairs in five routes.
-It preserves explicit legacy templates for GPT-6 Sol/Luna, MiMo V2.6 Flash/Pro, and Space Bunny Free.
-`space-bunny-free <- mimo-v2.5` was an explicit migration input, not a general recommendation or automatic fallback.
-Go's `deepseek-flash <- deepseek-v4-flash` preserves the existing shipped extra-model declaration.
-Its selector alias is `deepseek-v4.1-flash`; its wire ID remains `deepseek-flash`.
+A model template expresses operator intent, not verified endpoint compatibility.
+Zero cost metadata means unknown pricing, not free inference.
+Test selected models separately with authorized credentials before adopting another profile.
+Keep personal model selections outside the package and repository fixtures.
 
-Qwen DeepSeek preserves the declared context, output limit, modalities, effort map, and compatibility flags.
-Its explicit `defaultMaxTokens: 384000` also preserves the legacy request policy.
-Grok declares no request default; its inherited output capacity does not create one.
-Grok preserves the declared protocol, context, modalities, and effort map.
-Its `maxTokens: 32768` materializes the legacy adapter default, not a verified endpoint maximum.
-The custom models' zero cost fields materialize legacy `NO_COST`; they mean unknown pricing, not free inference.
-These defaults come from released `dsh-llm-pi-ai`'s `resolveRouteModels` and `DEFAULT_MAX_TOKENS`; no private function is called.
-Credential references in the example must match the target profile's existing authentication setup.
+## Clone-only development setup
 
-The example defines configuration, not a guarantee of endpoint support.
-Private-clone smoke tests completed requests for these routes:
+This source-checkout command prepares a new private clone without launching a profile.
+It never authenticates, contacts a model, or writes the source home.
+The clone can contain copied credentials. Keep it private and never commit it.
 
-- `opencode-go-session/deepseek-flash`, with `max`.
-- `openai-codex/gpt-6-astra`, with `max` over SSE.
-- `qwen-token-plan/qwen3.8-max`.
-- `qwen-token-plan/deepseek-v4.1-flash`, with `max` and a wire output cap of 384000 tokens.
+1. Install this checkout's dependencies and supply an existing profile to clone.
+2. Prepare a private JSON file containing only your complete `{"catalog": {...}}` Config.
+3. Supply the existing generic dogfood helper as an explicit development-tool path.
+4. Choose a nonexistent clone path whose parent already exists.
+5. Run:
 
-OpenAI and XAI requests stopped before HTTP because `OPENAI_API_KEY` and `XAI_API_KEY` were unresolved in the clones.
-These results do not establish availability for every selected model or account.
-They do not establish authoritative names, pricing, maximum capacities, or template capability equivalence.
-Source `0.1.7-alpha.2` tests passed for canonical saves, restart persistence, and field-scoped default rollback preserving newer privacy opt-outs.
-Released `0.1.5-rc.3` tests returned the explicit `CONFIG_PERSISTENCE_UNAVAILABLE` refusal.
-Repeat smoke tests with authorized credentials before activating another profile.
+```sh
+pnpm catalog:setup \
+  --helper /path/to/run-plugin-from-worktree.sh \
+  --source-home /path/to/source-home \
+  --home /path/to/new-private-clone \
+  --profile web \
+  --catalog /private/path/catalog-config.json \
+  [--allow-row ROW_ID]...
+```
+
+`--catalog` is required. There is no packaged selection or implicit model set.
+Setup refuses a row whose name reads like a model provider unless `--allow-row ROW_ID` asserts that
+row registers no provider and no default owner. A real home carries such rows, and setup cannot see
+row provenance, so the flag keeps the check fail-closed instead of guessing; failure output names the
+row and prints the flag to use. Boot-time `CATALOG_OWNER_COLLISION` stays authoritative either way.
+The shape example validates, but its synthetic model cannot serve requests; replace it with your own selection.
+The helper is optional development tooling, not a provider runtime dependency.
+A checkout of the independent TUI currently carries it under:
+
+```text
+.agents/skills/dsh-tui-dogfood/scripts/run-plugin-from-worktree.sh
+```
+
+Use the generic helper, not the TUI-specific wrapper.
+The command builds this provider checkout and relinks only this package in the fresh clone.
+It uses the locally installed development harness by default.
+To select another installed harness, add `--dsh /absolute/path/to/dsh/lib/bin.js`.
+Pass the actual JavaScript bin, not a shell launcher. Setup prints the matching launch command.
+
+Setup appends JSON flow-map sequence rows to the clone's profile patch.
+It retains all original patch bytes and uses the selected host's public parser and composition API.
+It disables recognized native adapters, the generic pi-ai adapter, and the default owner by their actual composed IDs.
+It preserves the core LLM service and unrelated configuration.
+The command checks the resolved provider module and isolated catalog listing/default APIs before replacing the clone patch.
+
+Success means `composition-verified`, not verified runtime ownership or authentication.
+Setup does not boot arbitrary profile plugins or infer their service ownership.
+Boot-time `CATALOG_OWNER_COLLISION` remains authoritative, including for late-mounted plugins.
+Launch only the printed clone command, then use sign-in status to inspect authentication.
+The released host can still reject persistent default saves with `CONFIG_PERSISTENCE_UNAVAILABLE`.
+No setup path writes legacy defaults as a fallback.
+
+Setup refuses existing or overlapping homes, unsafe clone files, and unresolved or mismatched provider builds.
+It also refuses unknown provider-like rows, opaque nested/include rows, and missing or duplicate core/catalog owners.
+Profile patches must accept appended block-sequence rows; flow arrays and closed YAML documents require manual clone-only setup.
+Home-level overrides must not counteract the catalog or disabled owner rows.
+A refusal leaves the source home unchanged and never reports success.
+A failed setup can leave a private clone for inspection; choose another new path for the next attempt.

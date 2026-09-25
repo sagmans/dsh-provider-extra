@@ -3,170 +3,21 @@
     "version": 1,
     "providers": [
       {
-        "id": "openai",
-        "name": "OpenAI API",
+        "id": "example-route",
+        "name": "Example provider",
         "source": "openai",
         "auth": {
-          "apiKeyRef": "OPENAI_API_KEY"
+          "apiKeyRef": "EXAMPLE_API_KEY"
         },
         "models": [
           {
-            "id": "gpt-6-astra",
-            "name": "GPT-6 Astra"
-          },
-          {
-            "id": "gpt-6-sol",
-            "name": "GPT-6 Sol",
-            "template": "gpt-5.6-sol"
-          },
-          {
-            "id": "gpt-6-luna",
-            "name": "GPT-6 Luna",
-            "template": "gpt-5.6-luna"
-          }
-        ]
-      },
-      {
-        "id": "openai-codex",
-        "name": "OpenAI Codex",
-        "source": "openai-codex",
-        "auth": {
-          "credentialProvider": "openai-codex"
-        },
-        "transport": "sse",
-        "models": [
-          {
-            "id": "gpt-6-astra",
-            "name": "GPT-6 Astra"
-          },
-          {
-            "id": "gpt-6-sol",
-            "name": "GPT-6 Sol",
-            "template": "gpt-5.6-sol"
-          },
-          {
-            "id": "gpt-6-luna",
-            "name": "GPT-6 Luna",
-            "template": "gpt-5.6-luna"
-          }
-        ]
-      },
-      {
-        "id": "opencode-go-session",
-        "name": "OpenCode Go (session)",
-        "source": "opencode-go",
-        "auth": {
-          "apiKeyRef": "OPENCODE_GO_API_KEY"
-        },
-        "fallbackSessionId": "dsh-provider-extra",
-        "models": [
-          {
-            "id": "deepseek-flash",
-            "name": "DeepSeek V4.1 Flash",
-            "aliases": [
-              "deepseek-v4.1-flash"
-            ],
-            "template": "deepseek-v4-flash"
-          },
-          {
-            "id": "hy4-preview",
-            "name": "Hy4 Preview"
-          },
-          {
-            "id": "mimo-v2.6-flash",
-            "name": "MiMo V2.6 Flash",
-            "template": "mimo-v2.5"
-          },
-          {
-            "id": "mimo-v2.6-pro",
-            "name": "MiMo V2.6 Pro",
-            "template": "mimo-v2.5-pro"
-          },
-          {
-            "id": "muse-spark-1.3-contributor",
-            "name": "Muse Spark 1.3 Contributor"
-          },
-          {
-            "id": "omen-alpha",
-            "name": "Omen Alpha"
-          },
-          {
-            "id": "space-bunny-free",
-            "name": "Space Bunny Free",
-            "template": "mimo-v2.5"
-          }
-        ]
-      },
-      {
-        "id": "qwen-token-plan",
-        "name": "Qwen Token Plan",
-        "source": "qwen-token-plan",
-        "baseURL": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
-        "auth": {
-          "apiKeyRef": "QWEN_TOKEN_PLAN_API_KEY"
-        },
-        "models": [
-          {
-            "id": "qwen3.8-max",
-            "name": "Qwen3.8 Max"
-          },
-          {
-            "id": "deepseek-v4.1-flash",
-            "name": "DeepSeek V4.1 Flash",
-            "defaultMaxTokens": 384000,
-            "metadata": {
-              "api": "openai-completions",
-              "reasoning": true,
-              "input": [
-                "text",
-                "image"
-              ],
-              "cost": {
-                "input": 0,
-                "output": 0,
-                "cacheRead": 0,
-                "cacheWrite": 0
-              },
-              "contextWindow": 1000000,
-              "maxTokens": 384000,
-              "thinkingLevelMap": {
-                "off": null,
-                "minimal": null,
-                "low": "low",
-                "medium": null,
-                "high": "high",
-                "xhigh": null,
-                "max": "max"
-              },
-              "compat": {
-                "supportsStore": false,
-                "supportsDeveloperRole": false,
-                "supportsReasoningEffort": true,
-                "supportsStrictMode": true,
-                "thinkingFormat": "qwen"
-              }
-            }
-          }
-        ]
-      },
-      {
-        "id": "xai",
-        "name": "XAI",
-        "source": "xai",
-        "baseURL": "https://api.x.ai/v1",
-        "auth": {
-          "apiKeyRef": "XAI_API_KEY"
-        },
-        "models": [
-          {
-            "id": "grok-4.7",
-            "name": "Grok 4.7",
+            "id": "example-model",
+            "name": "Example model",
             "metadata": {
               "api": "openai-responses",
-              "reasoning": true,
+              "reasoning": false,
               "input": [
-                "text",
-                "image"
+                "text"
               ],
               "cost": {
                 "input": 0,
@@ -174,26 +25,16 @@
                 "cacheRead": 0,
                 "cacheWrite": 0
               },
-              "contextWindow": 500000,
-              "maxTokens": 32768,
-              "thinkingLevelMap": {
-                "off": null,
-                "minimal": null,
-                "low": "low",
-                "medium": "medium",
-                "high": "high",
-                "xhigh": "xhigh",
-                "max": null
-              }
+              "contextWindow": 8192,
+              "maxTokens": 1024
             }
           }
         ]
       }
     ],
     "default": {
-      "provider": "opencode-go-session",
-      "model": "deepseek-flash",
-      "reasoningEffort": "max"
+      "provider": "example-route",
+      "model": "example-model"
     }
   }
 }

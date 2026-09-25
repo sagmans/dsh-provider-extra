@@ -14,7 +14,10 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { createRequire } from 'node:module'
+import { checkSelections } from './catalog-artifact-policy.mjs'
+import { writeFileSync } from 'node:fs'
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 
@@ -47,6 +50,7 @@ const BIN_NAME = 'dsh-provider-extra-login'
 
 /** Dependency protocols that cannot be resolved from a registry tarball. */
 const LOCAL_PROTOCOLS = ['link:', 'workspace:', 'file:']
+const SHAPE_EXAMPLE = 'package/docs/catalog-v1.example.json'
 
 function walk(directory) {
   const found = []
@@ -104,6 +108,28 @@ try {
 
   const patch = read('package/cordis.patch.yml')
   if (!patch.includes(PATCH_ROW)) problems.push('the bundle patch no longer names ' + PATCH_ROW)
+  const local = createRequire(import.meta.url)
+  const host = createRequire(local.resolve('@deepseek-ai/dsh/package.json'))
+  const { loadOverlayPatches } = await import(pathToFileURL(host.resolve('@deepseek-ai/dsh-app-boot')).href)
+  const parsedPatch = text => {
+    const file = join(out, 'example.patch.yml')
+    writeFileSync(file, text)
+    return loadOverlayPatches('pack-smoke', file)
+  }
+  const defaults = parsedPatch(patch)
+  if (defaults.some(row => row.config?.catalog || row.insert?.some(child => child.config?.catalog))) problems.push('bundle patch must not activate a catalog')
+  for (const entry of entries) {
+    if (entry.endsWith('.json') && entry !== 'package/package.json') {
+      if (entry !== SHAPE_EXAMPLE) problems.push('unexpected packaged catalog/data file: ' + entry)
+      checkSelections(JSON.parse(read(entry)), entry, problems)
+    }
+    if (entry.endsWith('.yml') || entry.endsWith('.yaml')) checkSelections(parsedPatch(read(entry)), entry, problems)
+    if (entry.endsWith('.md')) {
+      for (const match of read(entry).matchAll(/```(yaml|yml|json)\n([\s\S]*?)```/gu)) {
+        checkSelections(match[1] === 'json' ? JSON.parse(match[2]) : parsedPatch(match[2]), entry, problems)
+      }
+    }
+  }
 
   const modules = walk(join(ROOT, 'dist')).filter(file => file.endsWith('.js'))
   for (const module of modules) execFileSync(process.execPath, ['--check', module], { stdio: 'inherit' })
