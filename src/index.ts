@@ -1,7 +1,9 @@
 /**
  * dsh-provider-extra: extra LLM provider routes for DeepSeek Harness.
  *
- * Mounts two routes today. OpenCode Go stamps the x-opencode-session header
+ * Without a catalog, mounts two additive routes. An opted-in catalog owns
+ * the profile's complete model selection and default instead.
+ * OpenCode Go stamps the x-opencode-session header
  * from the live dsh session id, which the gateway requires for routing and
  * prompt-cache affinity and which the shipped adapters do not send. OpenAI
  * Codex serves a ChatGPT subscription through pi-ai's OAuth: the grant lives
@@ -31,14 +33,11 @@ import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
-import type { CredentialInfo } from '@deepseek-ai/dsh-credentials'
 import { LlmError, assertUsableApiKey, resolveImageAttachmentAccess } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-commands'
 import type {} from '@deepseek-ai/dsh-user-questions'
-import { createModels } from '@earendil-works/pi-ai'
-import type { Provider } from '@earendil-works/pi-ai'
-import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
+import type { Transport } from '@earendil-works/pi-ai'
 import {
   DEFAULT_EXTRA_MODEL_TEMPLATE,
   DEFAULT_OPENCODE_API_KEY_ENV,
@@ -53,56 +52,24 @@ import {
   buildCodexProfile,
   codexApiKey,
   codexAuth,
-  recordKeyFor,
 } from './codex.ts'
+import { CODEX_TRANSPORTS } from './codex.ts'
 import type { CodexCredentialService, CodexRouteConfig } from './codex.ts'
-import { DEFAULT_LOGIN_COMMAND_NAME, createLoginCommand } from './login-command.ts'
-import type { LoginChoice, LoginCommandHost } from './login-contract.ts'
-import { declareProviderRoute, declaredCredentialRef } from './login-route.ts'
-import { PendingCredentialStore, proveApiKey } from './login-verify.ts'
+import { DEFAULT_LOGIN_COMMAND_NAME } from './login-command.ts'
+import { mountLoginCommand } from './login-host.ts'
+import { compileCatalog } from './catalog.ts'
+import type { CatalogConfig } from './catalog.ts'
+import { mountCatalog } from './catalog-runtime.ts'
+
+export { compileCatalog } from './catalog.ts'
+export type { CatalogConfig, CatalogProvider, CatalogModel, CatalogSelection, CatalogSnapshot } from './catalog.ts'
+export { buildCatalogProfile } from './catalog-routes.ts'
 
 /** Settings namespace configuration surfaces address this plugin's section by. */
 const SETTINGS_NS = 'dsh-provider-extra'
 
-export interface Config {
-  apiKeyEnv: string
-  routeId: string
-  displayName: string
-  baseURL?: string
-  fallbackSessionId?: string
-  headers?: Record<string, string>
-  codexEnabled: boolean
-  codexRouteId: string
-  codexDisplayName: string
-  loginCommandEnabled: boolean
-  loginCommandName: string
-}
-
-export const Config: Schema<Config> = Schema.object({
-  apiKeyEnv: Schema.string().role('credential-ref').default(DEFAULT_OPENCODE_API_KEY_ENV),
-  routeId: Schema.string().default(OPENCODE_GO_PROVIDER_ID),
-  displayName: Schema.string().default('OpenCode Go'),
-  baseURL: Schema.string(),
-  fallbackSessionId: Schema.string(),
-  headers: Schema.dict(Schema.string()),
-  codexEnabled: Schema.boolean().default(true),
-  codexRouteId: Schema.string().default(DEFAULT_CODEX_ROUTE_ID),
-  codexDisplayName: Schema.string().default(DEFAULT_CODEX_DISPLAY_NAME),
-  loginCommandEnabled: Schema.boolean().default(true),
-  loginCommandName: Schema.string().default(DEFAULT_LOGIN_COMMAND_NAME),
-})
-
-export const name = 'dsh-provider-extra'
-export const inject = ['llm']
-
-/** Restart-free model additions, read from the settings section per request. */
-export interface ProviderExtraSection {
-  /** Extra models served beside the installed catalog; later entries win by id. */
-  extraModels: ExtraModelSpec[]
-  /** Extra models the Codex route serves; each names the catalog sibling it clones. */
-  codexExtraModels: ExtraModelSpec[]
-}
-
+// Declared extra models: the composition entry and the settings section share
+// these two shapes, so one document's declaration is valid in the other.
 const goExtraModelSchema: Schema<ExtraModelSpec> = Schema.object({
   id: Schema.string().required(),
   name: Schema.string(),
@@ -118,6 +85,97 @@ const codexExtraModelSchema: Schema<ExtraModelSpec> = Schema.object({
   template: Schema.string(),
 })
 
+export interface Config {
+  /** Presence opts this profile into exclusive, validated catalog ownership. */
+  catalog?: CatalogConfig
+  apiKeyEnv: string
+  routeId: string
+  displayName: string
+  baseURL?: string
+  fallbackSessionId?: string
+  headers?: Record<string, string>
+  /**
+   * Extra models for the OpenCode Go route. It lives in the composition entry
+   * rather than only in the settings section because a harness without a
+   * settings document can only deliver a profile's declared extras through
+   * its own config; a settings section still overrides this whole array.
+   */
+  extraModels?: readonly ExtraModelSpec[]
+  /** Exact model ids the OpenCode Go route serves, in this order. */
+  models?: readonly string[]
+  codexEnabled: boolean
+  codexRouteId: string
+  codexDisplayName: string
+  /** Extra models for the Codex route, under the same precedence as {@link extraModels}. */
+  codexExtraModels?: readonly ExtraModelSpec[]
+  /** Exact model ids the Codex route serves, in this order. */
+  codexModels?: readonly string[]
+  /**
+   * Transport to pin on every Codex request. Unset keeps pi-ai's own choice,
+   * whose websocket path needs a connection that outlives the response; a
+   * deployment where that connection never settles pins sse instead.
+   */
+  codexTransport?: Transport
+  loginCommandEnabled: boolean
+  loginCommandName: string
+}
+
+// The assertion carries the one thing schemastery cannot state: every array in
+// this entry is read-only to the plugin, which only ever copies it, while an
+// array member schema is typed as the mutable array it validates.
+export const Config: Schema<Config> = Schema.transform(Schema.object({
+  // Keep raw catalog presence: schemastery otherwise materializes absent arrays.
+  catalog: Schema.any(),
+  apiKeyEnv: Schema.string().role('credential-ref').default(DEFAULT_OPENCODE_API_KEY_ENV),
+  routeId: Schema.string().default(OPENCODE_GO_PROVIDER_ID),
+  displayName: Schema.string().default('OpenCode Go'),
+  baseURL: Schema.string(),
+  fallbackSessionId: Schema.string(),
+  headers: Schema.dict(Schema.string()),
+  extraModels: Schema.array(goExtraModelSchema),
+  models: Schema.array(Schema.string()),
+  codexEnabled: Schema.boolean().default(true),
+  codexRouteId: Schema.string().default(DEFAULT_CODEX_ROUTE_ID),
+  codexDisplayName: Schema.string().default(DEFAULT_CODEX_DISPLAY_NAME),
+  codexExtraModels: Schema.array(codexExtraModelSchema),
+  codexModels: Schema.array(Schema.string()),
+  codexTransport: Schema.union(CODEX_TRANSPORTS),
+  loginCommandEnabled: Schema.boolean().default(true),
+  loginCommandName: Schema.string().default(DEFAULT_LOGIN_COMMAND_NAME),
+}), (value) => {
+  // Object-level validation also sees explicit null, which field transforms skip.
+  // Loader validates before disposal, retaining the previous snapshot on failure.
+  compileCatalog(value.catalog)
+  return value
+}, true) as Schema<Config>
+
+/**
+ * One configured model selection, or nothing when the entry declared none.
+ * schemastery materializes an undeclared array member as an empty array, so an
+ * empty declaration is the absence of a selection: the route serves everything
+ * its catalog and extras resolved, exactly as a profile that never named the
+ * field does.
+ */
+function selection(declared: readonly string[] | undefined): readonly string[] | undefined {
+  return declared === undefined || declared.length === 0 ? undefined : declared
+}
+
+export const name = 'dsh-provider-extra'
+export const inject = ['llm']
+
+/**
+ * Restart-free model additions, read from the settings section per request.
+ * The section layer sits over the composition entry, so a harness with a
+ * settings document reshapes these two arrays and one without keeps the
+ * entry's own values (see {@link Config.extraModels}).
+ */
+export interface ProviderExtraSection {
+  /** Extra models served beside the installed catalog; later entries win by id. */
+  extraModels: ExtraModelSpec[]
+  /** Extra models the Codex route serves; each names the catalog sibling it clones. */
+  codexExtraModels: ExtraModelSpec[]
+}
+
 const SectionSchema: Schema<ProviderExtraSection> = Schema.object({
   extraModels: Schema.array(goExtraModelSchema).default([]),
   codexExtraModels: Schema.array(codexExtraModelSchema).default([]),
@@ -130,49 +188,16 @@ const SectionSchema: Schema<ProviderExtraSection> = Schema.object({
  */
 interface CredentialService extends CodexCredentialService {
   resolve(ref: string): Promise<{ value: string } | undefined>
-  describe(ref: string): Promise<CredentialInfo>
-}
-
-/**
- * Every catalog provider that ships an interactive login, in catalog order.
- * The catalog is the authority on how a provider signs in — which methods it
- * offers, and what each is called — so the picker never re-decides that here.
- */
-function loginChoices(): readonly LoginChoice[] {
-  const choices: LoginChoice[] = []
-  for (const provider of builtinProviders()) {
-    const oauth = provider.auth?.oauth
-    if (oauth?.login !== undefined) {
-      choices.push({
-        providerId: provider.id,
-        providerName: provider.name,
-        authType: 'oauth',
-        methodLabel: oauth.loginLabel ?? oauth.name,
-      })
-    }
-    const apiKey = provider.auth?.apiKey
-    if (apiKey?.login !== undefined) {
-      choices.push({
-        providerId: provider.id,
-        providerName: provider.name,
-        authType: 'api_key',
-        methodLabel: apiKey.name,
-      })
-    }
-  }
-  return choices
-}
-
-/** The catalog provider behind one sign-in choice. */
-function catalogLoginProvider(providerId: string): Provider {
-  const found = builtinProviders().find(provider => provider.id === providerId)
-  if (found === undefined) {
-    throw new Error('dsh-provider-extra: the installed pi-ai catalog no longer ships provider "' + providerId + '"')
-  }
-  return found
 }
 
 export function apply(ctx: Context, config: Config): void {
+  const snapshot = compileCatalog(config.catalog)
+  if (snapshot !== undefined) {
+    mountCatalog(ctx, snapshot, config)
+    return
+  }
+  const models = selection(config.models)
+  const codexModels = selection(config.codexModels)
   const route: OpenCodeGoRouteConfig = {
     provider: config.routeId,
     displayName: config.displayName,
@@ -180,12 +205,32 @@ export function apply(ctx: Context, config: Config): void {
     ...config.baseURL === undefined ? {} : { baseURL: config.baseURL },
     ...config.fallbackSessionId === undefined ? {} : { fallbackSessionId: config.fallbackSessionId },
     ...config.headers === undefined ? {} : { headers: { ...config.headers } },
+    ...models === undefined ? {} : { models },
   }
 
   const codex: CodexRouteConfig = {
     provider: config.codexRouteId,
     displayName: config.codexDisplayName,
+    ...codexModels === undefined ? {} : { models: codexModels },
+    ...config.codexTransport === undefined ? {} : { transport: config.codexTransport },
   }
+
+  // The entry's own declarations are the base layer the settings section sits
+  // over, and the value the routes serve on a harness with no settings document
+  // at all — which is why they seed the thunk below instead of only the base.
+  const entry: ProviderExtraSection = {
+    extraModels: [...config.extraModels ?? []],
+    codexExtraModels: [...config.codexExtraModels ?? []],
+  }
+
+  // A declared selection is configuration, not a request fact, so it is proven
+  // once here. Registration resolves a profile for its route metadata and
+  // reports a failure as a refused route, which would bury the one message that
+  // names the misconfigured id; resolving per request would bury it the same
+  // way. The extras a selection resolves against at this point are the entry's
+  // own, because a settings document may not have arrived yet.
+  if (models !== undefined) buildOpenCodeGoProfile({ ...route, extraModels: entry.extraModels })
+  if (codexModels !== undefined) buildCodexProfile({ ...codex, extraModels: entry.codexExtraModels })
 
   // The catalog check stays boot-time even though settings can now extend the
   // profile per request: a catalog drift (pi-ai no longer shipping Codex) must
@@ -194,7 +239,9 @@ export function apply(ctx: Context, config: Config): void {
   let codexServable = false
   if (config.codexEnabled) {
     try {
-      buildCodexProfile(codex)
+      // Catalog drift alone: the selection was already proven above, so it
+      // cannot be what this check reports.
+      buildCodexProfile({ provider: codex.provider, displayName: codex.displayName })
       codexServable = true
     } catch (error) {
       ctx.logger.error('dsh-provider-extra: codex route "' + codex.provider + '" disabled; the installed pi-ai catalog cannot serve it')
@@ -205,14 +252,19 @@ export function apply(ctx: Context, config: Config): void {
   // Route wiring is boot-time, but the model list is per-request: the section
   // thunk below tracks the settings overlay, so a committed extras change
   // reaches the next operation with no rebuild and no restart.
-  let currentSection: () => ProviderExtraSection = () => ({ extraModels: [], codexExtraModels: [] })
+  let currentSection: () => ProviderExtraSection = () => entry
   const profiles = (): Map<string, ResolvedPiAiProviderProfile> => {
     const section = currentSection()
+    // Selections stay bound to the entry extras that passed mount-time validation.
     const entries: [string, ResolvedPiAiProviderProfile][] = [
-      [route.provider, buildOpenCodeGoProfile({ ...route, extraModels: section.extraModels })],
+      [route.provider, buildOpenCodeGoProfile({
+        ...route, extraModels: models !== undefined ? entry.extraModels : section.extraModels,
+      })],
     ]
     if (codexServable) {
-      entries.push([codex.provider, buildCodexProfile({ ...codex, extraModels: section.codexExtraModels })])
+      entries.push([codex.provider, buildCodexProfile({
+        ...codex, extraModels: codexModels !== undefined ? entry.codexExtraModels : section.codexExtraModels,
+      })])
     }
     return new Map(entries)
   }
@@ -298,7 +350,10 @@ export function apply(ctx: Context, config: Config): void {
     ctx.logger.warn(error)
   }
   ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.settings.installSection(ctx, SETTINGS_NS, SectionSchema, { extraModels: [], codexExtraModels: [] }, {
+    // The section overrides the entry where a settings document exists and
+    // stands in for it where none does; the settings service falls back to this
+    // same value when it detaches.
+    settingsCtx.settings.installSection(ctx, SETTINGS_NS, SectionSchema, entry, {
       setSource: (source) => { currentSection = source },
       // No registration facts derive from the section: the route set is fixed
       // at composition and the adapter rebuilds its snapshot on every
@@ -306,77 +361,5 @@ export function apply(ctx: Context, config: Config): void {
       onChange: () => { /* per-operation snapshot; no swap needed */ },
     })
   })
-  // The command is the registry-install-friendly half of the attended sign-in:
-  // it runs in this process, so the credential lands in the store the routes
-  // already read and no bin path or peer tree is involved. It signs into any
-  // provider the installed catalog ships a login for, not only the two routes
-  // this plugin mounts, because a human asking to sign in means the provider
-  // they name and nothing narrower. Profiles without a command registry
-  // (headless compositions) keep the package bin.
-  if (config.loginCommandEnabled) {
-    ctx.inject(['commands'], (commandCtx) => {
-      const host: LoginCommandHost = {
-        choices: loginChoices,
-        login: async (choice, interaction) => {
-          const credentials = () => ctx.get('credentials') as CodexCredentialService | undefined
-          const auth = codexAuth(credentials)
-          const models = createModels(auth)
-          // pi-ai's collection starts empty: the catalog provider carrying the
-          // login implementation has to be handed to it before the flow runs.
-          models.setProvider(catalogLoginProvider(choice.providerId))
-          if (choice.authType !== 'api_key') {
-            await models.login(choice.providerId, choice.authType, interaction)
-            return await declareProviderRoute(ctx.get('settings'), choice.providerId)
-          }
-          // A grant the provider minted proves itself, but a key proves nothing
-          // until a request carries it, so the key is spent from a store that
-          // forgets and the profile hears of it only once it has been accepted.
-          const pending = createModels({ credentials: new PendingCredentialStore(), authContext: auth.authContext })
-          pending.setProvider(catalogLoginProvider(choice.providerId))
-          const credential = await pending.login(choice.providerId, choice.authType, interaction)
-          await proveApiKey(pending, choice.providerId)
-          await auth.credentials.modify(choice.providerId, async () => credential)
-          // The credential is only reachable through a declared route, so the
-          // sign-in is not finished until one exists.
-          return await declareProviderRoute(ctx.get('settings'), choice.providerId)
-        },
-        stored: async (providerId) => {
-          const credentials = ctx.get('credentials') as CodexCredentialService | undefined
-          if (credentials === undefined) return undefined
-          const record = await credentials.readRecord(recordKeyFor(providerId))
-          if (record === undefined) return undefined
-          return record.kind === 'api-key' ? 'api_key' : 'oauth'
-        },
-        reference: async (providerId) => {
-          // A route this plugin mounts names its reference in this plugin's
-          // config; every other route is whatever llm-pi-ai was configured
-          // with, which is the same document a sign-in declares into.
-          const ref = declaredCredentialRef(ctx.get('settings'), providerId)
-            ?? (providerId === route.provider ? route.apiKeyEnv : undefined)
-          if (ref === undefined || ref.length === 0) return undefined
-          const credentials = ctx.get('credentials') as CredentialService | undefined
-          if (credentials === undefined) return { ref }
-          const info = await credentials.describe(ref)
-          return { ref, ...info.configured && info.source !== undefined ? { source: info.source } : {} }
-        },
-        // Resolved per call, never at mount: a composition that mounts no
-        // session UI still gets the command, and says so when it runs.
-        ask: async (request) => {
-          const userQuestions = ctx.get('userQuestions')
-          if (userQuestions === undefined) {
-            throw new Error('dsh-provider-extra: this composition mounts no session UI that can ask the sign-in questions')
-          }
-          return await userQuestions.ask({
-            questions: [...request.questions],
-            agent: request.agent,
-            ...request.signal === undefined ? {} : { signal: request.signal },
-          })
-        },
-      }
-      commandCtx.commands.register(createLoginCommand(host, config.loginCommandName))
-      // Registration is silent otherwise, and the command is the one surface a
-      // user cannot see in a config dump: saying it exists is the diagnosis.
-      ctx.logger.info('dsh-provider-extra: /' + config.loginCommandName + ' signs in any provider with an interactive login')
-    })
-  }
+  mountLoginCommand(ctx, config, { profiles })
 }

@@ -17,9 +17,32 @@ import type { AddressInfo } from 'node:net'
 import { after, before, describe, it } from 'node:test'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { Message, GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
+import { LlmError } from '@deepseek-ai/dsh-llm'
 import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
 import { DEEPSEEK_V41_FLASH_ID, DEEPSEEK_V41_FLASH_NAME, OPENCODE_GO_PROVIDER_ID, SESSION_HEADER_NAME, buildOpenCodeGoProfile, openCodeGoAuth } from '../src/opencode-go.ts'
 import type { OpenCodeGoRouteConfig } from '../src/opencode-go.ts'
+import { Config } from '../src/index.ts'
+import type { Config as ConfigShape } from '../src/index.ts'
+
+/**
+ * Resolve one raw entry document the way the loader hands it to the schema: a
+ * profile patch is a partial document, so only the schema can say whether a
+ * key survives into the config this plugin runs on.
+ */
+function resolveConfig(document: Record<string, unknown>): ConfigShape {
+  return Config(document as unknown as ConfigShape)
+}
+
+/** One catalog id the installed pi-ai catalog ships, for whitelist cases. */
+const CATALOG_MODEL_ID = 'deepseek-v4-flash'
+
+/** A declared extra cloning the catalog sibling above. */
+const DECLARED_EXTRA = { id: 'my-flash', template: CATALOG_MODEL_ID }
+
+/** The served ids of one route configuration, in the order it advertises them. */
+function servedIds(route: Partial<OpenCodeGoRouteConfig> = {}): string[] {
+  return buildOpenCodeGoProfile({ ...baseRoute, ...route }).piProvider!.getModels().map(model => model.id)
+}
 
 /** Header sets the mock gateway received, one entry per request. */
 const capturedHeaders: Array<Record<string, string | string[] | undefined>> = []
@@ -243,6 +266,73 @@ describe('settings-declared extra models', () => {
     const instance = adapter({ extraModels: [{ id: 'my-flash', template: 'deepseek-v4-flash' }] })
     const chunks = await viaRuntime(instance, request('session-extra', 'my-flash'))
     assert.equal(lastSessionHeader(), 'session-extra')
+    assert.equal(chunks.at(-1)?.type, 'finish')
+  })
+})
+
+describe('exact model selection', () => {
+  it('distills the composition entry into the models the entry itself carries', () => {
+    const resolved = resolveConfig({ extraModels: [DECLARED_EXTRA], models: [DECLARED_EXTRA.id] })
+    assert.deepEqual(resolved.models, [DECLARED_EXTRA.id])
+    assert.deepEqual(resolved.extraModels?.[0]?.template, CATALOG_MODEL_ID)
+  })
+
+  it('serves everything the catalog and the extras resolved when no selection is declared', () => {
+    const ids = servedIds({ extraModels: [DECLARED_EXTRA] })
+    assert.ok(ids.length > 20, 'the catalog stays whole')
+    assert.ok(ids.includes(CATALOG_MODEL_ID))
+    assert.ok(ids.includes(DEEPSEEK_V41_FLASH_ID))
+    assert.ok(ids.includes(DECLARED_EXTRA.id))
+  })
+
+  it('serves only the declared ids, in the declared order', () => {
+    // Reverse catalog order: the declaration, not the catalog, decides order.
+    assert.deepEqual(servedIds({ models: [DEEPSEEK_V41_FLASH_ID, CATALOG_MODEL_ID] }), [DEEPSEEK_V41_FLASH_ID, CATALOG_MODEL_ID])
+  })
+
+  it('selects across the catalog, the shipped extra, and a declared extra alike', () => {
+    const ids = servedIds({ models: [DECLARED_EXTRA.id, DEEPSEEK_V41_FLASH_ID, CATALOG_MODEL_ID], extraModels: [DECLARED_EXTRA] })
+    assert.deepEqual(ids, [DECLARED_EXTRA.id, DEEPSEEK_V41_FLASH_ID, CATALOG_MODEL_ID])
+    const chosen = buildOpenCodeGoProfile({
+      ...baseRoute, models: [DECLARED_EXTRA.id], extraModels: [DECLARED_EXTRA],
+    }).piProvider!.getModels()
+    // A selected extra is served exactly like a selected catalog model.
+    assert.equal(chosen[0]!.provider, baseRoute.provider)
+    assert.equal(chosen[0]!.baseUrl, baseRoute.baseURL)
+  })
+
+  it('keeps a repeated id as one model at its first position', () => {
+    assert.deepEqual(servedIds({ models: [CATALOG_MODEL_ID, CATALOG_MODEL_ID] }), [CATALOG_MODEL_ID])
+  })
+
+  it('serves nothing when the selection is declared empty', () => {
+    // A composition entry never reaches this state: its schema materializes an
+    // undeclared array as an empty one, and the wiring reads an empty
+    // declaration as no selection at all.
+    assert.deepEqual(servedIds({ models: [] }), [])
+  })
+
+  it('refuses a selected id nothing resolves, naming the route and the id', () => {
+    assert.throws(
+      () => buildOpenCodeGoProfile({ ...baseRoute, models: [CATALOG_MODEL_ID, 'no-such-model'] }),
+      (error: unknown) => error instanceof LlmError
+        && /UNKNOWN_MODEL/.test(error.code)
+        && error.message.includes(baseRoute.provider)
+        && error.message.includes('no-such-model'),
+    )
+  })
+
+  it('refuses a selected extra whose template does not resolve', () => {
+    assert.throws(
+      () => buildOpenCodeGoProfile({ ...baseRoute, models: ['bad-flash'], extraModels: [{ id: 'bad-flash', template: 'no-such-model' }] }),
+      (error: unknown) => error instanceof LlmError && error.message.includes('bad-flash'),
+    )
+  })
+
+  it('streams a selected extra through the mock gateway with the session header', async () => {
+    const instance = adapter({ models: [DECLARED_EXTRA.id], extraModels: [DECLARED_EXTRA] })
+    const chunks = await viaRuntime(instance, request('session-whitelist', DECLARED_EXTRA.id))
+    assert.equal(lastSessionHeader(), 'session-whitelist')
     assert.equal(chunks.at(-1)?.type, 'finish')
   })
 })

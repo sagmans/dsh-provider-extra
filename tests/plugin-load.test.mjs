@@ -7,7 +7,9 @@ const PACKAGE_NAME = '@sagmans/dsh-provider-extra'
 const GO_ROUTE = 'opencode-go'
 const CODEX_ROUTE = 'openai-codex'
 const EXTRA_MODEL = 'deepseek-flash'
-const CODEX_EXTRA_MODEL = 'gpt-6-luna'
+const CATALOG_MODEL = 'deepseek-v4-flash'
+const ENTRY_EXTRA_MODEL = 'entry-flash'
+const CODEX_EXTRA_MODEL = 'example-codex-model'
 const CODEX_EXTRA_TEMPLATE = 'gpt-5.6-luna'
 
 /**
@@ -25,6 +27,9 @@ class SettingsDocument extends Service {
 
   installSection(_owner, _ns, schema, entry, hooks) {
     this.schema = schema
+    // The section layer sits over the entry, so a published document has to
+    // win key by key the way the file provider resolves it, arrays included.
+    this.base = entry
     this.value = schema(entry)
     this.hooks = hooks
     hooks.setSource(() => this.value)
@@ -33,7 +38,7 @@ class SettingsDocument extends Service {
 
   /** Commit a user layer, as a settings write does. */
   publish(section) {
-    this.value = this.schema(section)
+    this.value = this.schema({ ...this.base, ...section })
     this.hooks.onChange()
   }
 }
@@ -51,6 +56,94 @@ test('built package mounts both routes without credentials or a TypeScript loade
     assert.ok(codex.length > 0)
   } finally {
     await mounted?.dispose()
+    await runtime.dispose()
+  }
+})
+
+test('entry-declared extras reach both routes with no settings document at all', async () => {
+  const plugin = await import(PACKAGE_NAME)
+  const ctx = new Context()
+  const runtime = await ctx.plugin(LlmRuntime)
+  let mounted
+  try {
+    mounted = await ctx.plugin(plugin, {
+      extraModels: [{ id: ENTRY_EXTRA_MODEL, template: CATALOG_MODEL }],
+      codexExtraModels: [{ id: CODEX_EXTRA_MODEL, name: 'GPT-6 Luna', template: CODEX_EXTRA_TEMPLATE }],
+    })
+    const go = await ctx.llm.listModels(GO_ROUTE)
+    const codex = await ctx.llm.listModels(CODEX_ROUTE)
+    assert.ok(go.some((model) => model.id === ENTRY_EXTRA_MODEL), 'entry extras reach the Go route')
+    assert.ok(go.some((model) => model.id === EXTRA_MODEL), 'shipped extras stay served')
+    assert.ok(codex.some((model) => model.id === CODEX_EXTRA_MODEL), 'entry extras reach the Codex route')
+  } finally {
+    await mounted?.dispose()
+    await runtime.dispose()
+  }
+})
+
+test('entry-declared selections narrow each route to exactly those models, in order', async () => {
+  const plugin = await import(PACKAGE_NAME)
+  const ctx = new Context()
+  const runtime = await ctx.plugin(LlmRuntime)
+  let mounted
+  try {
+    mounted = await ctx.plugin(plugin, {
+      extraModels: [{ id: ENTRY_EXTRA_MODEL, template: CATALOG_MODEL }],
+      models: [ENTRY_EXTRA_MODEL, CATALOG_MODEL],
+      codexExtraModels: [{ id: CODEX_EXTRA_MODEL, name: 'GPT-6 Luna', template: CODEX_EXTRA_TEMPLATE }],
+      codexModels: [CODEX_EXTRA_MODEL, CODEX_EXTRA_TEMPLATE],
+    })
+    assert.deepEqual((await ctx.llm.listModels(GO_ROUTE)).map((model) => model.id), [ENTRY_EXTRA_MODEL, CATALOG_MODEL])
+    assert.deepEqual((await ctx.llm.listModels(CODEX_ROUTE)).map((model) => model.id), [CODEX_EXTRA_MODEL, CODEX_EXTRA_TEMPLATE])
+  } finally {
+    await mounted?.dispose()
+    await runtime.dispose()
+  }
+})
+
+test('a selection that names nothing fails the composition, naming the route and the id', async () => {
+  const plugin = await import(PACKAGE_NAME)
+  const ctx = new Context()
+  const runtime = await ctx.plugin(LlmRuntime)
+  try {
+    await assert.rejects(
+      async () => { await ctx.plugin(plugin, { models: ['no-such-model'] }) },
+      (error) => error?.code === 'UNKNOWN_MODEL'
+        && error.message.includes(GO_ROUTE)
+        && error.message.includes('no-such-model'),
+    )
+  } finally {
+    await runtime.dispose()
+  }
+})
+
+test('settings-declared extras override the entry\'s own, per key', async () => {
+  const plugin = await import(PACKAGE_NAME)
+  const ctx = new Context()
+  const runtime = await ctx.plugin(LlmRuntime)
+  const settings = await ctx.plugin(SettingsDocument)
+  let mounted
+  try {
+    mounted = await ctx.plugin(plugin, {
+      extraModels: [{ id: ENTRY_EXTRA_MODEL, template: CATALOG_MODEL }],
+      codexExtraModels: [{ id: CODEX_EXTRA_MODEL, name: 'GPT-6 Luna', template: CODEX_EXTRA_TEMPLATE }],
+    })
+    assert.ok((await ctx.llm.listModels(GO_ROUTE)).some((model) => model.id === ENTRY_EXTRA_MODEL))
+
+    ctx.settings.publish({
+      extraModels: [{ id: 'section-flash', template: CATALOG_MODEL }],
+      codexExtraModels: [{ id: 'section-luna', template: CODEX_EXTRA_TEMPLATE }],
+    })
+
+    const go = await ctx.llm.listModels(GO_ROUTE)
+    const codex = await ctx.llm.listModels(CODEX_ROUTE)
+    assert.ok(go.some((model) => model.id === 'section-flash'), 'the section is what the route serves')
+    assert.equal(go.some((model) => model.id === ENTRY_EXTRA_MODEL), false, 'the entry declaration is overridden, not merged')
+    assert.ok(codex.some((model) => model.id === 'section-luna'))
+    assert.equal(codex.some((model) => model.id === CODEX_EXTRA_MODEL), false)
+  } finally {
+    await mounted?.dispose()
+    await settings.dispose()
     await runtime.dispose()
   }
 })

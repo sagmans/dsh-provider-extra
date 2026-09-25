@@ -22,7 +22,7 @@
 
 import type { CommandDefinition, CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import type { LoginChoice, LoginCommandHost } from './login-contract.ts'
-import { KEY_WORD, OAUTH_WORD, choiceByWords, pickerQuestion, resolveChoice, words } from './login-choice.ts'
+import { KEY_WORD, OAUTH_WORD, answerText, choiceByWords, pickerQuestion, resolveChoice, words } from './login-choice.ts'
 import { runChoice } from './login-attempt.ts'
 import { statusOf } from './login-status.ts'
 
@@ -51,20 +51,28 @@ export function createLoginCommand(host: LoginCommandHost, commandName: string):
     recordInput: false,
     handler: async (invocation: CommandInvocation): Promise<CommandResult> => {
       const input = words(invocation.rawInput)
-      if (input.length === 1 && input[0] === STATUS_WORD) return await statusOf(host)
+      if (input.length === 1 && input[0]?.toLowerCase() === STATUS_WORD) return await statusOf(host)
       if (input.length > 2) return { kind: 'error', text: 'dsh-provider-extra: too many arguments. ' + usage }
       const choices = host.choices()
       if (choices.length === 0) {
         return { kind: 'error', text: 'dsh-provider-extra: this composition mounts no provider with an interactive sign-in' }
       }
+      const unknownChoice = (input: readonly string[]): CommandResult => {
+        const known = [...new Set(choices.map(entry => entry.providerId))].join(', ')
+        return { kind: 'error', text: 'dsh-provider-extra: no sign-in named "' + input.join(' ') + '". Known providers: ' + known + '. ' + usage }
+      }
       let choice: LoginChoice | undefined
       if (input.length === 0) {
         try {
-          choice = resolveChoice(choices, await host.ask({
+          const question = pickerQuestion(choices)
+          const answer = await host.ask({
             agent: invocation.agent,
-            questions: [pickerQuestion(choices)],
+            questions: [question],
             signal: invocation.signal,
-          }))
+          })
+          choice = resolveChoice(choices, answer)
+          const typed = answerText(answer, question.id)
+          if (choice === undefined && typed !== undefined) return unknownChoice(words(typed))
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error)
           return { kind: 'error', text: 'dsh-provider-extra: no provider was picked (' + message + '). ' + usage }
@@ -72,10 +80,7 @@ export function createLoginCommand(host: LoginCommandHost, commandName: string):
         if (choice === undefined) return { kind: 'error', text: 'dsh-provider-extra: no provider was picked. ' + usage }
       } else {
         choice = choiceByWords(choices, input)
-        if (choice === undefined) {
-          const known = [...new Set(choices.map(entry => entry.providerId))].join(', ')
-          return { kind: 'error', text: 'dsh-provider-extra: no sign-in named "' + input.join(' ') + '". Known providers: ' + known + '. ' + usage }
-        }
+        if (choice === undefined) return unknownChoice(input)
       }
       return await runChoice(host, invocation, choice)
     },

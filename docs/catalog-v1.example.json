@@ -1,0 +1,40 @@
+{
+  "catalog": {
+    "version": 1,
+    "providers": [
+      {
+        "id": "example-route",
+        "name": "Example provider",
+        "source": "openai",
+        "auth": {
+          "apiKeyRef": "EXAMPLE_API_KEY"
+        },
+        "models": [
+          {
+            "id": "example-model",
+            "name": "Example model",
+            "metadata": {
+              "api": "openai-responses",
+              "reasoning": false,
+              "input": [
+                "text"
+              ],
+              "cost": {
+                "input": 0,
+                "output": 0,
+                "cacheRead": 0,
+                "cacheWrite": 0
+              },
+              "contextWindow": 8192,
+              "maxTokens": 1024
+            }
+          }
+        ]
+      }
+    ],
+    "default": {
+      "provider": "example-route",
+      "model": "example-model"
+    }
+  }
+}
