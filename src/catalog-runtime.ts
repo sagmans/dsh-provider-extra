@@ -6,6 +6,8 @@ import { codexAuth } from './codex.ts'
 import type { CodexCredentialService } from './codex.ts'
 import type { CatalogSnapshot } from './catalog.ts'
 import { catalogDefault } from './catalog-default.ts'
+import { mountLoginCommand } from './login-host.ts'
+import type { LoginConfig } from './login-host.ts'
 
 const PLUGIN_NAME = 'dsh-provider-extra'
 const OWNER_COLLISION = 'CATALOG_OWNER_COLLISION'
@@ -28,7 +30,7 @@ function assertCatalogOwnership(ctx: Context, ownedRoutes: readonly string[] = [
 }
 
 /** Immutable closures also keep prepared and in-flight calls on their original revision. */
-export function mountCatalog(ctx: Context, snapshot: CatalogSnapshot): void {
+export function mountCatalog(ctx: Context, snapshot: CatalogSnapshot, config: LoginConfig): void {
   assertCatalogOwnership(ctx)
   let ownershipError: unknown
   const requireOwnership = (): void => {
@@ -65,7 +67,10 @@ export function mountCatalog(ctx: Context, snapshot: CatalogSnapshot): void {
             requireOwnership()
           }
         },
-        delete: route => auth.credentials.delete(credentialId(route)),
+        delete: route => {
+          requireOwnership()
+          return auth.credentials.delete(credentialId(route))
+        },
         list: async () => {
           const stored = await auth.credentials.list()
           return [...snapshot.providers.values()].flatMap(provider => {
@@ -124,6 +129,7 @@ export function mountCatalog(ctx: Context, snapshot: CatalogSnapshot): void {
     if (next.catalog !== undefined) assertCatalogOwnership(ctx, routes, defaults)
     return proceed()
   })
+  mountLoginCommand(ctx, config, { catalog: snapshot, profiles: () => snapshot.profiles, requireOwnership })
   ctx.inject(['settings'], (child) => {
     const settings = child.get('settings') as { configure?: (options: { auto: boolean }, fiber: typeof ctx.fiber) => () => void }
     if (typeof settings.configure === 'function') child.effect(() => settings.configure!({ auto: false }, ctx.fiber))

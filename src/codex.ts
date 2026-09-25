@@ -43,6 +43,8 @@ export const DEFAULT_CODEX_DISPLAY_NAME = 'OpenAI Codex'
  * Transports pi-ai's Codex API accepts, as that API declares them. Named here
  * because a profile pins one: the websocket path keeps a connection-scoped
  * continuation cache, which some networks and proxies never let complete.
+ * Mirrors @earendil-works/pi-ai/dist/types.d.ts:41 (Transport); review this
+ * schema alongside dependency upgrades so added transports are not silently excluded.
  */
 export const CODEX_TRANSPORTS = ['sse', 'websocket', 'websocket-cached', 'auto'] as const
 

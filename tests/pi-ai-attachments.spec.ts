@@ -34,7 +34,7 @@ const API_KEY_ENV = 'OPENCODE_API_KEY_ATTACH_TEST'
 const ROUTE = 'opencode-go-attach-test'
 /** Origin for parsing request paths only; the mock socket binds its own at listen time. */
 const MOCK_ORIGIN = 'http://mock'
-/** The subscription route the incident reported, and the exact model on it. */
+/** The subscription route the incident reported, and the exact model on it (an id the installed pi-ai catalog ships). */
 const CODEX_ROUTE = 'openai-codex'
 const CODEX_ROUTE_MODEL = 'gpt-6-astra'
 /** One real 1x1 PNG, so the base64 asserted on the wire is an actual raster. */

@@ -70,6 +70,23 @@ test('invalid complete candidate mounts neither its valid route nor default serv
   } finally { await runtime.dispose() }
 })
 
+test('Cordis rejects a later default provider without replacing the managed owner', async () => {
+  const ctx = new Context()
+  const runtime = await ctx.plugin(LlmRuntime)
+  const mounted = await ctx.plugin(plugin, { catalog: catalog() } as never)
+  try {
+    const owner = ctx.get('agentDefaultModel')
+    await assert.rejects(async () => {
+      await ctx.plugin(other => {
+        other.provide('agentDefaultModel', { currentSelection: () => SELECTION } as never)
+      })
+    }, /service "agentDefaultModel" has been registered/u)
+    assert.equal(ctx.get('agentDefaultModel'), owner)
+    assert.deepEqual(owner.currentSelection(), SELECTION)
+    assert.deepEqual((await ctx.llm.listModels(ROUTE)).map(model => model.id), [MODEL])
+  } finally { await mounted.dispose(); await runtime.dispose() }
+})
+
 test('competing default owner rejects before managed routes mount', async () => {
   const ctx = new Context()
   const runtime = await ctx.plugin(LlmRuntime)

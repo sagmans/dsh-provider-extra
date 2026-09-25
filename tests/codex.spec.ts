@@ -53,7 +53,7 @@ const route = { provider: DEFAULT_CODEX_ROUTE_ID, displayName: DEFAULT_CODEX_DIS
 const CATALOG_MODEL_ID = 'gpt-5.6-luna'
 
 /** A declared extra cloning the catalog sibling above, as a subscription-only id would. */
-const DECLARED_EXTRA = { id: 'gpt-6-luna', name: 'GPT-6 Luna', template: CATALOG_MODEL_ID }
+const DECLARED_EXTRA = { id: 'declared-extra-fixture', name: 'Declared extra fixture', template: CATALOG_MODEL_ID }
 
 /** The served ids of one route configuration, in the order it advertises them. */
 function servedIds(config: { models?: readonly string[]; extraModels?: { id: string; name?: string; template?: string }[] } = {}): string[] {
@@ -150,13 +150,13 @@ describe('codex settings-declared extra models', () => {
   it('serves a declared model cloned from its template', () => {
     const profile = buildCodexProfile({
       ...route,
-      extraModels: [{ id: 'gpt-6-luna', name: 'GPT-6 Luna', template: 'gpt-5.6-luna' }],
+      extraModels: [{ id: 'declared-extra-fixture', name: 'Declared extra fixture', template: 'gpt-5.6-luna' }],
     })
     const models = profile.piProvider!.getModels()
-    const extra = models.find(model => model.id === 'gpt-6-luna')
+    const extra = models.find(model => model.id === 'declared-extra-fixture')
     const template = models.find(model => model.id === 'gpt-5.6-luna')!
     assert.notEqual(extra, undefined, 'route serves the declared model')
-    assert.equal(extra!.name, 'GPT-6 Luna')
+    assert.equal(extra!.name, 'Declared extra fixture')
     assert.equal(extra!.api, template.api)
     assert.equal(extra!.contextWindow, template.contextWindow)
     assert.equal(extra!.maxTokens, template.maxTokens)
@@ -165,17 +165,17 @@ describe('codex settings-declared extra models', () => {
   })
 
   it('records an unknown template beside serviceable models', () => {
-    const profile = buildCodexProfile({ ...route, extraModels: [{ id: 'gpt-6-luna', template: 'no-such-model' }] })
-    assert.ok(profile.modelErrors.has('gpt-6-luna'), 'failure is diagnosable')
-    assert.equal(profile.piProvider!.getModels().find(model => model.id === 'gpt-6-luna'), undefined)
+    const profile = buildCodexProfile({ ...route, extraModels: [{ id: 'declared-extra-fixture', template: 'no-such-model' }] })
+    assert.ok(profile.modelErrors.has('declared-extra-fixture'), 'failure is diagnosable')
+    assert.equal(profile.piProvider!.getModels().find(model => model.id === 'declared-extra-fixture'), undefined)
     // One mistyped declaration must not silence the subscription route.
     assert.ok(profile.piProvider!.getModels().length > 0)
   })
 
   it('records a declaration that names no template and clones nothing', () => {
-    const profile = buildCodexProfile({ ...route, extraModels: [{ id: 'gpt-6-luna' }] })
-    assert.ok(profile.modelErrors.has('gpt-6-luna'), 'a route with no shipped default must say so')
-    assert.equal(profile.piProvider!.getModels().find(model => model.id === 'gpt-6-luna'), undefined)
+    const profile = buildCodexProfile({ ...route, extraModels: [{ id: 'declared-extra-fixture' }] })
+    assert.ok(profile.modelErrors.has('declared-extra-fixture'), 'a route with no shipped default must say so')
+    assert.equal(profile.piProvider!.getModels().find(model => model.id === 'declared-extra-fixture'), undefined)
   })
 
   it('leaves a catalog-shipped id to the catalog', () => {
