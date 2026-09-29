@@ -38,6 +38,12 @@ carry a breaking change, and a patch carries only fixes.
   instead of failing inside a sign-in. The 0.1.5 line's section behaves as
   before.
 
+- A catalog profile on the 0.1.7 line disables two more base rows: that line
+  registers the signed-in DeepSeek account as a provider, so the ownership
+  preflight reports `CATALOG_OWNER_COLLISION` until `llm-deepseek-account` and
+  `deepseek-account` carry the same override the earlier rows do
+  ([docs/catalog.md](docs/catalog.md)).
+
 - `pnpm-workspace.yaml` excludes the harness vendor's scope from the
   release-age window, because a verified release is published inside that window
   and a harness mount resolves that same vendor's packages.
