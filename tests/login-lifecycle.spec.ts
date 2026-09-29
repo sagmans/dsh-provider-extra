@@ -14,7 +14,8 @@ import { AGENT, COMMAND, KEY, OLD_KEY, REF, ROUTE, SOURCE, MemoryCredentials, ca
 
 const CODEX_SOURCE = 'openai-codex'
 const CODEX_ROUTE = 'subscription-alias'
-const CODEX_MODEL = 'gpt-5.4'
+/** The installed line names its own Codex models, so a hardcoded id does not exist on every line. */
+const CODEX_MODEL = builtinProviders().find(provider => provider.id === CODEX_SOURCE)!.getModels()[0]!.id
 const XAI_SOURCE = 'xai'
 const XAI_MODEL = builtinProviders().find(provider => provider.id === XAI_SOURCE)!.getModels()[0]!.id
 const GRANT: OAuthCredential = { type: 'oauth', access: 'local-access', refresh: 'local-refresh', expires: Number.MAX_SAFE_INTEGER }

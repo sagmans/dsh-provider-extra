@@ -21,14 +21,14 @@ carry a breaking change, and a patch carries only fixes.
 
 ### Changed
 
-- The supported harness line widens to `>=0.1.5-rc.1 <0.2.0`, and
+- The supported harness line widens to `>=0.1.5-rc.1 <0.3.0`, and
   `dsh.compatibility.dshReleases` records the releases that passed the gates:
-  `0.1.5-rc.2`, `0.1.5-rc.3`, and `0.1.7-rc.2`. The harness
-  `devDependencies` compile against `0.1.7-rc.2`, because a mounted release is
+  `0.1.5-rc.2`, `0.1.5-rc.3`, `0.1.7-rc.2`, and `0.2.0-rc.2`. The harness
+  `devDependencies` compile against `0.2.0-rc.2`, because a mounted release is
   one a range cannot reach: npm admits a prerelease only through a comparator
   naming its own `X.Y.Z` tuple. The harness peers stay `*` for the same
   reason, since a peer is resolved against the consumer's own tree and a range
-  naming `0.1.5` cannot accept the `0.1.7` prerelease a profile already has.
+  naming `0.1.5` cannot accept the `0.2.0` prerelease a profile already has.
   [RELEASE.md](RELEASE.md#harness-matrix) owns the rule.
 
 - The settings seams follow the line they mount on. A line that publishes forms
@@ -36,17 +36,26 @@ carry a breaking change, and a patch carries only fixes.
   section there and the committing Loader re-applies the entry with the new
   extras; a line with no per-namespace reader reports a route it cannot declare
   instead of failing inside a sign-in. The 0.1.5 line's section behaves as
-  before.
+  before. The 0.2.0 line publishes the 0.1.7 shape — forms over an entry's own
+  Config, addressed by profile entry id, and no per-namespace reader — so both
+  newer lines take the same branch and no further seam moved.
 
-- A catalog profile on the 0.1.7 line disables two more base rows: that line
-  registers the signed-in DeepSeek account as a provider, so the ownership
-  preflight reports `CATALOG_OWNER_COLLISION` until `llm-deepseek-account` and
-  `deepseek-account` carry the same override the earlier rows do
-  ([docs/catalog.md](docs/catalog.md)).
+- The Codex fixtures and the replayed transcript follow the installed line's own
+  catalog and context factory. `0.2.0-rc.2` ships a pi-ai that drops the
+  `gpt-5.4` id the fixtures hardcoded and brands the normalized context a
+  provider receives, so a literal that matched one line leaves the other
+  unrunnable.
 
-- `pnpm-workspace.yaml` excludes the harness vendor's scope from the
-  release-age window, because a verified release is published inside that window
-  and a harness mount resolves that same vendor's packages.
+- A catalog profile on the 0.1.7 and 0.2.0 lines disables two more base rows:
+  from 0.1.7 on, the base registers the signed-in DeepSeek account as a
+  provider, so the ownership preflight reports `CATALOG_OWNER_COLLISION` until
+  `llm-deepseek-account` and `deepseek-account` carry the same override the
+  earlier rows do ([docs/catalog.md](docs/catalog.md)).
+
+- `pnpm-workspace.yaml` excludes the harness vendor's scope and its model
+  adapter's vendor from the release-age window, because a verified release is
+  published inside that window and a harness mount resolves those same vendors'
+  packages: `0.2.0-rc.2` pins `@earendil-works/pi-ai` `^0.87.1`.
 
 - The replayed tool-result case builds its fixture through the installed line's
   own message factory, because the two lines answer a tool call differently and

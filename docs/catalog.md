@@ -33,7 +33,7 @@ For example, a profile with these row IDs needs these overrides:
 ```
 
 Inspect the composed profile for additional provider rows or different IDs.
-The 0.1.7 base adds two of them: it registers the signed-in DeepSeek account as a provider, so a catalog profile on that line reports `CATALOG_OWNER_COLLISION` until `llm-deepseek-account` and `deepseek-account` carry the same override.
+From 0.1.7 on, the base adds two more: it registers the signed-in DeepSeek account as a provider, so a catalog profile on the 0.1.7 or 0.2.0 line reports `CATALOG_OWNER_COLLISION` until `llm-deepseek-account` and `deepseek-account` carry the same override.
 Mount provider-extra after those rows so its preflight can detect existing owners.
 Preflight rejects any existing adapter, provider directory, or default owner before registering managed routes.
 It never disables another plugin. The public registry cannot veto a later unrelated adapter or directory registration.

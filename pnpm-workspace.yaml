@@ -11,6 +11,9 @@ minimumReleaseAge: 10080
 # the plugin's own dependency set.
 minimumReleaseAgeExclude:
   - '@deepseek-ai/*'
+  # The harness mount resolves its own model adapter's vendor, so a verified
+  # harness release pins a pi-ai published inside the same window.
+  - '@earendil-works/*'
 allowBuilds:
   # Build steps the pinned toolchain needs: esbuild's binary is required by tsx,
   # and the profile tests drive @deepseek-ai/dsh, which loads a subprocess

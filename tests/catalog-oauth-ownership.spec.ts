@@ -5,13 +5,15 @@ import { Context } from '@deepseek-ai/cordis'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import type { LlmFailure } from '@deepseek-ai/dsh-llm'
 import type { CredentialRecord } from '@deepseek-ai/dsh-credentials'
+import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
 import { recordKeyFor } from '../src/codex.ts'
 import type { CodexCredentialService } from '../src/codex.ts'
 import * as plugin from '../src/index.ts'
 
 const SOURCE = 'openai-codex'
 const ROUTE = 'subscription-alias'
-const MODEL = 'gpt-5.4'
+/** The installed line names its own Codex models, so a hardcoded id does not exist on every line. */
+const MODEL = builtinProviders().find(provider => provider.id === SOURCE)!.getModels()[0]!.id
 const MODEL_NAME = 'Codex model'
 const RELOADED_MODEL_NAME = 'Reloaded Codex model'
 const ACCOUNT = 'local-account'

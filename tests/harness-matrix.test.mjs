@@ -4,8 +4,8 @@ import { test } from 'node:test'
 import { readFile } from 'node:fs/promises'
 import { checkMatrix, compareVersions } from '../tools/harness-matrix.mjs'
 
-const RANGE = '>=0.1.5-rc.1 <0.2.0'
-const RELEASES = ['0.1.5-rc.2', '0.1.5-rc.3', '0.1.7-rc.2']
+const RANGE = '>=0.1.5-rc.1 <0.3.0'
+const RELEASES = ['0.1.5-rc.2', '0.1.5-rc.3', '0.1.7-rc.2', '0.2.0-rc.2']
 
 /** A manifest that satisfies every rule, so one rule can be broken at a time. */
 function consistent(overrides = {}) {
@@ -24,9 +24,9 @@ test('the shipped manifest satisfies the matrix', async () => {
 
 test('a release outside the compatible range is refused', () => {
   const manifest = consistent()
-  manifest.dsh.compatibility.dshReleases['0.2.0'] = 'compatible'
+  manifest.dsh.compatibility.dshReleases['0.3.0'] = 'compatible'
   assert.equal(checkMatrix(manifest).length, 1)
-  assert.match(checkMatrix(manifest)[0], /verified release 0\.2\.0 lies outside the compatible range/u)
+  assert.match(checkMatrix(manifest)[0], /verified release 0\.3\.0 lies outside the compatible range/u)
 })
 
 test('a range no plugin can parse, and an empty verified list, are both refused', () => {
@@ -37,8 +37,9 @@ test('a range no plugin can parse, and an empty verified list, are both refused'
 test('a harness peer stays open, and a narrowed one is refused', () => {
   assert.deepEqual(checkMatrix(consistent({ peerDependencies: { '@deepseek-ai/dsh-llm': RANGE } })), [])
   assert.deepEqual(checkMatrix(consistent({ peerDependencies: { '@deepseek-ai/dsh-llm': '0.1.7-rc.2' } })), [])
-  // The range that cannot admit a 0.1.7 prerelease is exactly the one a peer
-  // must not carry, or a 0.1.7 profile resolves a second framework copy.
+  // A peer naming one prerelease line is exactly what a profile on another line
+  // must not carry: npm admits a prerelease only through a comparator naming its
+  // own tuple, so that peer resolves a second framework copy beside the host's.
   const narrowed = consistent({ peerDependencies: { '@deepseek-ai/dsh-llm': '0.1.7-rc.1' } })
   assert.match(checkMatrix(narrowed)[0], /peer dependency @deepseek-ai\/dsh-llm declares 0\.1\.7-rc\.1/u)
   // A non-harness package keeps its own range: the rule places harness rows.
