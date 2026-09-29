@@ -6,7 +6,7 @@ import type { AddressInfo } from 'node:net'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
 import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
-import { getSupportedThinkingLevels, defaultProviderAuthContext, InMemoryCredentialStore } from '@earendil-works/pi-ai'
+import { getSupportedThinkingLevels, defaultProviderAuthContext, InMemoryCredentialStore, normalizeContext } from '@earendil-works/pi-ai'
 import type { Api, Model } from '@earendil-works/pi-ai'
 import { compileCatalog } from '../src/catalog.ts'
 import type { CatalogAuth, CatalogConfig, CatalogFilter, CatalogProvider, CatalogModel } from '../src/catalog.ts'
@@ -136,7 +136,7 @@ describe('managed catalog compilation', () => {
       const pi = profile.piProvider!
       for (const sessionId of [LIVE_SESSION, undefined]) {
         const options = { apiKey: TEST_KEY, sessionId, headers: { [SESSION_HEADER.toUpperCase()]: 'stale-request', 'x-request': 'preserved' } }
-        const response = await pi[method](pi.getModels()[0]!, { messages: [] }, options).result()
+        const response = await pi[method](pi.getModels()[0]!, normalizeContext({ messages: [] }), options).result()
         assert.notEqual(response.stopReason, 'error', response.errorMessage)
         const request = captured.at(-1)!
         assert.equal(request.headers.get(SESSION_HEADER), sessionId ?? FALLBACK_SESSION)
@@ -153,7 +153,7 @@ describe('managed catalog compilation', () => {
       assert.equal(typeof profile.piProvider!.auth.oauth?.login, 'function')
       const before = upgrades
       const pi = profile.piProvider!
-      const response = await pi[method](pi.getModels()[0]!, { messages: [] }, {
+      const response = await pi[method](pi.getModels()[0]!, normalizeContext({ messages: [] }), {
         apiKey: CODEX_TOKEN, transport: 'websocket', maxRetries: 0, websocketConnectTimeoutMs: 100, timeoutMs: 1000,
       }).result()
       assert.notEqual(response.stopReason, 'error', response.errorMessage)
@@ -165,7 +165,7 @@ describe('managed catalog compilation', () => {
   it('does not invent Go routing identity when session and fallback are absent', async () => {
     const profile = buildCatalogProfile({ ...provider('opencode-go', [{ id: GO_MODEL, name: NAME }]), baseURL: endpoint })
     const pi = profile.piProvider!
-    const response = await pi.streamSimple(pi.getModels()[0]!, { messages: [] }, { apiKey: TEST_KEY }).result()
+    const response = await pi.streamSimple(pi.getModels()[0]!, normalizeContext({ messages: [] }), { apiKey: TEST_KEY }).result()
     assert.notEqual(response.stopReason, 'error', response.errorMessage)
     assert.equal(captured.at(-1)!.headers.get(SESSION_HEADER), null)
   })

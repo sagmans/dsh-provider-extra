@@ -37,6 +37,26 @@ export interface SettingsLike {
   update(namespace: typeof PI_AI_SETTINGS_NAMESPACE, patch: object): Promise<void>
 }
 
+/**
+ * The same slice, but only when the running line still owns a per-namespace
+ * settings document.
+ *
+ * The 0.1.7 line publishes forms derived from each entry's own Config, and its
+ * service has neither reader nor writer for a namespace: the declaration this
+ * seam used to write is a profile-patch edit there. Reporting that as
+ * unavailable is the truth, where handing the service through would fail on the
+ * first read and read as a broken sign-in rather than a moved seam.
+ *
+ * @param service - whatever the composition publishes under the settings name.
+ * @returns the readable-and-writable seam, or nothing on a line without one.
+ */
+export function legacySettings(service: unknown): SettingsLike | undefined {
+  const settings = service as Partial<SettingsLike> | undefined
+  return settings !== undefined && typeof settings.get === 'function' && typeof settings.update === 'function'
+    ? settings as SettingsLike
+    : undefined
+}
+
 /** The configured routes, or nothing when no pi-ai service registered the namespace. */
 function configuredProviders(value: unknown): Record<string, unknown> | undefined {
   if (typeof value !== 'object' || value === null) return undefined

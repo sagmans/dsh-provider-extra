@@ -6,6 +6,7 @@ import CommandRuntime from '@deepseek-ai/dsh-commands'
 import type { CommandInvocation } from '@deepseek-ai/dsh-commands'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import type { OAuthCredential } from '@earendil-works/pi-ai'
+import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
 import { buildCodexProfile, recordKeyFor } from '../src/codex.ts'
 import { mountLoginCommand } from '../src/login-host.ts'
 import * as plugin from '../src/index.ts'
@@ -13,7 +14,8 @@ import { AGENT, COMMAND, REF, SOURCE, MemoryCredentials } from './login-host-fix
 
 const CODEX_SOURCE = 'openai-codex'
 const CODEX_ALIAS = 'legacy-subscription-alias'
-const CODEX_MODEL = 'gpt-5.4'
+/** The installed line names its own Codex models, so a hardcoded id does not exist on every line. */
+const CODEX_MODEL = builtinProviders().find(provider => provider.id === CODEX_SOURCE)!.getModels()[0]!.id
 const ACCOUNT = 'local-codex-account'
 const AUTH_CLAIM = 'https://api.openai.com/auth'
 const ACCESS = ['header', Buffer.from(JSON.stringify({ [AUTH_CLAIM]: { chatgpt_account_id: ACCOUNT } })).toString('base64url'), 'signature'].join('.')

@@ -24,11 +24,16 @@ For example, a profile with these row IDs needs these overrides:
   disabled: true
 - id: llm-pi-ai
   disabled: true
+- id: llm-deepseek-account
+  disabled: true
+- id: deepseek-account
+  disabled: true
 - id: agent-default-model
   disabled: true
 ```
 
 Inspect the composed profile for additional provider rows or different IDs.
+From 0.1.7 on, the base adds two more: it registers the signed-in DeepSeek account as a provider, so a catalog profile on the 0.1.7 or 0.2.0 line reports `CATALOG_OWNER_COLLISION` until `llm-deepseek-account` and `deepseek-account` carry the same override.
 Mount provider-extra after those rows so its preflight can detect existing owners.
 Preflight rejects any existing adapter, provider directory, or default owner before registering managed routes.
 It never disables another plugin. The public registry cannot veto a later unrelated adapter or directory registration.
@@ -134,7 +139,7 @@ The updater preserves other fields and revalidates membership against the editor
 The promise awaits the editor's validation, persistence, and reconciliation.
 Failures propagate without publishing a local-only default.
 Hosts without an addressable entry and that editor reject with `CONFIG_PERSISTENCE_UNAVAILABLE`.
-The released `0.1.5-rc.2` host has no verified canonical editor; edit its profile patch explicitly.
+The verified `0.1.5` line has no canonical editor; edit its profile patch explicitly.
 No fallback writes legacy `agent-default-model` settings or another file.
 
 The catalog is nonvolatile. Successful edits follow the host's normal plugin restart lifecycle.

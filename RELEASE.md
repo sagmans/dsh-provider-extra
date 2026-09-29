@@ -10,10 +10,24 @@ Applies to maintainers. Current release owner: repository owner ([`LICENSE`](LIC
 
 1. Candidate lands on `main` through a reviewed PR (squash merge).
 2. `verify` CI green on the exact merged SHA.
-3. Locally on that SHA: `pnpm typecheck`, `pnpm test`, `pnpm run build`, `pnpm run test:build`, `pnpm test:release`, `npm audit signatures`, `pnpm audit --audit-level high`, and `node tools/pack-smoke.mjs`.
-4. Dogfooding: install the packed candidate into a plugin profile whose harness is the supported line (`>=0.1.5-rc.1 <0.1.6`) and drive a real session through **both** routes — OpenCode Go with a stored key, OpenAI Codex after `dsh-provider-extra-login`. Unit tests do not prove a real account authenticates or a remote gateway accepts the session header.
+3. Locally on that SHA: `pnpm typecheck`, `pnpm test`, `node tools/harness-matrix.mjs`, `pnpm run build`, `pnpm run test:build`, `pnpm test:release`, `npm audit signatures`, `pnpm audit --audit-level high`, and `node tools/pack-smoke.mjs`.
+4. Dogfooding: install the packed candidate into a plugin profile whose harness is a verified release (`>=0.1.5-rc.1 <0.3.0`) and drive a real session through **both** routes — OpenCode Go with a stored key, OpenAI Codex after `dsh-provider-extra-login`. Unit tests do not prove a real account authenticates or a remote gateway accepts the session header.
 5. README accuracy pass: every documented command, profile path, and credential reference still behaves as written.
 6. A published npm version is immutable. A broken release is forward-fixed, never unpublished (see [Rollback](#rollback)).
+
+## Harness matrix
+
+The plugin mounts harness packages and peers on harness modules, so `dsh.compatibility.dsh` is the range its peers and a profile accept, and `dsh.compatibility.dshReleases` lists the releases that passed the gates. The harness peers themselves stay `*`: npm resolves a peer against the consumer's own tree, and a peer range cannot span two prerelease lines — npm admits a prerelease only through a comparator naming its own `X.Y.Z` tuple, so `>=0.1.5-rc.1 <0.2.0` reaches `0.1.5-rc.3` and never a `0.1.7` prerelease, which resolves a second framework copy beside the version the profile already has. The runtime gates a row on those same peer ranges before it mounts one — `@deepseek-ai/dsh-app-boot` reads them with `semver.satisfies(runtimeVersion, range, { includePrerelease: true })` and reports the row incompatible when none admits the host — which is the second reason `*` is the only shape that serves every line. A mounted package, by contrast, either accepts that range or names one verified release, the way the harness's own bundles pin.
+
+`node tools/harness-matrix.mjs` guards the matrix offline and `check` runs it: every verified release lies inside the range, every mounted package accepts the range or names a verified release, every harness peer stays open or names one of those, every aliased install names one, and the harness devDependencies compile against exactly one verified release. [`.github/workflows/harness-matrix.yml`](.github/workflows/harness-matrix.yml) runs the same tool with `--check-registry` daily and fails when `@deepseek-ai/dsh@latest` is not a verified release.
+
+That failure is the matrix bump, and it is a release-sized change:
+
+1. Run `node tools/harness-matrix.mjs --check-registry` to read the release the harness now serves as `latest`.
+2. Add it to `dsh.compatibility.dshReleases`, raise the `@deepseek-ai/dsh-*` `devDependencies` to it, and raise every mounted package and aliased install that names a release to it as well; `dsh.compatibility.dsh` widens only when the whole line's gates pass, and a package that serves the older line stays behind.
+3. `pnpm install`, then run every gate above. The vendor's scope is excluded from the release-age window in `pnpm-workspace.yaml`, because a verified release is published inside that window and the mount resolves the same vendor's packages.
+4. Dogfood a real session against the new release before it ships: install the packed candidate into a cloned home's profile and drive a real surface through the routes this plugin owns.
+5. Land the bump through a reviewed PR and ship it with the next patch release.
 
 ## Release identity and authority
 

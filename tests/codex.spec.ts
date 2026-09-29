@@ -16,6 +16,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { createModels } from '@earendil-works/pi-ai'
+import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
 import type { Credential } from '@earendil-works/pi-ai'
 import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import type { CredentialKey, CredentialRecord } from '@deepseek-ai/dsh-credentials'
@@ -179,8 +180,10 @@ describe('codex settings-declared extra models', () => {
   })
 
   it('leaves a catalog-shipped id to the catalog', () => {
-    const profile = buildCodexProfile({ ...route, extraModels: [{ id: 'gpt-5.4', name: 'Renamed' }] })
-    assert.equal(profile.piProvider!.getModels().find(model => model.id === 'gpt-5.4')!.name, 'GPT-5.4')
+    // The installed line names its own catalog, so the shipped id and the name it keeps come from there.
+    const shipped = builtinProviders().find(provider => provider.id === CODEX_CATALOG_ID)!.getModels()[0]!
+    const profile = buildCodexProfile({ ...route, extraModels: [{ id: shipped.id, name: 'Renamed' }] })
+    assert.equal(profile.piProvider!.getModels().find(model => model.id === shipped.id)!.name, shipped.name)
   })
 })
 

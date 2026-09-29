@@ -13,7 +13,7 @@ import type { CodexCredentialService } from './codex.ts'
 import { createLoginCommand } from './login-command.ts'
 import { StoredCredentialError } from './login-contract.ts'
 import type { LoginAuthType, LoginChoice, LoginCommandHost } from './login-contract.ts'
-import { declareProviderRoute, declaredCredentialRef } from './login-route.ts'
+import { declareProviderRoute, declaredCredentialRef, legacySettings } from './login-route.ts'
 import { PendingCredentialStore, proveApiKey } from './login-verify.ts'
 
 const PLUGIN_NAME = 'dsh-provider-extra'
@@ -78,7 +78,7 @@ function loginTargets(ctx: Context, config: LoginConfig, routes: LoginRoutes): T
       : source.id === CODEX_SOURCE ? profiles.get(config.codexRouteId) : undefined
     // The plugin's Go adapter resolves its Config reference before considering any provider record.
     const ref = source.id === GO_SOURCE ? config.apiKeyEnv
-      : source.id === CODEX_SOURCE && profile !== undefined ? undefined : declaredCredentialRef(ctx.get('settings'), source.id)
+      : source.id === CODEX_SOURCE && profile !== undefined ? undefined : declaredCredentialRef(legacySettings(ctx.get('settings')), source.id)
     // Legacy Codex aliases intentionally own a separate record; their command must use that same address.
     const credentialProvider = source.id === CODEX_SOURCE && profile !== undefined ? profile.provider : source.id
     return { id: source.id, provider: loginProvider(profile, source), served: profile !== undefined,
@@ -191,7 +191,7 @@ export function mountLoginCommand(ctx: Context, config: LoginConfig, routes: Log
         }
         if (routes.catalog !== undefined || target.served) return 'present'
         if (interaction.signal?.aborted) return 'unavailable'
-        return declareProviderRoute(ctx.get('settings'), target.id)
+        return declareProviderRoute(legacySettings(ctx.get('settings')), target.id)
       },
       stored: async id => {
         const target = targetFor(id)
