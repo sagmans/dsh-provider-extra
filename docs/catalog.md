@@ -134,7 +134,7 @@ The updater preserves other fields and revalidates membership against the editor
 The promise awaits the editor's validation, persistence, and reconciliation.
 Failures propagate without publishing a local-only default.
 Hosts without an addressable entry and that editor reject with `CONFIG_PERSISTENCE_UNAVAILABLE`.
-The released `0.1.5-rc.2` host has no verified canonical editor; edit its profile patch explicitly.
+The verified `0.1.5` line has no canonical editor; edit its profile patch explicitly.
 No fallback writes legacy `agent-default-model` settings or another file.
 
 The catalog is nonvolatile. Successful edits follow the host's normal plugin restart lifecycle.
