@@ -2,18 +2,23 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { readFile } from 'node:fs/promises'
-import { checkMatrix, compareVersions } from '../tools/harness-matrix.mjs'
+import { admitsVersion, checkMatrix, compareVersions } from '../tools/harness-matrix.mjs'
 
 const RANGE = '>=0.1.5-rc.1 <0.3.0'
 const RELEASES = ['0.1.5-rc.2', '0.1.5-rc.3', '0.1.7-rc.2', '0.2.0-rc.2']
+/** The vendor peer that admits both model-adapter lines those releases ship. */
+const VENDOR_PEER = '^0.85.1 || ^0.87.1'
 
 /** A manifest that satisfies every rule, so one rule can be broken at a time. */
 function consistent(overrides = {}) {
+  // Peers merge rather than replace, because the vendor rule is about one entry
+  // and a case that narrows another peer must not silently drop it.
+  const { peerDependencies, ...rest } = overrides
   return {
     dsh: { compatibility: { dsh: RANGE, dshReleases: Object.fromEntries(RELEASES.map(release => [release, 'compatible'])) } },
-    peerDependencies: { '@deepseek-ai/dsh-llm': '*', '@deepseek-ai/cordis': '^4.0.2' },
     devDependencies: { '@deepseek-ai/dsh-llm': '0.1.7-rc.2' },
-    ...overrides,
+    ...rest,
+    peerDependencies: { '@deepseek-ai/dsh-llm': '*', '@deepseek-ai/cordis': '^4.0.2', '@earendil-works/pi-ai': VENDOR_PEER, ...peerDependencies },
   }
 }
 
@@ -25,8 +30,9 @@ test('the shipped manifest satisfies the matrix', async () => {
 test('a release outside the compatible range is refused', () => {
   const manifest = consistent()
   manifest.dsh.compatibility.dshReleases['0.3.0'] = 'compatible'
-  assert.equal(checkMatrix(manifest).length, 1)
-  assert.match(checkMatrix(manifest)[0], /verified release 0\.3\.0 lies outside the compatible range/u)
+  // One rule per problem: the unrecorded release reports its own, so the range
+  // rule is asserted by its message rather than by counting the list.
+  assert.ok(checkMatrix(manifest).some(problem => /verified release 0\.3\.0 lies outside the compatible range/u.test(problem)))
 })
 
 test('a range no plugin can parse, and an empty verified list, are both refused', () => {
@@ -65,6 +71,37 @@ test('the sources compile against exactly one verified release', () => {
   const unverified = consistent({ devDependencies: { '@deepseek-ai/dsh-llm': '0.1.5-rc.1' } })
   assert.match(checkMatrix(unverified)[0], /which is not a verified release/u)
   assert.match(checkMatrix(consistent({ devDependencies: {} }))[0], /compiles against no harness package/u)
+})
+
+test('a vendor peer admits every version the served lines ship', () => {
+  assert.deepEqual(checkMatrix(consistent()), [])
+  // The plugin builds a provider out of this vendor and hands it to the host's
+  // seam, so a peer that admits one line and not the other resolves a private
+  // copy of the vendor under the plugin — the shape that failed the 0.2.0 turn.
+  const narrowed = consistent({ peerDependencies: { '@earendil-works/pi-ai': '^0.85.1' } })
+  assert.match(checkMatrix(narrowed)[0], /peer dependency @earendil-works\/pi-ai declares \^0\.85\.1, which does not admit 0\.87\.1, the vendor line 0\.2\.0-rc\.2 ships/u)
+  const opened = consistent({ peerDependencies: { '@earendil-works/pi-ai': '*' } })
+  assert.deepEqual(checkMatrix(opened), [])
+  // A range this guard cannot read is reported, never read as an admission.
+  const unreadable = consistent({ peerDependencies: { '@earendil-works/pi-ai': '>=0.85.1' } })
+  assert.match(checkMatrix(unreadable)[0], /which this guard cannot verify against the 0\.85\.1 line 0\.1\.5-rc\.2 ships/u)
+  const dropped = consistent()
+  delete dropped.peerDependencies['@earendil-works/pi-ai']
+  assert.match(checkMatrix(dropped)[0], /peer dependency @earendil-works\/pi-ai is missing/u)
+  // A new verified line cannot skip the vendor question.
+  const unrecorded = consistent()
+  unrecorded.dsh.compatibility.dshReleases['0.2.0-rc.3'] = 'compatible'
+  assert.match(checkMatrix(unrecorded)[0], /verified release 0\.2\.0-rc\.3 has no recorded vendor pin/u)
+})
+
+test('a caret keeps the minor of a 0.x vendor line', () => {
+  assert.ok(admitsVersion('^0.85.1 || ^0.87.1', '0.85.1'))
+  assert.ok(admitsVersion('^0.85.1 || ^0.87.1', '0.87.1'))
+  assert.ok(admitsVersion('^0.87.1', '0.87.2'))
+  assert.ok(!admitsVersion('^0.85.1', '0.87.1'))
+  assert.ok(!admitsVersion('^0.85.1', '0.86.0'))
+  assert.ok(admitsVersion('0.87.1', '0.87.1'))
+  assert.ok(admitsVersion('*', '0.87.1'))
 })
 
 test('a prerelease orders before its own release and after the previous one', () => {

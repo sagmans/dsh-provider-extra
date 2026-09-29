@@ -8,6 +8,17 @@ carry a breaking change, and a patch carries only fixes.
 
 ## [Unreleased]
 
+### Fixed
+
+- A provider route serves the host's own model adapter instead of a private
+  older copy. The `@earendil-works/pi-ai` peer admitted only `^0.85.1`, so a
+  profile on the `0.2.0` line — whose harness ships `0.87.1` — resolved a second
+  `0.85.1` under this plugin, and the provider built from it met the host's
+  newer request vocabulary: on `0.2.0-rc.2` the first turn failed with
+  `Cannot read properties of undefined (reading 'length')`. The peer now admits
+  both vendor lines, and `tools/harness-matrix.mjs` refuses a peer that excludes
+  the vendor a verified release ships.
+
 ### Added
 
 - `tools/harness-matrix.mjs` guards the declared range, the verified releases,
