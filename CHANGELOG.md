@@ -42,6 +42,12 @@ carry a breaking change, and a patch carries only fixes.
   naming `0.1.5` cannot accept the `0.2.0` prerelease a profile already has.
   [RELEASE.md](RELEASE.md#harness-matrix) owns the rule.
 
+- A refused catalog declaration names the route and the model it belongs to —
+  `catalog provider "<route>".models[<index>] "<model>": unknown model requires
+  complete metadata: missing <field>`. A model id a newer line's vendor dropped
+  takes the profile's whole model selection down, and an index into a catalog of
+  dozens of entries names neither the route nor the model a reader has to repair.
+
 - The settings seams follow the line they mount on. A line that publishes forms
   over each entry's own Config has no section API, so the plugin installs no
   section there and the committing Loader re-applies the entry with the new
