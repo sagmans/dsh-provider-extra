@@ -262,6 +262,18 @@ describe('managed catalog compilation', () => {
     assert.throws(() => compileCatalog(config(provider('opencode-go', [{ id: WIRE_ID, name: NAME, template: UNKNOWN }]))))
   })
 
+  it('names the route and the model a refused declaration belongs to', () => {
+    // A catalog that runs to dozens of entries cannot be repaired from an index:
+    // a profile whose declaration a newer line's vendor dropped must read the
+    // route and the model id out of the message itself.
+    const route = provider('openai', [{ id: UNKNOWN, name: NAME, metadata: { api: sourceModel().api } }])
+    route.id = 'zai-route'
+    assert.throws(
+      () => compileCatalog(config(route)),
+      new RegExp('catalog provider "zai-route"\\.models\\[0\\] "' + UNKNOWN + '": unknown model requires complete metadata: missing reasoning', 'u'),
+    )
+  })
+
   it('rejects protocol changes that would inherit incompatible template metadata', () => {
     const sibling = sourceModel('opencode-go')
     assert.equal(sibling.api, 'anthropic-messages')

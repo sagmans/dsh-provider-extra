@@ -93,6 +93,7 @@ The plugin reads the profile Config, not this example or another catalog file.
 - Provider `fallbackSessionId`: optional OpenCode Go identity for requests without a session ID.
 
 Unknown fields, duplicate IDs or aliases, unknown sources or protocols, missing endpoints, malformed metadata and patterns, and unsupported default effort reject the whole candidate.
+The refusal names the route and the model it belongs to, because one stale declaration takes the profile's whole model selection down with it: a model id a newer line's vendor dropped reads as `catalog provider "<route>".models[<index>] "<model>": unknown model requires complete metadata: missing <field>`, and the repair is an installed sibling through `template` or the complete metadata below.
 Omitting `catalog` differs from `providers: []`. Empty provider or model arrays select nothing; they never expand a source catalog.
 An empty provider list requires `default: null`. A nonempty model selection requires one valid default.
 A selected route with `models: []` remains empty even when pi-ai ships models for its source.

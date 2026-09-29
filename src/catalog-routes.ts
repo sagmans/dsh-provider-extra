@@ -254,10 +254,15 @@ export function buildCatalogProfile(input: CatalogProvider): ResolvedPiAiProvide
   const models = declarations === undefined
     ? filteredModels(raw.filter, source!, input, path + '.filter')
     : declarations.map((entry, index): Model<Api> => {
-    const location = path + '.models[' + index + ']'
-    const spec = catalogRecord(entry, MODEL_FIELDS, location)
-    catalogString(spec.id, location + '.id')
-    catalogString(spec.name, location + '.name')
+    const declaration = path + ' "' + raw.id + '".models[' + index + ']'
+    const spec = catalogRecord(entry, MODEL_FIELDS, declaration)
+    catalogString(spec.id, declaration + '.id')
+    catalogString(spec.name, declaration + '.name')
+    // One refused declaration must be repairable from the message alone: an
+    // index into a catalog that runs to dozens of entries names neither the
+    // route nor the model, which is how a stale id a newer line's vendor
+    // dropped reached a reader as provider.models[5].
+    const location = declaration + ' "' + spec.id + '"'
     const aliases = 'aliases' in spec ? strings(spec.aliases, location + '.aliases') : []
     for (const name of [spec.id, ...aliases]) {
       if (names.has(name)) catalogError(location, 'duplicate model id or alias ' + name)

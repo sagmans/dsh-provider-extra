@@ -9,6 +9,9 @@
  * copy of the framework instead of the host's. The default mode checks the
  * matrix offline; --check-registry also reads the registry's latest and fails
  * when the harness has moved past the verified list.
+ *
+ * A vendor peer is placed here too, because a vendor is resolved by the
+ * consumer's tree rather than by this repository: see {@link LINE_VENDOR_PINS}.
  */
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -48,6 +51,63 @@ export function compareVersions(left, right) {
 /** The releases the gates actually ran against, as declared by the manifest. */
 export function verifiedReleases(manifest) {
   return Object.keys(manifest.dsh?.compatibility?.dshReleases ?? {})
+}
+
+/**
+ * The model-adapter vendor each verified release ships, keyed by that release.
+ *
+ * This plugin builds a provider out of the vendor and hands it to the host's own
+ * adapter seam, so both sides have to be the same copy: a peer that excludes the
+ * vendor a served line pins does not fail the install, it resolves a private
+ * older copy under this plugin, and the objects that copy builds then meet the
+ * host's newer request vocabulary. On `0.2.0-rc.2` the private `0.85.1`
+ * estimator read the host's system message as a list of content blocks and
+ * failed the first turn. Read the versions with
+ * `npm view @deepseek-ai/dsh-llm-pi-ai@<release> dependencies` when a line is
+ * added; the entries below are what those ranges resolved to in a verified
+ * clone.
+ */
+const LINE_VENDOR_PINS = {
+  '0.1.5-rc.2': { '@earendil-works/pi-ai': '0.85.1' },
+  '0.1.5-rc.3': { '@earendil-works/pi-ai': '0.85.1' },
+  '0.1.7-rc.2': { '@earendil-works/pi-ai': '0.85.1' },
+  '0.2.0-rc.2': { '@earendil-works/pi-ai': '0.87.1' },
+}
+
+/** Whether one alternative of a declared range is a shape this guard verifies. */
+function isVerifiableAlternative(alternative) {
+  return alternative === '*'
+    || /^\^\d+\.\d+\.\d+$/u.test(alternative)
+    || /^\d+\.\d+\.\d+$/u.test(alternative)
+}
+
+/** Whether every alternative of a declared range is a shape this guard verifies. */
+function isVerifiableRange(declared) {
+  const alternatives = String(declared).split('||').map(part => part.trim())
+  return alternatives.length > 0 && alternatives.every(isVerifiableAlternative)
+}
+
+/**
+ * Whether a declared range admits one version. Only the shapes
+ * {@link isVerifiableRange} accepts reach here, so an unreadable range is
+ * reported instead of being read as an admission.
+ *
+ * @param declared - the range as the manifest writes it.
+ * @param version - one exact X.Y.Z the served line ships.
+ * @returns whether some alternative admits that version.
+ */
+export function admitsVersion(declared, version) {
+  return String(declared).split('||').some(part => {
+    const alternative = part.trim()
+    if (alternative === '*') return true
+    const caret = /^\^(\d+\.\d+\.\d+)$/u.exec(alternative)
+    if (caret !== null) {
+      // Caret on 0.x keeps the minor: ^0.85.1 admits 0.85.x and never 0.87.
+      const [major, minor] = caret[1].split('.').map(Number)
+      return version.startsWith(major + '.' + minor + '.')
+    }
+    return alternative === version
+  })
 }
 
 /**
@@ -111,6 +171,28 @@ export function checkMatrix(manifest) {
     problems.push('peer dependency ' + name + ' declares ' + String(declared)
       + ', which is neither open (*), the compatible range ' + String(compatibility)
       + ', nor one of the verified releases ' + releases.join(', '))
+  }
+
+  // A vendor version is resolved by the consumer's tree, not by the range this
+  // manifest declares, so the peer is the only place that can keep one copy:
+  // narrowing it is what let a private older copy meet the host's newer
+  // contexts (see LINE_VENDOR_PINS).
+  for (const release of releases) {
+    const pins = LINE_VENDOR_PINS[release]
+    if (pins === undefined) {
+      problems.push('verified release ' + release + ' has no recorded vendor pin; read its @deepseek-ai/dsh-llm-pi-ai dependencies and record them')
+      continue
+    }
+    for (const [name, version] of Object.entries(pins)) {
+      const declared = manifest.peerDependencies?.[name]
+      if (declared === undefined) {
+        problems.push('peer dependency ' + name + ' is missing, so the ' + version + ' that line ' + release + ' ships resolves a second copy beside the host\'s')
+      } else if (!isVerifiableRange(declared)) {
+        problems.push('peer dependency ' + name + ' declares ' + String(declared) + ', which this guard cannot verify against the ' + version + ' line ' + release + ' ships')
+      } else if (!admitsVersion(declared, version)) {
+        problems.push('peer dependency ' + name + ' declares ' + String(declared) + ', which does not admit ' + version + ', the vendor line ' + release + ' ships')
+      }
+    }
   }
 
   const compiled = Object.entries(manifest.devDependencies ?? {})

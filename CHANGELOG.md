@@ -8,6 +8,17 @@ carry a breaking change, and a patch carries only fixes.
 
 ## [Unreleased]
 
+### Fixed
+
+- A provider route serves the host's own model adapter instead of a private
+  older copy. The `@earendil-works/pi-ai` peer admitted only `^0.85.1`, so a
+  profile on the `0.2.0` line — whose harness ships `0.87.1` — resolved a second
+  `0.85.1` under this plugin, and the provider built from it met the host's
+  newer request vocabulary: on `0.2.0-rc.2` the first turn failed with
+  `Cannot read properties of undefined (reading 'length')`. The peer now admits
+  both vendor lines, and `tools/harness-matrix.mjs` refuses a peer that excludes
+  the vendor a verified release ships.
+
 ### Added
 
 - `tools/harness-matrix.mjs` guards the declared range, the verified releases,
@@ -30,6 +41,12 @@ carry a breaking change, and a patch carries only fixes.
   reason, since a peer is resolved against the consumer's own tree and a range
   naming `0.1.5` cannot accept the `0.2.0` prerelease a profile already has.
   [RELEASE.md](RELEASE.md#harness-matrix) owns the rule.
+
+- A refused catalog declaration names the route and the model it belongs to —
+  `catalog provider "<route>".models[<index>] "<model>": unknown model requires
+  complete metadata: missing <field>`. A model id a newer line's vendor dropped
+  takes the profile's whole model selection down, and an index into a catalog of
+  dozens of entries names neither the route nor the model a reader has to repair.
 
 - The settings seams follow the line they mount on. A line that publishes forms
   over each entry's own Config has no section API, so the plugin installs no
