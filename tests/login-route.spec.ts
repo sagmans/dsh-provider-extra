@@ -7,7 +7,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { declareProviderRoute, declaredCredentialRef } from '../src/login-route.ts'
+import { declareProviderRoute, declaredCredentialRef, legacySettings } from '../src/login-route.ts'
 import type { SettingsLike } from '../src/login-route.ts'
 
 /** A settings service over one fixed namespace value, recording every write. */
@@ -41,6 +41,29 @@ describe('declaring a provider route', () => {
     const { settings } = settingsOf(undefined)
     assert.equal(await declareProviderRoute(undefined, 'qwen-token-plan-individual'), 'unavailable')
     assert.equal(await declareProviderRoute(settings, 'qwen-token-plan-individual'), 'unavailable')
+  })
+})
+
+describe('the settings seam a running line publishes', () => {
+  it('hands the document seam through when the line owns one', () => {
+    const { settings } = settingsOf({ providers: {} })
+    assert.equal(legacySettings(settings), settings)
+  })
+
+  it('refuses a forms service, a partial service, and an unmounted one', () => {
+    // The 0.1.7 shape: forms over Config, with no reader for a namespace. It
+    // must not be handed on, because the first read would throw inside a
+    // sign-in rather than report the moved seam.
+    const forms = { describe: () => [], update: async () => {}, configure: () => () => {} }
+    assert.equal(legacySettings(forms), undefined)
+    assert.equal(legacySettings({ get: () => ({}) }), undefined)
+    assert.equal(legacySettings({ update: async () => {} }), undefined)
+    assert.equal(legacySettings(undefined), undefined)
+  })
+
+  it('reports a declaration without a route as unavailable rather than failing', async () => {
+    const forms = { describe: () => [], update: async () => {} }
+    assert.equal(await declareProviderRoute(legacySettings(forms), 'qwen-token-plan-individual'), 'unavailable')
   })
 })
 

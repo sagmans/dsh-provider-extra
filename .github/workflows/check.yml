@@ -46,6 +46,10 @@ jobs:
         run: pnpm run typecheck
       - name: Unit tests
         run: pnpm test
+      # The declared range, the verified releases, and what every harness
+      # package declares must agree before anything is installed from them.
+      - name: Harness matrix
+        run: node tools/harness-matrix.mjs
       - name: Build
         run: pnpm run build
       # The CLI and mount tests run the build output, not the sources.

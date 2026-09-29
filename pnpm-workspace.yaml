@@ -4,6 +4,13 @@ packages: []
 # the tests would resolve to nothing.
 autoInstallPeers: true
 minimumReleaseAge: 10080
+# A verified harness release is published inside the release-age window, and
+# this project tracks that exact release rather than waiting the window out. The
+# window cannot be waited out for the mount either: a harness release resolves
+# its own vendor's packages, so the exclusion is that publisher's scope and not
+# the plugin's own dependency set.
+minimumReleaseAgeExclude:
+  - '@deepseek-ai/*'
 allowBuilds:
   # Build steps the pinned toolchain needs: esbuild's binary is required by tsx,
   # and the profile tests drive @deepseek-ai/dsh, which loads a subprocess

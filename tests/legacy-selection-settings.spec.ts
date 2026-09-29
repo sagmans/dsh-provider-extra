@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { Context, Service } from '@deepseek-ai/cordis'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
-import type { SettingsSectionHooks } from '@deepseek-ai/dsh-settings'
+import type { SectionHooks } from '../src/index.ts'
 import * as plugin from '../src/index.ts'
 import type { ExtraModelSpec } from '../src/extra-models.ts'
 import { DEFAULT_EXTRA_MODEL_TEMPLATE, OPENCODE_GO_PROVIDER_ID } from '../src/opencode-go.ts'
@@ -46,13 +46,13 @@ interface Section {
 /** The external settings seam can publish without touching documents or live homes. */
 class PublishingSettings extends Service {
   private current: Section = EMPTY_SECTION
-  private hooks?: SettingsSectionHooks<Section>
+  private hooks?: SectionHooks<Section>
 
   constructor(ctx: Context) {
     super(ctx, SETTINGS_SERVICE)
   }
 
-  installSection(_owner: Context, _namespace: string, _schema: unknown, entry: Section, hooks: SettingsSectionHooks<Section>): void {
+  installSection(_owner: Context, _namespace: string, _schema: unknown, entry: Section, hooks: SectionHooks<Section>): void {
     this.current = entry
     this.hooks = hooks
     hooks.setSource(() => this.current)

@@ -69,8 +69,12 @@ export { buildCatalogProfile } from './catalog-routes.ts'
 const SETTINGS_NS = 'dsh-provider-extra'
 
 // Declared extra models: the composition entry and the settings section share
-// these two shapes, so one document's declaration is valid in the other.
-const goExtraModelSchema: Schema<ExtraModelSpec> = Schema.object({
+// these two shapes, so one document's declaration is valid in the other. Both
+// are left to inference rather than annotated with the interfaces below: a
+// schemastery release on a verified line widens a required field's output to
+// `string | Volatile<string>` for a value a loader may pass as a getter, and an
+// annotation in the declaration's own shape then fails to compile on that line.
+const goExtraModelSchema = Schema.object({
   id: Schema.string().required(),
   name: Schema.string(),
   template: Schema.string().default(DEFAULT_EXTRA_MODEL_TEMPLATE),
@@ -79,7 +83,7 @@ const goExtraModelSchema: Schema<ExtraModelSpec> = Schema.object({
 // The Codex route ships no default template: a declaration must name the
 // sibling it clones, because a clone from another vendor's catalog would be
 // dispatched as if the subscription served it.
-const codexExtraModelSchema: Schema<ExtraModelSpec> = Schema.object({
+const codexExtraModelSchema = Schema.object({
   id: Schema.string().required(),
   name: Schema.string(),
   template: Schema.string(),
@@ -176,10 +180,33 @@ export interface ProviderExtraSection {
   codexExtraModels: ExtraModelSpec[]
 }
 
-const SectionSchema: Schema<ProviderExtraSection> = Schema.object({
+// Inferred for the reason above; the section and the entry still read the same
+// declaration form, because both are built from these two schema values.
+const SectionSchema = Schema.object({
   extraModels: Schema.array(goExtraModelSchema).default([]),
   codexExtraModels: Schema.array(codexExtraModelSchema).default([]),
 })
+
+/**
+ * The hooks a line that owns an editable section reports its merged value
+ * through; the current value replaces the entry the section sits over.
+ */
+export interface SectionHooks<T> {
+  setSource(current: () => T): void
+  onChange(): void
+}
+
+/**
+ * The section seam, seen from a line that may not publish one.
+ *
+ * The 0.1.5 line installs a section per namespace and re-reads the merged value
+ * through {@link SectionHooks}. The 0.1.7 line derives forms from each entry's
+ * own Config instead and publishes no section API, so the two are told apart
+ * here by behavior rather than by a version string.
+ */
+interface SectionOwner {
+  installSection?<T>(owner: Context, ns: string, schema: unknown, entry: T, hooks: SectionHooks<T>): void
+}
 
 /**
  * The credential seam when present; resolved per request, never at mount.
@@ -350,10 +377,17 @@ export function apply(ctx: Context, config: Config): void {
     ctx.logger.warn(error)
   }
   ctx.inject(['settings'], (settingsCtx) => {
+    const settings = settingsCtx.settings as unknown as SectionOwner
+    // A line with no section API publishes forms from this entry's own Config
+    // instead, and a committed form edit restarts the entry, so that line's
+    // extras arrive as a fresh mount of this apply() rather than as a
+    // notification. Installing a section there would fail on the missing
+    // method; leaving this line's Config alone would ignore every later edit.
+    if (typeof settings.installSection !== 'function') return
     // The section overrides the entry where a settings document exists and
     // stands in for it where none does; the settings service falls back to this
     // same value when it detaches.
-    settingsCtx.settings.installSection(ctx, SETTINGS_NS, SectionSchema, entry, {
+    settings.installSection(ctx, SETTINGS_NS, SectionSchema, entry, {
       setSource: (source) => { currentSection = source },
       // No registration facts derive from the section: the route set is fixed
       // at composition and the adapter rebuilds its snapshot on every

@@ -25,7 +25,7 @@ import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { after, before, describe, it } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
-import { LlmRuntime } from '@deepseek-ai/dsh-llm'
+import { LlmRuntime, createToolResultMessage } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, LlmAdapter, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { apply } from '../src/index.ts'
 import { buildOpenCodeGoProfile } from '../src/opencode-go.ts'
@@ -269,6 +269,13 @@ function imageMessage(ref: Record<string, unknown> = imageRef()): Message {
 /**
  * The incident's trailing history: the model called read_image, the tool
  * result carried the durable image, and the next user turn replayed all of it.
+ *
+ * The tool result is built by the installed line's own factory, because its
+ * shape is that line's: 0.1.5 answers a call with a user-role message holding a
+ * tool-result block, while 0.1.7 answers with a tool-role message carrying the
+ * call id itself. A hand-written literal silently replays as a model-visible
+ * user message on whichever line it does not match, which is the failure this
+ * case exists to catch.
  */
 function replayedToolResultHistory(): Message[] {
   return [
@@ -278,14 +285,14 @@ function replayedToolResultHistory(): Message[] {
       content: [{ type: 'tool-call', id: 'call-1', name: 'read_image', arguments: '{"path":"/tmp/shot.png"}' }],
       source: { kind: 'model', provider: ROUTE, model: IMAGE_MODEL_BY_PROTOCOL.get('openai-completions')! },
     },
-    {
-      id: 'tool-result-1', role: 'user',
-      content: [{
-        type: 'tool-result', toolCallId: 'call-1',
-        content: [{ type: 'text', text: 'image read' }, { type: 'image', attachment: imageRef() }],
-      }],
-      source: { kind: 'tool', callId: 'call-1' },
-    },
+    createToolResultMessage({
+      callId: 'call-1',
+      content: [{ type: 'text', text: 'image read' }, { type: 'image', attachment: imageRef() }],
+      isError: false,
+      // The ids and the reference are branded on both lines, and this fixture
+      // stands in for a tool result the harness built: the same cast the rest of
+      // this history makes.
+    } as unknown as Parameters<typeof createToolResultMessage>[0]) as unknown as Message,
     { id: 'user-next', role: 'user', content: [{ type: 'text', text: 'describe it' }], source: { kind: 'user' } },
   ] as unknown as Message[]
 }
