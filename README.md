@@ -162,6 +162,35 @@ Routes without models or codexModels continue to read extraModels or codexExtraM
 
 `codexTransport` pins the transport pi-ai uses for this route: `sse`, `websocket`, `websocket-cached`, or `auto`. Leave it out and pi-ai chooses, which on a network that never lets the subscription's websocket continue past the first answer leaves the reply printed and the process waiting; pin `sse` there.
 
+## Service tiers
+
+Codex routes expose service tier selection through the `providerServiceTiers` service.
+Choices are `auto`, `default`, and `priority` (Fast).
+Priority processing can increase usage cost and requires account access.
+The plugin does not offer `ultrafast` or `flex` for Codex.
+
+Selections apply to one provider and model pair.
+The owning profile Config stores them in `serviceTierSelections`:
+
+```yaml
+- id: dsh-provider-extra
+  config:
+    serviceTierSelections:
+      - provider: openai-codex
+        model: gpt-5.6-luna
+        tier: priority
+```
+
+The selection reaches both stream entry points without changing OAuth or transport.
+Managed catalog aliases with the Codex protocol also support selection.
+Other providers and routes owned by another adapter do not advertise tiers.
+
+In dsh-tui, confirm an effort to open the tier picker.
+Use `prefix+t` to open the tier picker independently.
+Choose **provider default** to remove the explicit tier.
+Cancelling the tier picker does not change the confirmed effort.
+A failed profile write leaves the previous tier unchanged.
+
 ## Provider sign-in
 
 Sign in from the profile you are already using. The plugin registers a command in the harness command palette.

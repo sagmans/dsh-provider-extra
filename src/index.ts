@@ -60,6 +60,8 @@ import { mountLoginCommand } from './login-host.ts'
 import { compileCatalog } from './catalog.ts'
 import type { CatalogConfig } from './catalog.ts'
 import { mountCatalog } from './catalog-runtime.ts'
+import { mountServiceTiers, withServiceTiers, SERVICE_TIER_CHOICES } from './service-tiers.ts'
+import type { TierSelectionConfig } from './service-tiers.ts'
 
 export { compileCatalog } from './catalog.ts'
 export type { CatalogConfig, CatalogProvider, CatalogModel, CatalogSelection, CatalogSnapshot } from './catalog.ts'
@@ -92,6 +94,8 @@ const codexExtraModelSchema = Schema.object({
 export interface Config {
   /** Presence opts this profile into exclusive, validated catalog ownership. */
   catalog?: CatalogConfig
+  /** Persist paid processing policy independently for each served model route. */
+  serviceTierSelections?: TierSelectionConfig['serviceTierSelections']
   apiKeyEnv: string
   routeId: string
   displayName: string
@@ -130,6 +134,12 @@ export interface Config {
 export const Config: Schema<Config> = Schema.transform(Schema.object({
   // Keep raw catalog presence: schemastery otherwise materializes absent arrays.
   catalog: Schema.any(),
+  // The validated Config transform owns this array; profile edits reconcile it atomically.
+  serviceTierSelections: Schema.array(Schema.object({
+    provider: Schema.string().required(),
+    model: Schema.string().required(),
+    tier: Schema.union(SERVICE_TIER_CHOICES.map(choice => choice.id)).required(),
+  })).default([]),
   apiKeyEnv: Schema.string().role('credential-ref').default(DEFAULT_OPENCODE_API_KEY_ENV),
   routeId: Schema.string().default(OPENCODE_GO_PROVIDER_ID),
   displayName: Schema.string().default('OpenCode Go'),
@@ -295,8 +305,10 @@ export function apply(ctx: Context, config: Config): void {
     }
     return new Map(entries)
   }
+  const servedProviders = new Set<string>()
+  const tiers = mountServiceTiers(ctx, config, () => new Map([...profiles()].filter(([provider]) => servedProviders.has(provider))))
   const adapter = new PiAiAdapter({
-    profiles,
+    profiles: () => withServiceTiers(profiles(), tiers.current),
     resolveApiKey: async (provider) => {
       // The Codex route authenticates from the stored OAuth grant, never
       // from a key: absent here is what lets the collection store serve it.
@@ -344,6 +356,7 @@ export function apply(ctx: Context, config: Config): void {
   // remediation and every other plugin keeps working.
   try {
     ctx.llm.registerAdapter([route.provider], adapter)
+    servedProviders.add(route.provider)
   } catch (error) {
     ctx.logger.error('dsh-provider-extra: route "' + route.provider + '" was refused;'
       + " remove it from llm-pi-ai's providers section to serve it here")
@@ -357,6 +370,7 @@ export function apply(ctx: Context, config: Config): void {
   if (codexServable) {
     try {
       ctx.llm.registerAdapter([codex.provider], adapter)
+      servedProviders.add(codex.provider)
     } catch (error) {
       ctx.logger.warn('dsh-provider-extra: codex route "' + codex.provider + '" stays with its existing owner;'
         + " remove it from llm-pi-ai's providers section to serve it here")
