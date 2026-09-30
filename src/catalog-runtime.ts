@@ -8,6 +8,8 @@ import type { CatalogSnapshot } from './catalog.ts'
 import { catalogDefault } from './catalog-default.ts'
 import { mountLoginCommand } from './login-host.ts'
 import type { LoginConfig } from './login-host.ts'
+import { mountServiceTiers, withServiceTiers } from './service-tiers.ts'
+import type { TierSelectionConfig } from './service-tiers.ts'
 
 const PLUGIN_NAME = 'dsh-provider-extra'
 const OWNER_COLLISION = 'CATALOG_OWNER_COLLISION'
@@ -30,7 +32,7 @@ function assertCatalogOwnership(ctx: Context, ownedRoutes: readonly string[] = [
 }
 
 /** Immutable closures also keep prepared and in-flight calls on their original revision. */
-export function mountCatalog(ctx: Context, snapshot: CatalogSnapshot, config: LoginConfig): void {
+export function mountCatalog(ctx: Context, snapshot: CatalogSnapshot, config: LoginConfig & TierSelectionConfig): void {
   assertCatalogOwnership(ctx)
   let ownershipError: unknown
   const requireOwnership = (): void => {
@@ -41,8 +43,9 @@ export function mountCatalog(ctx: Context, snapshot: CatalogSnapshot, config: Lo
     const configured = snapshot.providers.get(route)?.auth
     return configured !== undefined && 'credentialProvider' in configured ? configured.credentialProvider : route
   }
+  const tiers = mountServiceTiers(ctx, config, () => { requireOwnership(); return snapshot.profiles })
   const adapter = new PiAiAdapter({
-    profiles: () => { requireOwnership(); return snapshot.profiles },
+    profiles: () => { requireOwnership(); return withServiceTiers(snapshot.profiles, tiers.current) },
     auth: {
       ...auth,
       // Route aliases must share the source provider's existing OAuth grant.

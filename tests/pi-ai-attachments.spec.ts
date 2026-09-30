@@ -218,6 +218,8 @@ function mount(options: { attachments?: boolean; fs?: boolean; fault?: StoreFaul
   }
   const fs = { processPathFromHostPath: (hostPath: string) => hostPath === HOST_PATH ? WORLD_PATH : undefined }
   const ctx = {
+    fiber: { entry: { options: { id: 'attachment-test' } } },
+    provide: () => {},
     llm: {
       registerAdapter: (_providers: readonly string[], adapter: LlmAdapter) => { adapters.push(adapter); return {} },
       registerConfigurableProviders: () => ({}),
