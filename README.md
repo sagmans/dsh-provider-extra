@@ -186,7 +186,13 @@ Managed catalog aliases with the Codex protocol also support selection.
 Other providers and routes owned by another adapter do not advertise tiers.
 
 In dsh-tui, confirm an effort to open the tier picker.
+The plugin registers `prefix+t` through the optional `tuiKeymaps` registry.
+The TUI owns generic key dispatch, not this binding or its behavior.
 Use `prefix+t` to open the tier picker independently.
+Rebind `keys.plugin.provider-extra.serviceTier` on the owning TUI row.
+On Config-backed profiles, put `keys` directly under that row's `config`, not under `settings`.
+Keep `sessionId` and the other launch fields when editing the row.
+Removing this provider plugin removes its shortcut and effort follow-up.
 Choose **provider default** to remove the explicit tier.
 Cancelling the tier picker does not change the confirmed effort.
 A failed profile write leaves the previous tier unchanged.

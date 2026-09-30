@@ -63,7 +63,7 @@ it('uses the profile editor on released schemas and preserves unrelated Config',
     assert.equal(target, entry)
     entry.options.config = change({ ...entry.options.config, serviceTierSelections: [other] }, {}) as typeof entry.options.config
   } }
-  const ctx = { fiber: { entry }, get: (name: string) => name === 'configEditor' ? editor : undefined, provide: () => {} } as unknown as Context
+  const ctx = { fiber: { entry }, get: (name: string) => name === 'configEditor' ? editor : undefined, inject: () => {}, provide: () => {} } as unknown as Context
   const service = mountServiceTiers(ctx, {}, () => new Map([[PROVIDER, buildCodexProfile({ provider: PROVIDER, displayName: PROVIDER })]]))
   await service.select(PROVIDER, MODEL, PRIORITY)
   assert.deepEqual(entry.options.config, { untouched: true, serviceTierSelections: [other, { provider: PROVIDER, model: MODEL, tier: PRIORITY }] })
@@ -73,7 +73,7 @@ it('uses the profile editor on released schemas and preserves unrelated Config',
 })
 
 it('refuses unavailable persistence and invalid Config without changing policy', async () => {
-  const ctx = { fiber: { entry: { options: { id: 'provider-row' } } }, get: () => undefined, provide: () => {} } as unknown as Context
+  const ctx = { fiber: { entry: { options: { id: 'provider-row' } } }, get: () => undefined, inject: () => {}, provide: () => {} } as unknown as Context
   const service = mountServiceTiers(ctx, {}, () => new Map([[PROVIDER, buildCodexProfile({ provider: PROVIDER, displayName: PROVIDER })]]))
   await assert.rejects(service.select(PROVIDER, MODEL, PRIORITY), /writable provider settings/)
   assert.equal(service.current(PROVIDER, MODEL), undefined)

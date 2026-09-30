@@ -10,7 +10,7 @@ carry a breaking change, and a patch carries only fixes.
 
 ### Added
 
-- Codex service tiers can be selected per model route and saved in the owning profile Config. Auto, Standard, and Fast preserve existing authentication and transport.
+- Codex service tiers can be selected per model route and saved in the owning profile Config. Auto, Standard, and Fast preserve existing authentication and transport. The provider owns its optional terminal shortcut and effort follow-up through the TUI keymap registry.
 
 ## [0.6.0] - 2026-09-30
 

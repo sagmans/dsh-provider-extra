@@ -1,5 +1,6 @@
 /** Keep paid request policy with the route owner, never with a terminal-only selector. */
 import type { Context } from '@deepseek-ai/cordis'
+import { mountTierActions } from './tui-actions.ts'
 import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { Api, Model, StreamOptions } from '@earendil-works/pi-ai'
 
@@ -113,5 +114,6 @@ export function mountServiceTiers(
     profiles,
   )
   ctx.provide(SERVICE_NAME, service)
+  mountTierActions(ctx, service)
   return service
 }
