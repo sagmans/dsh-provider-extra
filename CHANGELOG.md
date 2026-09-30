@@ -8,6 +8,8 @@ carry a breaking change, and a patch carries only fixes.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-30
+
 ### Fixed
 
 - A provider route serves the host's own model adapter instead of a private
@@ -29,6 +31,13 @@ carry a breaking change, and a patch carries only fixes.
 - `tests/harness-matrix.test.mjs` pins every rule that guard enforces, and
   `tests/config-backed-settings.spec.ts` pins extras mounting and committing on
   a harness line whose settings service publishes no section.
+
+- `AGENTS.md` is added: the commands this tree runs, its file map, and the
+  sharp edges a reader otherwise rediscovers. The gate order, the two sides of
+  the harness matrix, the release-age exclusion a verified release needs, the
+  synthetic-identifier rule the packaged examples are held to, and the rule that
+  credential work stays out of the tree now read where an agent looks first
+  rather than being inferred from CI and [RELEASE.md](RELEASE.md).
 
 ### Changed
 
@@ -57,6 +66,13 @@ carry a breaking change, and a patch carries only fixes.
   Config, addressed by profile entry id, and no per-namespace reader — so both
   newer lines take the same branch and no further seam moved.
 
+- The settings-section schemas are left to inference rather than annotated with
+  the interfaces they describe. A schemastery release on a verified line widens a
+  required field's output to `string | Volatile<string>`, because a loader may
+  pass that field as a getter, and an annotation in the declaration's own shape
+  then fails to compile on that line. The section and the entry still read the
+  same declaration form, because both are built from the same schema values.
+
 - The Codex fixtures and the replayed transcript follow the installed line's own
   catalog and context factory. `0.2.0-rc.2` ships a pi-ai that drops the
   `gpt-5.4` id the fixtures hardcoded and brands the normalized context a
@@ -78,3 +94,6 @@ carry a breaking change, and a patch carries only fixes.
   own message factory, because the two lines answer a tool call differently and
   a hand-written literal replays as model-visible content on whichever line it
   does not match.
+
+[Unreleased]: https://github.com/sagmans/dsh-provider-extra/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/sagmans/dsh-provider-extra/compare/v0.5.0...v0.6.0
