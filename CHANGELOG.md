@@ -8,6 +8,8 @@ carry a breaking change, and a patch carries only fixes.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-01
+
 ### Changed
 
 - Agent guidance now requires signed version tags, matching GitHub releases,
@@ -111,5 +113,6 @@ carry a breaking change, and a patch carries only fixes.
   a hand-written literal replays as model-visible content on whichever line it
   does not match.
 
-[Unreleased]: https://github.com/sagmans/dsh-provider-extra/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/sagmans/dsh-provider-extra/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/sagmans/dsh-provider-extra/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/sagmans/dsh-provider-extra/compare/v0.5.0...v0.6.0
