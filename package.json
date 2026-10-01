@@ -18,6 +18,9 @@
   "main": "./dist/index.js",
   "exports": {
     ".": "./dist/index.js",
+    "./client": "./dist/client.js",
+    "./headless-startup": "./dist/headless-startup.js",
+    "./headless.patch.yml": "./headless.patch.yml",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
@@ -28,6 +31,7 @@
     "dist",
     "docs",
     "cordis.patch.yml",
+    "headless.patch.yml",
     "README.md"
   ],
   "engines": {
@@ -45,6 +49,9 @@
   "homepage": "https://github.com/sagmans/dsh-provider-extra#readme",
   "bugs": "https://github.com/sagmans/dsh-provider-extra/issues",
   "dsh": {
+    "client": {
+      "platform": "web"
+    },
     "bundle": {
       "patch": "./cordis.patch.yml"
     },
@@ -63,7 +70,8 @@
     "codex:login": "node --import tsx/esm src/login-cli.ts",
     "test": "node --import tsx/esm --test \"tests/*.spec.ts\"",
     "typecheck": "tsc --noEmit",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node tools/build-client.mjs",
+    "build:client": "node tools/build-client.mjs",
     "test:build": "node --test \"tests/*.test.mjs\"",
     "test:release": "python3 -m unittest discover -s tests/release -p 'test_*.py'",
     "pack-smoke": "node tools/pack-smoke.mjs",

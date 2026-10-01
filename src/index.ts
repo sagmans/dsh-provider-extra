@@ -306,9 +306,10 @@ export function apply(ctx: Context, config: Config): void {
     return new Map(entries)
   }
   const servedProviders = new Set<string>()
-  const tiers = mountServiceTiers(ctx, config, () => new Map([...profiles()].filter(([provider]) => servedProviders.has(provider))))
+  const sourceFor = (provider: string): string | undefined => provider === codex.provider && codexServable ? DEFAULT_CODEX_ROUTE_ID : undefined
+  const tiers = mountServiceTiers(ctx, config, () => new Map([...profiles()].filter(([provider]) => servedProviders.has(provider))), sourceFor)
   const adapter = new PiAiAdapter({
-    profiles: () => withServiceTiers(profiles(), tiers.current),
+    profiles: () => withServiceTiers(profiles(), tiers.current, sourceFor),
     resolveApiKey: async (provider) => {
       // The Codex route authenticates from the stored OAuth grant, never
       // from a key: absent here is what lets the collection store serve it.

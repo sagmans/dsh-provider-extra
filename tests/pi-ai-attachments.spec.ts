@@ -220,6 +220,8 @@ function mount(options: { attachments?: boolean; fs?: boolean; fault?: StoreFaul
   const ctx = {
     fiber: { entry: { options: { id: 'attachment-test' } } },
     provide: () => {},
+    effect: (execute: () => (() => void)) => execute(),
+    on: () => () => {},
     llm: {
       registerAdapter: (_providers: readonly string[], adapter: LlmAdapter) => { adapters.push(adapter); return {} },
       registerConfigurableProviders: () => ({}),
