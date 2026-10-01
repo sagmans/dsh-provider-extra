@@ -131,7 +131,11 @@ export function mountCatalog(ctx: Context, snapshot: CatalogSnapshot, config: Lo
   refreshOwnership()
   // A public update veto runs before disposal, so a competing late-mounted
   // adapter cannot turn a refused reload into loss of the last valid catalog.
+  let activeGeneration = true
+  ctx.effect(() => () => { activeGeneration = false })
   ctx.on('internal/update', (next, _noSave, proceed) => {
+    // A retired snapshot must not veto replacement of the current catalog owner.
+    if (!activeGeneration) return proceed()
     if (next.catalog !== undefined) assertCatalogOwnership(ctx, routes, defaults)
     return proceed()
   })

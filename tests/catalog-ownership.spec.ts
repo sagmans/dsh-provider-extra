@@ -16,6 +16,7 @@ const COLLISION = 'CATALOG_OWNER_COLLISION'
 const SELECTION = { provider: ROUTE, model: MODEL }
 const FIRST = 'first-generation'
 const SECOND = 'second-generation'
+const RELOAD_GENERATIONS = [SECOND, FIRST, SECOND] as const
 const HEADER = 'x-catalog-generation'
 const catalog = (baseURL?: string) => ({
   version: 1,
@@ -153,4 +154,24 @@ test('legitimate reload retains captured dispatch and does not interrupt an alre
     releaseResponse(); await external?.dispose(); await mounted.dispose(); await credentials.dispose(); await runtime.dispose()
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
   }
+})
+test('successive managed reloads replace only their own default and remain usable', async t => {
+  const ctx = new Context()
+  const runtime = await ctx.plugin(LlmRuntime)
+  t.after(() => runtime.dispose())
+  const mounted = await ctx.plugin(plugin, { catalog: catalog() } as never)
+  t.after(() => mounted.dispose())
+  for (const generation of RELOAD_GENERATIONS) {
+    const replacement = catalog()
+    replacement.providers[0]!.models[0]!.name = generation
+    mounted.update({ catalog: replacement })
+    await mounted.await()
+    assert.equal((await ctx.llm.resolveModelInfo(ROUTE, MODEL)).name, generation)
+    assert.deepEqual(ctx.get('agentDefaultModel').currentSelection(), SELECTION)
+  }
+  const external = await ctx.plugin(competing())
+  t.after(() => external.dispose())
+  assert.throws(() => mounted.update({ catalog: catalog() }), { code: COLLISION })
+  await external.dispose()
+  assert.deepEqual(ctx.get('agentDefaultModel').currentSelection(), SELECTION)
 })
