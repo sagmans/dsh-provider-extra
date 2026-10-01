@@ -3,13 +3,15 @@ import assert from 'node:assert/strict'
 import { it } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import { createTierPicker, mountTierActions, TIER_ACTION_ID, type TierActionPorts } from '../src/tui-actions.ts'
-import type { TierSelection } from '../src/service-tiers.ts'
+import { SERVICE_TIER_CHOICES, type TierSelection } from '../src/service-tiers.ts'
 
 const PROVIDER = 'openai-codex'
 const MODEL = 'gpt-5.6-luna'
 const PRIORITY = 'priority'
 const CHOICES = [{ id: PRIORITY, name: 'Fast', description: 'Higher usage cost' }]
 const ROUTE = { provider: PROVIDER, model: MODEL }
+const OTHER_ROUTE = { provider: PROVIDER, model: 'other-model' }
+const FOOTER_CASES = [[undefined, undefined], ['auto', 'Auto'], ['default', undefined], [PRIORITY, 'Fast']] as const
 
 /** Public generic ports keep the provider test independent of terminal implementation classes. */
 function harness(picked: string | undefined, available = true, failure = false) {
@@ -53,7 +55,7 @@ it('does not leak adapter details or report a failed write as success', async ()
 })
 it('owns the default chord and effort follow-up for its injection lifetime', async t => {
   const ctx = new Context()
-  const actions: { id: string; defaultKeys: readonly string[]; handler(ports: TierActionPorts): Promise<void> }[] = []
+  const actions: { id: string; defaultKeys: readonly string[]; handler(ports: TierActionPorts): Promise<void>; routeHint?(route: typeof ROUTE): string | undefined }[] = []
   const hooks = new Set<(ports: TierActionPorts) => Promise<void>>()
   const registry = {
     register: (owner: Context, action: typeof actions[number]) => owner.effect(() => { actions.push(action); return () => { actions.splice(actions.indexOf(action), 1) } }),
@@ -62,12 +64,20 @@ it('owns the default chord and effort follow-up for its injection lifetime', asy
   const surface = await ctx.plugin((owner: Context) => owner.provide('tuiKeymaps', registry as never))
   t.after(() => surface.dispose())
   const test = harness(PRIORITY)
-  const owner = await ctx.plugin((owner: Context) => mountTierActions(owner, test.tiers))
+  let selected: string | undefined
+  const tiers: TierSelection = { ...test.tiers, choices: () => SERVICE_TIER_CHOICES,
+    current: (provider, model) => provider === PROVIDER && model === MODEL ? selected : undefined }
+  const owner = await ctx.plugin((owner: Context) => mountTierActions(owner, tiers))
   await new Promise<void>(resolve => setImmediate(resolve))
   assert.equal(actions.length, 1)
   assert.equal(actions[0]!.id, TIER_ACTION_ID)
   assert.deepEqual(actions[0]!.defaultKeys, ['t'])
   assert.equal(hooks.size, 1)
+  for (const [tier, expected] of FOOTER_CASES) {
+    selected = tier
+    assert.equal(actions[0]!.routeHint?.(ROUTE), expected)
+  }
+  assert.equal(actions[0]!.routeHint?.(OTHER_ROUTE), undefined)
   await actions[0]!.handler(test.ports)
   assert.deepEqual(test.calls, [[PROVIDER, MODEL, PRIORITY]])
   await owner.dispose()

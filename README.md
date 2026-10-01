@@ -196,6 +196,10 @@ Removing this provider plugin removes its shortcut and effort follow-up.
 Choose **provider default** to remove the explicit tier.
 Cancelling the tier picker does not change the confirmed effort.
 A failed profile write leaves the previous tier unchanged.
+With footer-hint support, explicit Auto and Fast appear beside effort, for example `(high · Fast)`.
+Standard and provider-default selections stay hidden.
+Provider default clears this plugin's override; it does not add `service_tier` to normal requests.
+Existing caller options and payload hooks remain unchanged.
 
 ## Provider sign-in
 
