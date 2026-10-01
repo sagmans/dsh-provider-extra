@@ -7,6 +7,8 @@ export const TIER_ACTION_ID = 'plugin.provider-extra.serviceTier'
 const TIER_KEY = 't'
 const TIER_LABEL = 'service tier'
 const PROVIDER_DEFAULT = ''
+/** Ordinary processing stays quiet; only account-auto and expedited choices qualify the route. */
+const FOOTER_TIERS = new Set(['auto', 'priority'])
 const SAVE_FAILURE = 'could not save service tier; check writable provider settings and retry'
 const DISCOVERY_FAILURE = 'could not read service tiers; check provider configuration and retry'
 const NO_ROUTE = 'no model route is in use; choose a model first'
@@ -19,7 +21,7 @@ export interface TierActionPorts {
   notice(message: string): void
 }
 interface Registry {
-  register(owner: Context, action: { id: string; layer: 'chord'; defaultKeys: readonly string[]; label: string; handler(ports: TierActionPorts): Promise<void> }): () => void
+  register(owner: Context, action: { id: string; layer: 'chord'; defaultKeys: readonly string[]; label: string; handler(ports: TierActionPorts): Promise<void>; routeHint?(route: NonNullable<TierActionPorts['route']>): string | undefined }): () => void
   afterEffort(owner: Context, handler: (ports: TierActionPorts) => Promise<void>): () => void
 }
 
@@ -57,7 +59,12 @@ export function mountTierActions(ctx: Context, tiers: TierSelection): void {
     const registry = owner.get(REGISTRY) as Registry
     const choose = createTierPicker(tiers)
     registry.register(owner, { id: TIER_ACTION_ID, layer: 'chord', defaultKeys: [TIER_KEY], label: TIER_LABEL,
-      handler: ports => choose(ports) })
+      handler: ports => choose(ports),
+      routeHint: route => {
+        const tier = tiers.current(route.provider, route.model)
+        return FOOTER_TIERS.has(tier ?? PROVIDER_DEFAULT)
+          ? tiers.choices(route.provider, route.model).find(choice => choice.id === tier)?.name : undefined
+      } })
     registry.afterEffort(owner, ports => choose(ports, true))
   })
 }
