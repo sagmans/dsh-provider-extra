@@ -6,11 +6,12 @@ import { createTierPicker, mountTierActions, TIER_ACTION_ID, type TierActionPort
 import { SERVICE_TIER_CHOICES, type TierSelection } from '../src/service-tiers.ts'
 
 const PROVIDER = 'openai-codex'
-const MODEL = 'gpt-5.6-luna'
+const MODEL = 'example-tier-model'
 const PRIORITY = 'priority'
+const SAVE_FAILURE = 'could not confirm service tier; check writable shared storage, then reopen the picker before retrying'
 const CHOICES = [{ id: PRIORITY, name: 'Fast', description: 'Higher usage cost' }]
 const ROUTE = { provider: PROVIDER, model: MODEL }
-const OTHER_ROUTE = { provider: PROVIDER, model: 'other-model' }
+const OTHER_ROUTE = { provider: PROVIDER, model: 'example-other-model' }
 const FOOTER_CASES = [[undefined, undefined], ['auto', 'Auto'], ['default', undefined], [PRIORITY, 'Fast']] as const
 
 /** Public generic ports keep the provider test independent of terminal implementation classes. */
@@ -19,6 +20,7 @@ function harness(picked: string | undefined, available = true, failure = false) 
   const notices: string[] = []
   let picks = 0
   const tiers: TierSelection = { choices: () => available ? CHOICES : [], current: () => undefined,
+    resolve: () => assert.fail('pickers must not resolve invocation policy'),
     select: async (...args) => { if (failure) throw new Error('private adapter details'); calls.push(args) } }
   const ports: TierActionPorts = { route: ROUTE, pick: async spec => { picks++; assert.equal(spec.rows[0]!.id, ''); return picked }, notice: text => notices.push(text) }
   return { tiers, ports, choose: createTierPicker(tiers), calls, notices, picks: () => picks }
@@ -51,7 +53,7 @@ it('does not leak adapter details or report a failed write as success', async ()
   const test = harness(PRIORITY, true, true)
   await test.choose(test.ports)
   assert.deepEqual(test.calls, [])
-  assert.deepEqual(test.notices, ['could not save service tier; check writable provider settings and retry'])
+  assert.deepEqual(test.notices, [SAVE_FAILURE])
 })
 it('owns the default chord and effort follow-up for its injection lifetime', async t => {
   const ctx = new Context()

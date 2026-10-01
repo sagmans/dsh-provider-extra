@@ -1,6 +1,9 @@
 /** Keep paid request policy with the route owner, never with a terminal-only selector. */
 import type { Context } from '@deepseek-ai/cordis'
 import { mountTierActions } from './tui-actions.ts'
+import { mountTierRemote } from './tier-remote.ts'
+import { createTierStore } from './tier-store.ts'
+import { currentInvocationTier, mountTierInvocation } from './tier-invocation.ts'
 import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { Api, Model, StreamOptions } from '@earendil-works/pi-ai'
 
@@ -15,10 +18,13 @@ export const SERVICE_TIER_CHOICES = [
   { id: 'default', name: 'Standard', description: 'Standard processing' },
   { id: 'priority', name: 'Fast', description: 'Priority processing; higher usage cost, subject to account access' },
 ] as const
-const SERVICE_TIER_FIELD = 'serviceTierSelections'
 const SERVICE_NAME = 'providerServiceTiers'
-const EDITOR_SERVICE = 'configEditor'
-const WRITE_UNSUPPORTED = 'service tier could not be saved; writable provider settings are required'
+const PROFILE_SERVICE = 'profileContext'
+const INVOCATION_TIERS = new Map<string, string | null>([
+  ['fast', 'priority'],
+  ['standard', 'default'],
+  ['provider-default', null],
+])
 const INVALID_TIER = 'unsupported service tier for this model route'
 const INVALID_PAYLOAD = 'OpenAI service tier requires an object request payload'
 
@@ -30,6 +36,8 @@ export interface TierSelectionConfig { serviceTierSelections?: readonly TierSele
 export interface TierSelection {
   choices(provider: string, model: string): readonly { id: string; name: string; description: string }[]
   current(provider: string, model: string): string | undefined
+  /** Invocation policy must validate without changing shared selections. */
+  resolve(provider: string, model: string, override: string): string | null
   select(provider: string, model: string, tier: string | undefined): Promise<void>
 }
 declare module '@deepseek-ai/cordis' {
@@ -53,10 +61,15 @@ function validTier(tier: string): boolean {
   return SERVICE_TIER_CHOICES.some(choice => choice.id === tier)
 }
 
+/** Startup validation shares the same canonical values and aliases as model-scoped resolution. */
+export function isServiceTierOverride(value: string): boolean {
+  return validTier(value) || INVOCATION_TIERS.has(value)
+}
+
 /** Durable writes complete before the selected row can truthfully report success. */
 export function createTierSelection(
-  read: () => readonly TierSelectionEntry[],
-  write: (change: (entries: readonly TierSelectionEntry[]) => TierSelectionEntry[]) => Promise<void>,
+  read: (provider: string, model: string) => string | null | undefined,
+  write: (provider: string, model: string, tier: string | null) => Promise<void>,
   profiles: () => ReadonlyMap<string, ResolvedPiAiProviderProfile>,
   sourceFor: TierSourceResolver = routeIdentity,
 ): TierSelection {
@@ -65,17 +78,19 @@ export function createTierSelection(
       ? SERVICE_TIER_CHOICES : []
   return {
     choices,
+    resolve: (provider, model, override) => {
+      const available = choices(provider, model)
+      const tier = INVOCATION_TIERS.has(override) ? INVOCATION_TIERS.get(override)! : override
+      if (available.length === 0 || (tier !== null && !available.some(choice => choice.id === tier))) throw new Error(INVALID_TIER)
+      return tier
+    },
     current: (provider, model) => {
-      const tier = read().find(entry => entry.provider === provider && entry.model === model)?.tier
-      return tier !== undefined && validTier(tier) ? tier : undefined
+      const tier = read(provider, model)
+      return typeof tier === 'string' && validTier(tier) ? tier : undefined
     },
     select: async (provider, model, tier) => {
       if (choices(provider, model).length === 0 || (tier !== undefined && !validTier(tier))) throw new Error(INVALID_TIER)
-      await write(entries => {
-        const next = entries.filter(entry => entry.provider !== provider || entry.model !== model)
-        if (tier !== undefined) next.push({ provider, model, tier })
-        return next
-      })
+      await write(provider, model, tier ?? null)
     },
   }
 }
@@ -91,7 +106,17 @@ export function withServiceTiers(
     const eligible = (model: Model<Api>): boolean => supportsTiers(sourceFor(id), model.api)
     if (source === undefined || !source.getModels().some(eligible)) return [id, profile]
     const optionsFor = <T extends StreamOptions>(model: Model<Api>, options: T | undefined): T | undefined => {
-      const tier = current(id, model.id)
+      // Plugin-local request scope carries CLI policy without changing host request or session schemas.
+      const invocation = currentInvocationTier()
+      const override = invocation === undefined
+        ? (options as (T & { serviceTier?: string | null }) | undefined)?.serviceTier : invocation
+      if (override === null) {
+        if (options === undefined) return undefined
+        const forwarded = Object.assign({}, options)
+        delete (forwarded as { serviceTier?: string | null }).serviceTier
+        return forwarded
+      }
+      const tier = override ?? current(id, model.id)
       if (!eligible(model) || tier === undefined || !validTier(tier)) return options
       return Object.assign({}, options, { serviceTier: tier, onPayload: async (payload: unknown, wireModel: Model<Api>) => {
         // pi-ai's simple stream drops serviceTier, but retains this final serialization hook.
@@ -109,31 +134,29 @@ export function withServiceTiers(
   }))
 }
 
-/** The profile editor supplies locking, rollback, and canonical plugin reconciliation. */
+/** Plugin-owned records share selections without editing or reconciling profile configuration. */
 export function mountServiceTiers(
   ctx: Context,
   config: TierSelectionConfig,
   profiles: () => ReadonlyMap<string, ResolvedPiAiProviderProfile>,
   sourceFor: TierSourceResolver = routeIdentity,
 ): TierSelection {
-  const entry: unknown = (ctx.fiber as typeof ctx.fiber & { entry?: unknown }).entry
+  const profile = ctx.get(PROFILE_SERVICE) as { home?: string } | undefined
+  const store = createTierStore(profile?.home, validTier)
   const service = createTierSelection(
-    // Retained calls keep their mounted policy until the editor reconciles a new owner.
-    () => config.serviceTierSelections ?? [],
-    async change => {
-      const editor = ctx.get(EDITOR_SERVICE) as { edit?(entry: unknown, change: (raw: Record<string, unknown>, inherited: Record<string, unknown>) => Record<string, unknown>): Promise<void> } | undefined
-      if (entry === undefined || typeof editor?.edit !== 'function') throw new Error(WRITE_UNSUPPORTED)
-      await editor.edit(entry, (raw, inherited) => {
-        // Merge under the profile lock so another model's simultaneous choice survives.
-        const previous = (raw[SERVICE_TIER_FIELD] ?? inherited[SERVICE_TIER_FIELD] ?? []) as TierSelectionEntry[]
-        if (!Array.isArray(previous)) throw new Error(WRITE_UNSUPPORTED)
-        return { ...raw, [SERVICE_TIER_FIELD]: change(previous) }
-      })
+    (provider, model) => {
+      const tier = store.read(provider, model)
+      return tier === undefined
+        ? config.serviceTierSelections?.find(entry => entry.provider === provider && entry.model === model)?.tier
+        : tier
     },
+    store.write,
     profiles,
     sourceFor,
   )
   ctx.provide(SERVICE_NAME, service)
+  mountTierInvocation(ctx, service)
+  mountTierRemote(ctx)
   mountTierActions(ctx, service)
   return service
 }

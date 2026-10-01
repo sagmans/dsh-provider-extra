@@ -26,6 +26,10 @@ const APIS = [RESPONSES, COMPLETIONS] as const
 const STREAMS = ['stream', 'streamSimple'] as const
 const TIERS = ['auto', 'default', 'priority'] as const
 const PRIORITY = 'priority'
+const INVOCATION_CASES = [
+  ['standard', 'default'], ['fast', PRIORITY], ['auto', 'auto'], ['provider-default', undefined],
+  ['default', 'default'], [PRIORITY, PRIORITY],
+] as const
 const INVALID_TIER = 'ultrafast'
 const ALIAS = 'example-openai-alias'
 const MODEL = 'example-tier-model'
@@ -80,7 +84,10 @@ for (const api of APIS) {
       t.after(() => mounted.dispose())
       assert.deepEqual(ctx.providerServiceTiers.choices(id, MODEL).map(choice => choice.id), eligible ? TIERS : [])
       assert.deepEqual(ctx.providerServiceTiers.choices(id, MODEL + '-missing'), [])
-      if (!eligible) await assert.rejects(ctx.providerServiceTiers.select(id, MODEL, PRIORITY), /unsupported service tier/)
+      if (!eligible) {
+        await assert.rejects(ctx.providerServiceTiers.select(id, MODEL, PRIORITY), /unsupported service tier/)
+        for (const [override] of INVOCATION_CASES) assert.throws(() => ctx.providerServiceTiers.resolve(id, MODEL, override), /unsupported service tier/)
+      }
       const payloads: Record<string, unknown>[] = []
       t.mock.method(globalThis, 'fetch', async (input: string | URL | Request, init?: RequestInit) => {
         const request = new Request(input, init)
@@ -141,9 +148,10 @@ for (const [source, api] of [[CODEX, RESPONSES], [CODEX, COMPLETIONS]] as const)
     const profile = buildCatalogProfile(route(ALIAS, RESPONSES, OPENAI))
     const model = { ...profile.piProvider!.getModels()[0]!, api }
     const profiles = new Map([[ALIAS, { ...profile, piProvider: { ...profile.piProvider!, getModels: () => [model] } }]])
-    const selection = createTierSelection(() => [], async () => {}, () => profiles, () => source)
+    const selection = createTierSelection(() => undefined, async () => {}, () => profiles, () => source)
     assert.deepEqual(selection.choices(ALIAS, MODEL), [])
     await assert.rejects(selection.select(ALIAS, MODEL, PRIORITY), /unsupported service tier/)
+    for (const [override] of INVOCATION_CASES) assert.throws(() => selection.resolve(ALIAS, MODEL, override), /unsupported service tier/)
   })
 }
 
@@ -154,7 +162,7 @@ for (const source of [OPENAI, GO_SOURCE, undefined]) for (const stream of STREAM
     const profiles = new Map([[OPENAI, original]])
     const provider = withServiceTiers(profiles, () => PRIORITY, () => source).get(OPENAI)!.piProvider!
     const model = provider.getModels()[0]!
-    const selection = createTierSelection(() => [], async () => {}, () => profiles, () => source)
+    const selection = createTierSelection(() => undefined, async () => {}, () => profiles, () => source)
     assert.deepEqual(selection.choices(OPENAI, model.id), [])
     const payloads: Record<string, unknown>[] = []
     t.mock.method(globalThis, 'fetch', async (input: string | URL | Request, init?: RequestInit) => {
@@ -168,6 +176,43 @@ for (const source of [OPENAI, GO_SOURCE, undefined]) for (const stream of STREAM
     for await (const event of provider[stream](model, normalizeContext({ messages: [] }), { apiKey: ACCESS })) assert.notEqual(event.type, 'error', JSON.stringify(event))
     assert.equal(payloads.length, 1)
     assert.equal(Object.hasOwn(payloads[0]!, 'service_tier'), false)
+  })
+}
+
+/** Real serializers must respect the callback's null sentinel without contaminating later calls. */
+for (const api of APIS) for (const stream of STREAMS) {
+  it('serializes invocation aliases without changing shared policy through ' + api + ' ' + stream, async t => {
+    const original = buildCatalogProfile(route(ALIAS, api, api === RESPONSES ? OPENAI : undefined))
+    const profiles = new Map([[ALIAS, original]])
+    const stored = [{ provider: ALIAS, model: MODEL, tier: PRIORITY }]
+    const selection = createTierSelection((provider, model) => stored.find(entry => entry.provider === provider && entry.model === model)?.tier, async () => assert.fail('invocations must not persist'), () => profiles, () => OPENAI)
+    const provider = withServiceTiers(profiles, selection.current, () => OPENAI).get(ALIAS)!.piProvider!
+    const model = provider.getModels()[0]!
+    const payloads: Record<string, unknown>[] = []
+    t.mock.method(globalThis, 'fetch', async (input: string | URL | Request, init?: RequestInit) => {
+      const request = new Request(input, init)
+      assert.equal(request.headers.get('authorization'), 'Bearer ' + KEY)
+      assert.equal(request.headers.get(HEADER), HEADER_VALUE)
+      payloads.push(await request.json() as Record<string, unknown>)
+      return new Response(api === RESPONSES ? RESPONSE : CHAT_RESPONSE, { headers: { 'content-type': 'text/event-stream' } })
+    })
+    const base: StreamOptions = { apiKey: KEY, temperature: TEMPERATURE, headers: { [HEADER]: HEADER_VALUE },
+      onPayload: payload => ({ ...payload as Record<string, unknown>, metadata: { hook: HEADER_VALUE } }) }
+    for (const [override, expected] of INVOCATION_CASES) {
+      const options = { ...base, serviceTier: selection.resolve(ALIAS, MODEL, override) }
+      for await (const event of provider[stream](model, normalizeContext({ messages: [] }), options)) assert.notEqual(event.type, 'error', JSON.stringify(event))
+      const actual = payloads.pop()!
+      assert.equal(actual.service_tier, expected)
+      assert.equal(Object.hasOwn(actual, 'service_tier'), expected !== undefined)
+      assert.equal(actual.temperature, TEMPERATURE)
+      assert.deepEqual(actual.metadata, { hook: HEADER_VALUE })
+      assert.equal(selection.current(ALIAS, MODEL), PRIORITY)
+      for await (const event of provider[stream](model, normalizeContext({ messages: [] }), base)) assert.notEqual(event.type, 'error', JSON.stringify(event))
+      assert.equal(payloads.pop()!.service_tier, PRIORITY)
+    }
+    assert.throws(() => selection.resolve(ALIAS, MODEL, INVALID_TIER), /unsupported service tier/)
+    assert.throws(() => selection.resolve(ALIAS, MODEL + '-missing', PRIORITY), /unsupported service tier/)
+    assert.deepEqual(payloads, [])
   })
 }
 

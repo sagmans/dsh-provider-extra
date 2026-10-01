@@ -9,7 +9,7 @@ const TIER_LABEL = 'service tier'
 const PROVIDER_DEFAULT = ''
 /** Ordinary processing stays quiet; only account-auto and expedited choices qualify the route. */
 const FOOTER_TIERS = new Set(['auto', 'priority'])
-const SAVE_FAILURE = 'could not save service tier; check writable provider settings and retry'
+const SAVE_FAILURE = 'could not confirm service tier; check writable shared storage, then reopen the picker before retrying'
 const DISCOVERY_FAILURE = 'could not read service tiers; check provider configuration and retry'
 const NO_ROUTE = 'no model route is in use; choose a model first'
 const UNSUPPORTED = 'this model route advertises no service tiers'

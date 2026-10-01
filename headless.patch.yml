@@ -1,0 +1,7 @@
+# Opt in only from a headless profile; the ordinary bundle keeps every other startup unchanged.
+- id: headless-startup
+  disabled: true
+
+- insert:
+    - id: provider-extra-headless-startup
+      name: '@sagmans/dsh-provider-extra/headless-startup'

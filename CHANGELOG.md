@@ -12,6 +12,13 @@ carry a breaking change, and a patch carries only fixes.
 
 - Plugin-owned OpenAI routes can select service tiers alongside Codex routes. Source-aware eligibility preserves aliases without applying paid policies to other OpenAI-compatible providers. Both streaming entry points preserve the selected tier on the wire.
 
+- Web and Desktop provide `/service-tier` through the stock command popup, leaving the model selector unchanged.
+- A plugin-owned headless startup overlay accepts invocation-only `--service-tier` overrides while retaining the stock runner.
+
+### Changed
+
+- Interactive tier choices use shared per-model plugin storage instead of profile-local configuration edits. Configured selections remain defaults until overridden; Provider default suppresses that fallback explicitly. Shared saves require private POSIX permissions and directory synchronization; Windows interactive persistence is unsupported.
+
 ## [0.7.0] - 2026-10-01
 
 ### Changed

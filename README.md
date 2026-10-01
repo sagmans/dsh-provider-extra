@@ -169,15 +169,17 @@ Choices are `auto`, `default`, and `priority` (Fast).
 Priority processing can increase usage cost and requires account access.
 The plugin does not offer `ultrafast` or `flex` for Codex.
 
-Selections apply to one provider and model pair.
-The owning profile Config stores them in `serviceTierSelections`:
+Interactive choices apply to one provider and model pair across profiles.
+The plugin atomically stores each choice under `$DSH_HOME/provider-extra-service-tiers/`, without editing configuration or duplicating the catalog.
+Menus and requests read the latest saved choice.
+Configured `serviceTierSelections` remain defaults until an interactive choice overrides them:
 
 ```yaml
 - id: dsh-provider-extra
   config:
     serviceTierSelections:
-      - provider: openai-codex
-        model: gpt-5.6-luna
+      - provider: example-codex-route
+        model: example-codex-model
         tier: priority
 ```
 
@@ -187,9 +189,38 @@ An OpenAI-compatible protocol alone does not enable tiers.
 Other sources and routes owned by another adapter do not advertise tiers.
 The provider still controls model support and account access.
 
-On DSH `0.2.0-rc.2`, interactive saves target the active profile patch only.
-The host rejects saves when a home patch overrides that configuration.
-Shared home-patch editing, the Web/Desktop tier selector, and a headless tier flag require additional host integration.
+### Web and Desktop
+
+Type `/service-tier` in the editor and select the command.
+Its popup offers Provider default, Auto, Standard, and Fast.
+The stock Model/Effort popup stays unchanged.
+Unsupported routes show an unavailable message and no selectable tiers.
+The command uses public npm DSH `0.2.0-rc.2` client services, without upstream patches or a custom React control.
+
+### Headless
+
+The packaged [headless overlay](headless.patch.yml) requires the public npm DSH `0.2.0-rc.2` startup and request-scoping contracts.
+It replaces only startup parsing; the stock runner still owns execution and resume.
+Enable this provider plugin in the headless profile first.
+Pass the installed overlay path before headless options:
+
+```sh
+dsh --profile headless --patch /path/to/dsh-provider-extra/headless.patch.yml --service-tier=fast "Reply with exactly pong"
+```
+
+Alternatively, compose the overlay entries into your headless profile once, then omit `--patch`.
+Do not apply that overlay to Web, Desktop, or TUI profiles.
+Stock headless startup alone does not recognize `--service-tier`.
+
+Accepted values are `auto`, `standard` (`default`), `fast` (`priority`), and `provider-default`.
+Without the flag, requests use the saved choice.
+`provider-default` suppresses it for this invocation without changing storage.
+Only the invoking root agent receives the override, including resumed requests.
+Child agents, titles, and compaction retain their own defaults.
+Invalid values and unsupported routes fail without sending a generation request.
+Invocation overrides never enter settings or durable request headers.
+
+### TUI
 
 In dsh-tui, confirm an effort to open the tier picker.
 The plugin registers `prefix+t` through the optional `tuiKeymaps` registry.
@@ -199,12 +230,17 @@ Rebind `keys.plugin.provider-extra.serviceTier` on the owning TUI row.
 On Config-backed profiles, put `keys` directly under that row's `config`, not under `settings`.
 Keep `sessionId` and the other launch fields when editing the row.
 Removing this provider plugin removes its shortcut and effort follow-up.
-Choose **provider default** to remove the explicit tier.
+Choose **provider default** to suppress both the saved tier and its configured fallback.
 Cancelling the tier picker does not change the confirmed effort.
-A failed profile write leaves the previous tier unchanged.
+Writes that fail before atomic replacement preserve the previous tier.
+A connection or durability failure after replacement can leave the new tier visible; reopen the picker before retrying.
+Cancelling an already-submitted save does not undo it.
+Shared saves require a DSH profile with a resolved shared home and a filesystem that supports private POSIX permissions and directory synchronization.
+Windows interactive persistence is unsupported; configured defaults and headless flags remain usable when no shared store exists.
+Unreadable or malformed records block tier reads rather than silently restoring paid defaults; repair or remove the affected record.
 With footer-hint support, explicit Auto and Fast appear beside effort, for example `(high · Fast)`.
 Standard and provider-default selections stay hidden.
-Provider default clears this plugin's override; it does not add `service_tier` to normal requests.
+Provider default adds no `service_tier` field to normal requests.
 Existing caller options and payload hooks remain unchanged.
 
 ## Provider sign-in
