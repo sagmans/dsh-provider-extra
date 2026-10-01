@@ -43,9 +43,10 @@ export function mountCatalog(ctx: Context, snapshot: CatalogSnapshot, config: Lo
     const configured = snapshot.providers.get(route)?.auth
     return configured !== undefined && 'credentialProvider' in configured ? configured.credentialProvider : route
   }
-  const tiers = mountServiceTiers(ctx, config, () => { requireOwnership(); return snapshot.profiles })
+  const sourceFor = (route: string): string | undefined => snapshot.providers.get(route)?.source
+  const tiers = mountServiceTiers(ctx, config, () => { requireOwnership(); return snapshot.profiles }, sourceFor)
   const adapter = new PiAiAdapter({
-    profiles: () => { requireOwnership(); return withServiceTiers(snapshot.profiles, tiers.current) },
+    profiles: () => { requireOwnership(); return withServiceTiers(snapshot.profiles, tiers.current, sourceFor) },
     auth: {
       ...auth,
       // Route aliases must share the source provider's existing OAuth grant.

@@ -44,12 +44,14 @@ it('forwards tier through both streams without mutating the original options', a
   const routed = withServiceTiers(new Map([[PROVIDER, profile]]), () => PRIORITY).get(PROVIDER)!.piProvider!
   const model = source.getModels().find(entry => entry.id === MODEL)!
   const options = { temperature: 0.5, onPayload: () => ({ preserved: true }) }
-  routed.stream(model, normalizeContext({ messages: [] }), options)
-  routed.streamSimple(model, normalizeContext({ messages: [] }), options)
-  for (const forwarded of received as { temperature: number; serviceTier: string; onPayload(payload: unknown, wireModel: typeof model): Promise<unknown> }[]) {
-    assert.equal(forwarded.temperature, options.temperature)
-    assert.equal(forwarded.serviceTier, PRIORITY)
-    assert.deepEqual(await forwarded.onPayload({}, model), { preserved: true, service_tier: PRIORITY })
+  for (const supplied of [options, undefined]) {
+    routed.stream(model, normalizeContext({ messages: [] }), supplied)
+    routed.streamSimple(model, normalizeContext({ messages: [] }), supplied)
+    for (const forwarded of received.splice(0) as { temperature?: number; serviceTier: string; onPayload(payload: unknown, wireModel: typeof model): Promise<unknown> }[]) {
+      assert.equal(forwarded.temperature, supplied?.temperature)
+      assert.equal(forwarded.serviceTier, PRIORITY)
+      assert.deepEqual(await forwarded.onPayload({}, model), { ...(supplied === undefined ? {} : { preserved: true }), service_tier: PRIORITY })
+    }
   }
   assert.deepEqual(options.onPayload(), { preserved: true })
   assert.equal(options.temperature, 0.5)

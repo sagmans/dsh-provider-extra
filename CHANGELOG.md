@@ -8,6 +8,10 @@ carry a breaking change, and a patch carries only fixes.
 
 ## [Unreleased]
 
+### Added
+
+- Plugin-owned OpenAI routes can select service tiers alongside Codex routes. Source-aware eligibility preserves aliases without applying paid policies to other OpenAI-compatible providers. Both streaming entry points preserve the selected tier on the wire.
+
 ## [0.7.0] - 2026-10-01
 
 ### Changed

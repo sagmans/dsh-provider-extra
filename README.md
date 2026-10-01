@@ -164,7 +164,7 @@ Routes without models or codexModels continue to read extraModels or codexExtraM
 
 ## Service tiers
 
-Codex routes expose service tier selection through the `providerServiceTiers` service.
+Plugin-owned OpenAI and Codex routes expose service tier selection through the `providerServiceTiers` service.
 Choices are `auto`, `default`, and `priority` (Fast).
 Priority processing can increase usage cost and requires account access.
 The plugin does not offer `ultrafast` or `flex` for Codex.
@@ -181,9 +181,15 @@ The owning profile Config stores them in `serviceTierSelections`:
         tier: priority
 ```
 
-The selection reaches both stream entry points without changing OAuth or transport.
-Managed catalog aliases with the Codex protocol also support selection.
-Other providers and routes owned by another adapter do not advertise tiers.
+The selection reaches both stream entry points without changing authentication or transport.
+Managed catalog aliases support tiers when their source is `openai` or `openai-codex` and their protocol supports tier selection.
+An OpenAI-compatible protocol alone does not enable tiers.
+Other sources and routes owned by another adapter do not advertise tiers.
+The provider still controls model support and account access.
+
+On DSH `0.2.0-rc.2`, interactive saves target the active profile patch only.
+The host rejects saves when a home patch overrides that configuration.
+Shared home-patch editing, the Web/Desktop tier selector, and a headless tier flag require additional host integration.
 
 In dsh-tui, confirm an effort to open the tier picker.
 The plugin registers `prefix+t` through the optional `tuiKeymaps` registry.
