@@ -11,10 +11,11 @@ import type { Api, Model, StreamOptions } from '@earendil-works/pi-ai'
 export const CODEX_TIER_API = 'openai-codex-responses'
 const CODEX_SOURCE = 'openai-codex'
 const OPENAI_SOURCE = 'openai'
+const AUTO_TIER = 'auto'
 const OPENAI_TIER_APIS: readonly Api[] = ['openai-responses', 'openai-completions']
-/** Keep shared tier choices within both native OpenAI transports' supported policies. */
+/** Keep saved choices stable while each native protocol resolves its own wire policy. */
 export const SERVICE_TIER_CHOICES = [
-  { id: 'auto', name: 'Auto', description: 'Use the account service tier' },
+  { id: AUTO_TIER, name: 'Auto', description: 'Use the account service tier' },
   { id: 'default', name: 'Standard', description: 'Standard processing' },
   { id: 'priority', name: 'Fast', description: 'Priority processing; higher usage cost, subject to account access' },
 ] as const
@@ -118,12 +119,17 @@ export function withServiceTiers(
       }
       const tier = override ?? current(id, model.id)
       if (!eligible(model) || tier === undefined || !validTier(tier)) return options
-      return Object.assign({}, options, { serviceTier: tier, onPayload: async (payload: unknown, wireModel: Model<Api>) => {
+      // Codex rejects literal auto; omission delegates to the account without changing the saved choice.
+      const wireTier = model.api === CODEX_TIER_API && tier === AUTO_TIER ? undefined : tier
+      return Object.assign({}, options, { serviceTier: wireTier, onPayload: async (payload: unknown, wireModel: Model<Api>) => {
         // pi-ai's simple stream drops serviceTier, but retains this final serialization hook.
         const replacement = await options?.onPayload?.(payload, wireModel)
         const body = replacement === undefined ? payload : replacement
         if (typeof body !== 'object' || body === null || Array.isArray(body)) throw new Error(INVALID_PAYLOAD)
-        return { ...body, service_tier: tier }
+        const forwarded: Record<string, unknown> = { ...body }
+        if (wireTier === undefined) delete forwarded.service_tier
+        else forwarded.service_tier = wireTier
+        return forwarded
       } })
     }
     return [id, { ...profile, piProvider: {

@@ -60,6 +60,8 @@ it('persists choices before reporting success and clears explicit selection', as
   assert.equal(createTierSelection((provider, model) => stored.find(entry => entry.provider === provider && entry.model === model)?.tier, async () => {}, () => new Map()).current(PROVIDER, MODEL), PRIORITY)
   await assert.rejects(service.select(PROVIDER, MODEL, UNKNOWN))
   assert.equal(service.current(PROVIDER, MODEL), PRIORITY)
+  await service.select(PROVIDER, MODEL, AUTO)
+  assert.equal(service.current(PROVIDER, MODEL), AUTO)
   await service.select(PROVIDER, MODEL, undefined)
   assert.equal(service.current(PROVIDER, MODEL), undefined)
   assert.deepEqual(service.choices('other', MODEL), [])
@@ -173,9 +175,10 @@ for (const stream of STREAMS) {
       const expected = tier === undefined ? PRIORITY : tier
       assert.equal(forwarded.apiKey, AUTH_KEY)
       assert.equal(forwarded.temperature, TEMPERATURE)
-      assert.equal(forwarded.serviceTier, expected ?? undefined)
+      const wireTier = expected === AUTO ? undefined : expected ?? undefined
+      assert.equal(forwarded.serviceTier, wireTier)
       assert.equal(Object.hasOwn(forwarded, 'serviceTier'), expected !== null)
-      assert.deepEqual(await forwarded.onPayload!({}, model), { preserved: true, ...(expected === null ? {} : { service_tier: expected }) })
+      assert.deepEqual(await forwarded.onPayload!({}, model), { preserved: true, ...(wireTier === undefined ? {} : { service_tier: wireTier }) })
       assert.equal(options.onPayload, onPayload)
       assert.equal(options.serviceTier, tier)
       routed[stream](model, context, base)
@@ -212,11 +215,20 @@ for (const stream of STREAMS) {
       return new Response(RESPONSE, { headers: { 'content-type': 'text/event-stream' } })
     })
     for (const [override, expected] of INVOCATION_CASES) {
-      const options = { apiKey: ACCESS, serviceTier: selection.resolve(PROVIDER, MODEL, override) }
+      let hookPayload: Record<string, unknown> | undefined
+      const options = { apiKey: ACCESS, serviceTier: selection.resolve(PROVIDER, MODEL, override), onPayload: async (payload: unknown) => {
+        if (override !== AUTO) return undefined
+        // A legacy caller hook must not restore paid processing after an Auto choice.
+        hookPayload = { ...payload as Record<string, unknown>, service_tier: PRIORITY }
+        return hookPayload
+      } }
       for await (const event of provider[stream](model, normalizeContext({ messages: [] }), options)) assert.notEqual(event.type, 'error', JSON.stringify(event))
       const actual = payloads.pop()!
-      assert.equal(actual.service_tier, expected)
-      assert.equal(Object.hasOwn(actual, 'service_tier'), expected !== undefined)
+      const wireTier = expected === AUTO ? undefined : expected
+      assert.equal(actual.service_tier, wireTier)
+      assert.equal(Object.hasOwn(actual, 'service_tier'), wireTier !== undefined)
+      assert.equal(actual.model, MODEL)
+      if (hookPayload) assert.equal(hookPayload.service_tier, PRIORITY)
       for await (const event of provider[stream](model, normalizeContext({ messages: [] }), { apiKey: ACCESS })) assert.notEqual(event.type, 'error', JSON.stringify(event))
       assert.equal(payloads.pop()!.service_tier, PRIORITY)
     }
@@ -225,7 +237,7 @@ for (const stream of STREAMS) {
 }
 
 /** Real harness and pi-ai dispatch must serialize the paid tier, not merely retain a UI option. */
-for (const managed of [false, true]) for (const tier of [PRIORITY, undefined]) {
+for (const managed of [false, true]) for (const tier of [PRIORITY, AUTO, undefined]) {
   it('serializes ' + (tier ?? 'implicit default') + ' through ' + (managed ? 'managed aliased' : 'additive') + ' Codex adapter', async t => {
     const ctx = new Context()
     const runtime = await ctx.plugin(LlmRuntime)
@@ -258,8 +270,10 @@ for (const managed of [false, true]) for (const tier of [PRIORITY, undefined]) {
     const chunks = []
     for await (const chunk of prepared.stream({ ...prepared.config, messages: [] })) chunks.push(chunk)
     assert.equal(payloads.length, 1, JSON.stringify(chunks))
-    assert.equal(payloads[0]!.service_tier, tier)
-    assert.equal(Object.hasOwn(payloads[0]!, 'service_tier'), tier !== undefined)
+    const wireTier = tier === AUTO ? undefined : tier
+    assert.equal(payloads[0]!.service_tier, wireTier)
+    assert.equal(Object.hasOwn(payloads[0]!, 'service_tier'), wireTier !== undefined)
+    assert.equal(ctx.providerServiceTiers.current(route, MODEL), tier)
     assert.equal(payloads[0]!.model, MODEL)
   })
 }

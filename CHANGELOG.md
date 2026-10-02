@@ -8,6 +8,10 @@ carry a breaking change, and a patch carries only fixes.
 
 ## [Unreleased]
 
+### Fixed
+
+- Codex Auto delegates to provider defaults without sending the rejected `service_tier: "auto"` value. Saved choices and native OpenAI Auto behavior remain unchanged.
+
 ### Added
 
 - Plugin-owned OpenAI routes can select service tiers alongside Codex routes. Source-aware eligibility preserves aliases without applying paid policies to other OpenAI-compatible providers. Both streaming entry points preserve the selected tier on the wire.
