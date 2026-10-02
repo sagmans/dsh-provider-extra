@@ -166,6 +166,8 @@ Routes without models or codexModels continue to read extraModels or codexExtraM
 
 Plugin-owned OpenAI and Codex routes expose service tier selection through the `providerServiceTiers` service.
 Choices are `auto`, `default`, and `priority` (Fast).
+For Codex, Auto omits `service_tier` and lets the provider choose; it has the same wire behavior as Provider default but remains a distinct saved choice.
+Native OpenAI routes continue to send `service_tier: "auto"` for Auto.
 Priority processing can increase usage cost and requires account access.
 The plugin does not offer `ultrafast` or `flex` for Codex.
 
