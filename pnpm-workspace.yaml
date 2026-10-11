@@ -24,3 +24,16 @@ allowBuilds:
   koffi: true
   node-pty: true
   protobufjs: true
+# Security floors for transitive dependencies the harness pulls in. Each entry
+# only matches the vulnerable range, so a harness release that already ships the
+# fix resolves untouched and the entry can be dropped then.
+#   GHSA-6qxp-vccf-f47h  @modelcontextprotocol/sdk, @modelcontextprotocol/client
+#   GHSA-jqcg-44mw-7w3h  proxy-addr
+#   GHSA-ch52-4w7c-c8xp  http-cache-semantics
+#   GHSA-wq5f-xc86-pv6w  sharp
+overrides:
+  '@modelcontextprotocol/client@<2.2.0': 2.2.0
+  '@modelcontextprotocol/sdk@<1.31.0': ^1.31.0
+  'proxy-addr@<2.0.8': ^2.0.8
+  'http-cache-semantics@<4.2.1': ^4.2.1
+  'sharp@<0.35.5': ^0.35.5

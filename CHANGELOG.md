@@ -8,6 +8,10 @@ carry a breaking change, and a patch carries only fixes.
 
 ## [Unreleased]
 
+### Security
+
+- Development installs resolve patched transitive dependencies through scoped `pnpm-workspace.yaml` overrides, clearing GHSA-6qxp-vccf-f47h (`@modelcontextprotocol/client`, `@modelcontextprotocol/sdk`), GHSA-jqcg-44mw-7w3h (`proxy-addr`), GHSA-ch52-4w7c-c8xp (`http-cache-semantics`), and GHSA-wq5f-xc86-pv6w (`sharp`) from the audit gate. The published package is unchanged.
+
 ### Fixed
 
 - Codex Auto delegates to provider defaults without sending the rejected `service_tier: "auto"` value. Saved choices and native OpenAI Auto behavior remain unchanged.
