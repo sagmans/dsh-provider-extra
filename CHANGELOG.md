@@ -25,6 +25,7 @@ carry a breaking change, and a patch carries only fixes.
 
 ### Changed
 
+- Dependabot now proposes weekly updates for the SHA-pinned GitHub Actions, so CI pins keep receiving security fixes without manual tracking.
 - Interactive tier choices use shared per-model plugin storage instead of profile-local configuration edits. Configured selections remain defaults until overridden; Provider default suppresses that fallback explicitly. Shared saves require private POSIX permissions and directory synchronization; Windows interactive persistence is unsupported.
 
 ## [0.7.0] - 2026-10-01
