@@ -8,6 +8,8 @@ carry a breaking change, and a patch carries only fixes.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-13
+
 ### Security
 
 - Development installs resolve patched transitive dependencies through scoped `pnpm-workspace.yaml` overrides, clearing GHSA-6qxp-vccf-f47h (`@modelcontextprotocol/client`, `@modelcontextprotocol/sdk`), GHSA-jqcg-44mw-7w3h (`proxy-addr`), GHSA-ch52-4w7c-c8xp (`http-cache-semantics`), and GHSA-wq5f-xc86-pv6w (`sharp`) from the audit gate. The published package is unchanged.
@@ -133,6 +135,7 @@ carry a breaking change, and a patch carries only fixes.
   a hand-written literal replays as model-visible content on whichever line it
   does not match.
 
-[Unreleased]: https://github.com/sagmans/dsh-provider-extra/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/sagmans/dsh-provider-extra/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/sagmans/dsh-provider-extra/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/sagmans/dsh-provider-extra/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/sagmans/dsh-provider-extra/compare/v0.5.0...v0.6.0
