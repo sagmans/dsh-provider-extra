@@ -327,3 +327,16 @@ The workflow stores no npm token: the registry trusts `release.yml` on the `npm-
 ## License
 
 MIT
+
+## Git hooks
+
+Checks run in tracked local Git hooks instead of push/PR CI. Enable them once per clone:
+
+```sh
+sh scripts/setup-hooks.sh
+```
+
+Each hook runs your global Git hook of the same name first (if any), then this repository's checks:
+
+- `pre-commit`: staged whitespace and conflict-marker check.
+- `pre-push`: `npm audit signatures`, `pnpm run check`, `pnpm audit --audit-level high`.

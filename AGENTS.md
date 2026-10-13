@@ -23,7 +23,7 @@ configuration: [docs/catalog.md](docs/catalog.md). Publication:
 | Adopt the catalog in a clone | `pnpm run catalog:setup` |
 | Sign in to Codex from a checkout | `pnpm run codex:login` |
 
-`.github/workflows/check.yml` is the gate; `.github/workflows/harness-matrix.yml`
+The tracked `pre-push` hook (`.githooks/`) is the gate; `.github/workflows/harness-matrix.yml`
 reads the registry daily. Neither proves a real account authenticates — dogfood a
 packed candidate in a cloned home (see [README.md](README.md#development-and-verification)).
 
@@ -114,3 +114,7 @@ If a tag or signature is missing or invalid, stop and ask the maintainer; do not
 invent a source commit from current `main`. Forward-fix broken packages as
 `RELEASE.md` directs. Helper mutations require `CONFIRM=<action>`; preview
 with `DRY_RUN=1`.
+
+## Git hooks
+
+Checks run in `.githooks/`, not in push/PR CI. Run `sh scripts/setup-hooks.sh` once per clone; never bypass hooks with `--no-verify`. `pre-push`: `npm audit signatures`, `pnpm run check`, `pnpm audit --audit-level high`.
