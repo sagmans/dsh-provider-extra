@@ -1,0 +1,21 @@
+#!/bin/sh
+# Runs the full check suite and the audits hosted CI ran on every push, on
+# each pushed commit. Telemetry stays off for every harness the tests start.
+set -eu
+DSH_TELEMETRY_DISABLED=1
+export DSH_TELEMETRY_DISABLED
+
+checks() {
+	npm audit signatures || return 1
+	pnpm run check || return 1
+	pnpm audit --audit-level high || return 1
+}
+
+# Shared helpers (staged_git, pushed_shas, at_sha, darwin_only) from the dotf
+# dispatcher, which also scrubs git's repository-local variables first.
+# shellcheck source=/dev/null
+. "${HOOK_HELPERS:?HOOK_HELPERS is not set: run this hook through the dotf git hooks dispatcher}"
+# Repository helpers, loaded relative to this script (the reviewed copy).
+# shellcheck source=../_lib/prepush.sh
+. "$(dirname -- "$0")/../_lib/prepush.sh"
+run_pushed
