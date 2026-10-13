@@ -3,9 +3,8 @@
 # staged content. Honors `git -c core.whitespace=...`.
 set -eu
 
-# Shared helpers (staged_git, pushed_shas, at_sha, darwin_only) from the dotf
-# dispatcher, which also scrubs git's repository-local variables first.
+# Helpers (staged_git, pushed_shas, at_sha, darwin_only) from .githooks/lib.
 # shellcheck source=/dev/null
-. "${HOOK_HELPERS:?HOOK_HELPERS is not set: run this hook through the dotf git hooks dispatcher}"
+. "${HOOK_HELPERS:?run from .githooks (scripts/setup-hooks)}"
 
 staged_git diff --cached --check
