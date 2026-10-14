@@ -12,7 +12,7 @@ process.once('message', async () => {
       process.send?.('written')
     }
   } finally {
-    process.disconnect()
+    process.disconnect?.()
   }
 })
 process.send?.('ready')

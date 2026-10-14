@@ -137,7 +137,7 @@ describe('managed catalog compilation', () => {
       for (const sessionId of [LIVE_SESSION, undefined]) {
         const options = { apiKey: TEST_KEY, sessionId, headers: { [SESSION_HEADER.toUpperCase()]: 'stale-request', 'x-request': 'preserved' } }
         const response = await pi[method](pi.getModels()[0]!, normalizeContext({ messages: [] }), options).result()
-        assert.notEqual(response.stopReason, 'error', response.errorMessage)
+        assert.notEqual(response.stopReason, 'error', response.errorMessage ?? 'stopReason was error')
         const request = captured.at(-1)!
         assert.equal(request.headers.get(SESSION_HEADER), sessionId ?? FALLBACK_SESSION)
         assert.equal(request.headers.get('x-static'), 'configured')
@@ -156,7 +156,7 @@ describe('managed catalog compilation', () => {
       const response = await pi[method](pi.getModels()[0]!, normalizeContext({ messages: [] }), {
         apiKey: CODEX_TOKEN, transport: 'websocket', maxRetries: 0, websocketConnectTimeoutMs: 100, timeoutMs: 1000,
       }).result()
-      assert.notEqual(response.stopReason, 'error', response.errorMessage)
+      assert.notEqual(response.stopReason, 'error', response.errorMessage ?? 'stopReason was error')
       assert.equal(upgrades, before, 'pinned SSE must not attempt a WebSocket upgrade')
       assert.equal(captured.at(-1)!.headers.get('chatgpt-account-id'), 'test-account')
     })
@@ -166,7 +166,7 @@ describe('managed catalog compilation', () => {
     const profile = buildCatalogProfile({ ...provider('opencode-go', [{ id: GO_MODEL, name: NAME }]), baseURL: endpoint })
     const pi = profile.piProvider!
     const response = await pi.streamSimple(pi.getModels()[0]!, normalizeContext({ messages: [] }), { apiKey: TEST_KEY }).result()
-    assert.notEqual(response.stopReason, 'error', response.errorMessage)
+    assert.notEqual(response.stopReason, 'error', response.errorMessage ?? 'stopReason was error')
     assert.equal(captured.at(-1)!.headers.get(SESSION_HEADER), null)
   })
 
