@@ -1,6 +1,46 @@
+# Dependabot policy. The supply chain window lives in pnpm-workspace.yaml, so the
+# cooldown below mirrors it: a bot pull request and `pnpm install` should never
+# disagree about which release is old enough to use.
 version: 2
 updates:
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  - package-ecosystem: npm
+    directory: /
     schedule:
-      interval: "weekly"
+      interval: weekly
+    open-pull-requests-limit: 5
+    cooldown:
+      # minimumReleaseAge: 10080 in pnpm-workspace.yaml, expressed in days. The
+      # workspace exempts the harness line so a verified release can be pinned
+      # by hand inside the window; the bot still waits the full week.
+      default-days: 7
+    groups:
+      # The harness matrix guard requires every harness pin, mounted or compiled
+      # against, to name one verified release. The line therefore moves in one
+      # pull request, which must also add that release to dshReleases (RELEASE.md).
+      # Listed first because a dependency joins the first group it matches.
+      harness:
+        patterns: ['@deepseek-ai/dsh', '@deepseek-ai/dsh-*']
+      # One pull request for the toolchain that verifies the plugin, so review
+      # attention stays on the runtime packages that actually ship.
+      dev-toolchain:
+        dependency-type: development
+        patterns: ['*']
+        update-types: [minor, patch]
+    ignore:
+      # @types/node majors track Node majors, so a types major moves only with a
+      # deliberate runtime move. Types must never lead the engine.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+
+  # Every action is pinned by commit SHA, and nothing else raises those pins.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      # A compromised action release is the same risk the npm window guards
+      # against, so a new action pin waits out the same week.
+      default-days: 7
+    groups:
+      actions:
+        patterns: ['*']
