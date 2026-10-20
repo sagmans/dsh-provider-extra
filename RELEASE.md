@@ -32,7 +32,7 @@ That failure is the matrix bump, and it is a release-sized change:
 
 1. Run `node tools/harness-matrix.mjs --check-registry` to read the release the harness now serves as `latest`.
 2. Add it to `dsh.compatibility.dshReleases`, raise the `@deepseek-ai/dsh-*` `devDependencies` to it, and raise every mounted package and aliased install that names a release to it as well; record the model vendor it ships in `LINE_VENDOR_PINS`; `dsh.compatibility.dsh` and the harness peers widen only when the whole line's gates pass, with a new `>=X.Y.Z-<pre> <X.Y.(Z+1)-0` alternative when the release is a prerelease of a new tuple, and a package that serves the older line stays behind.
-3. `pnpm install`, then run every gate above. The vendor's scope is excluded from the release-age window in `pnpm-workspace.yaml`, because a verified release is published inside that window and the mount resolves the same vendor's packages.
+3. `pnpm install`, then run every gate above. A verified release, and the framework and vendor releases it resolves, are published inside the release-age window, and pnpm checks every lockfile entry against it even on a frozen install. Exempt each entry still inside the window in `pnpm-workspace.yaml` by its exact `name@version`, never a name pattern or a scope, so no later release inherits the exemption. Record when the youngest entry leaves the window, and drop the whole list after that.
 4. Dogfood a real session against the new release before it ships: install the packed candidate into a cloned home's profile and drive a real surface through the routes this plugin owns.
 5. Land the bump through a reviewed PR and ship it with the next patch release.
 

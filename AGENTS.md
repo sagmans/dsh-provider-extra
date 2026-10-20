@@ -55,8 +55,9 @@ each prerelease `X.Y.Z` tuple its own `>=a <b` alternative and bounds lines at
 [RELEASE.md](RELEASE.md#harness-matrix) owns the bump.
 
 **A verified release is published inside the release-age window**, so
-`pnpm-workspace.yaml` excludes the vendor's scope from it; a harness mount also
-resolves that same vendor's packages, which the exclusion has to cover.
+`pnpm-workspace.yaml` exempts each lockfile entry still inside the window by
+its exact `name@version`, never a name pattern or a scope, and records when the
+list can be dropped.
 
 **The packaged examples are checked for synthetic identifiers.** Every catalog
 and model declaration in shipped configuration, examples, and documentation

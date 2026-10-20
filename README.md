@@ -308,7 +308,7 @@ Development setup tests use synthetic credentials-free profiles; the setup helpe
 
 Tests use a local mock gateway or seeded grants. They require no API key, OAuth login, or paid provider requests.
 
-CI installs from the registry with read-only permissions and no account credentials, verifies dependency signatures and attestations, and runs the same checks. New dependency releases must be at least seven days old, and `pnpm-workspace.yaml` limits which lifecycle scripts may run; the harness vendor's own scope is excluded from that window, because a verified release is published inside it and the mount resolves that same vendor's packages (see [RELEASE.md](RELEASE.md#harness-matrix)).
+CI installs from the registry with read-only permissions and no account credentials, verifies dependency signatures and attestations, and runs the same checks. New dependency releases must be at least seven days old, and `pnpm-workspace.yaml` limits which lifecycle scripts may run; a verified harness release is published inside that window, so only the exact versions it resolves are exempted, and only until they mature (see [RELEASE.md](RELEASE.md#harness-matrix)).
 
 The package smoke test does not prove a real account can authenticate or a remote provider is available. To verify those, install a candidate into a profile built on the supported harness line and send one message through each configured route.
 
