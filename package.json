@@ -110,10 +110,10 @@
     "@deepseek-ai/dsh-llm-pi-ai": "0.2.0-rc.2",
     "@deepseek-ai/dsh-settings": "0.2.0-rc.2",
     "@deepseek-ai/dsh-user-questions": "0.2.0-rc.2",
-    "@deepseek-ai/schemastery": "3.18.2",
+    "@deepseek-ai/schemastery": "3.18.4",
     "@earendil-works/pi-ai": "0.87.1",
-    "@types/node": "26.6.4",
-    "tsx": "4.22.4",
+    "@types/node": "26.6.5",
+    "tsx": "4.23.15",
     "typescript": "6.0.3"
   }
 }
