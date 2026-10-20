@@ -22,6 +22,7 @@ carry a breaking change, and a patch carries only fixes.
 ### Changed
 
 - Development tooling moves to `@types/node` 26.6.5 and `tsx` 4.23.15. The published package is unchanged.
+- Development builds use TypeScript 7.0.2. The published modules behave the same; the compiler now writes rewritten relative import paths with single quotes.
 
 ### Fixed
 
