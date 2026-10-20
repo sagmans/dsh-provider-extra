@@ -10,7 +10,8 @@ updates:
     open-pull-requests-limit: 5
     cooldown:
       # minimumReleaseAge: 10080 in pnpm-workspace.yaml, expressed in days. The
-      # workspace exempts the harness line so a verified release can be pinned
+      # workspace exempts the whole @deepseek-ai/* and @earendil-works/* scopes
+      # so a verified harness release, and the pi-ai it resolves, can be pinned
       # by hand inside the window; the bot still waits the full week.
       default-days: 7
     groups:
@@ -31,6 +32,11 @@ updates:
       # deliberate runtime move. Types must never lead the engine.
       - dependency-name: '@types/node'
         update-types: ['version-update:semver-major']
+      # Pi 1.4.0 and later are outside the Pi line this plugin supports, so no
+      # update may land there. A version range, unlike update-types, also binds
+      # security updates, so an advisory cannot pull the pin past the line either.
+      - dependency-name: '@earendil-works/*'
+        versions: ['>=1.4.0']
 
   # Every action is pinned by commit SHA, and nothing else raises those pins.
   - package-ecosystem: github-actions
