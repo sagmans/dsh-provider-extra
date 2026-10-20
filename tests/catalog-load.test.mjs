@@ -17,6 +17,11 @@ test('built package serves exactly the synthetic selected pairs and one canonica
   const config = exampleConfig()
   const ctx = new Context()
   const runtime = await ctx.plugin(LlmRuntime)
+  // Harness 0.2.1 lists a route's models only once its key resolves; every
+  // synthetic reference resolves to a local placeholder, never a real key.
+  const credentials = await ctx.plugin(owner => owner.provide('credentials', {
+    async resolve(ref) { return { value: 'local-' + ref } },
+  }))
   let mounted
   try {
     mounted = await ctx.plugin(plugin, config)
@@ -38,7 +43,7 @@ test('built package serves exactly the synthetic selected pairs and one canonica
     const go = await ctx.llm.listModels(GO)
     assert.equal(go[0].name, config.catalog.providers[2].models[0].name)
     await assert.rejects(ctx.get('agentDefaultModel').saveSelection(config.catalog.default), { code: 'CONFIG_PERSISTENCE_UNAVAILABLE' })
-  } finally { await mounted?.dispose(); await runtime.dispose() }
+  } finally { await mounted?.dispose(); await credentials.dispose(); await runtime.dispose() }
 })
 
 test('migration preserves Qwen explicit request defaults without inventing a Grok request cap', async () => {

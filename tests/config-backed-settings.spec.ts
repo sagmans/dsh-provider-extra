@@ -44,7 +44,9 @@ test('extras mount and commit on a line whose settings service publishes no sect
 
       // What a committed form edit does to this entry: the profile patch carries
       // the new value, and the Loader re-applies the plugin with it.
-      await mounted.update({ extraModels: [COMMITTED_GO], loginCommandEnabled: false })
+      // Cordis 4.0.3+ update() only schedules the restart; await() settles the new generation.
+      mounted.update({ extraModels: [COMMITTED_GO], loginCommandEnabled: false })
+      await mounted.await()
       assert.equal((await ctx.llm.resolveModelInfo(OPENCODE_GO_PROVIDER_ID, COMMITTED_GO.id)).name, COMMITTED_GO.name)
       await assert.rejects(ctx.llm.resolveModelInfo(OPENCODE_GO_PROVIDER_ID, ENTRY_GO.id), { code: 'UNKNOWN_MODEL' })
     } finally {

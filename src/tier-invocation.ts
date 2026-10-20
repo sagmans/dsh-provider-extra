@@ -8,7 +8,7 @@ import type { TierSelection } from './service-tiers.ts'
 const SERVICE_NAME = 'providerTierInvocation'
 const SINGLE_ROOT = 1
 const AMBIGUOUS_ROOT = 'headless service tier override cannot identify a unique invoking root'
-const UNSUPPORTED_RUNTIME = 'headless service tiers require the npm DSH 0.2.0-rc.2 loop marker and agents root registry'
+const UNSUPPORTED_RUNTIME = 'headless service tiers require the npm DSH 0.2.1-rc.2 loop marker and agents root registry'
 const scope = new AsyncLocalStorage<string | null | undefined>()
 
 /** The public registry determines runtime ownership, not user-supplied request metadata. */

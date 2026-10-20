@@ -7,10 +7,23 @@ const PACKAGE_NAME = '@sagmans/dsh-provider-extra'
 const GO_ROUTE = 'opencode-go'
 const CODEX_ROUTE = 'openai-codex'
 const EXTRA_MODEL = 'deepseek-flash'
-const CATALOG_MODEL = 'deepseek-v4-flash'
+const CATALOG_MODEL = 'deepseek-v4.1-flash'
 const ENTRY_EXTRA_MODEL = 'entry-flash'
 const CODEX_EXTRA_MODEL = 'example-codex-model'
 const CODEX_EXTRA_TEMPLATE = 'gpt-5.6-luna'
+const GO_KEY_REF = 'OPENCODE_API_KEY'
+const GO_TEST_KEY = 'local-test-key'
+
+/**
+ * Harness 0.2.1 lists a route's models only once its key resolves, so the Go
+ * route is listed against an in-memory key: no real credential, and no
+ * dependence on whatever the developer's shell exports.
+ */
+function withGoKey(ctx) {
+  return ctx.plugin((owner) => owner.provide('credentials', {
+    resolve: async (ref) => ref === GO_KEY_REF ? { value: GO_TEST_KEY } : undefined,
+  }))
+}
 
 /**
  * The settings seam the plugin installs its section on. It resolves the
@@ -43,10 +56,11 @@ class SettingsDocument extends Service {
   }
 }
 
-test('built package mounts both routes without credentials or a TypeScript loader', async () => {
+test('built package mounts both routes without stored credentials or a TypeScript loader', async () => {
   const plugin = await import(PACKAGE_NAME)
   const ctx = new Context()
   const runtime = await ctx.plugin(LlmRuntime)
+  const credentials = await withGoKey(ctx)
   let mounted
   try {
     mounted = await ctx.plugin(plugin, {})
@@ -56,6 +70,7 @@ test('built package mounts both routes without credentials or a TypeScript loade
     assert.ok(codex.length > 0)
   } finally {
     await mounted?.dispose()
+    await credentials.dispose()
     await runtime.dispose()
   }
 })
@@ -64,6 +79,7 @@ test('entry-declared extras reach both routes with no settings document at all',
   const plugin = await import(PACKAGE_NAME)
   const ctx = new Context()
   const runtime = await ctx.plugin(LlmRuntime)
+  const credentials = await withGoKey(ctx)
   let mounted
   try {
     mounted = await ctx.plugin(plugin, {
@@ -77,6 +93,7 @@ test('entry-declared extras reach both routes with no settings document at all',
     assert.ok(codex.some((model) => model.id === CODEX_EXTRA_MODEL), 'entry extras reach the Codex route')
   } finally {
     await mounted?.dispose()
+    await credentials.dispose()
     await runtime.dispose()
   }
 })
@@ -85,6 +102,7 @@ test('entry-declared selections narrow each route to exactly those models, in or
   const plugin = await import(PACKAGE_NAME)
   const ctx = new Context()
   const runtime = await ctx.plugin(LlmRuntime)
+  const credentials = await withGoKey(ctx)
   let mounted
   try {
     mounted = await ctx.plugin(plugin, {
@@ -97,6 +115,7 @@ test('entry-declared selections narrow each route to exactly those models, in or
     assert.deepEqual((await ctx.llm.listModels(CODEX_ROUTE)).map((model) => model.id), [CODEX_EXTRA_MODEL, CODEX_EXTRA_TEMPLATE])
   } finally {
     await mounted?.dispose()
+    await credentials.dispose()
     await runtime.dispose()
   }
 })
@@ -105,6 +124,7 @@ test('a selection that names nothing fails the composition, naming the route and
   const plugin = await import(PACKAGE_NAME)
   const ctx = new Context()
   const runtime = await ctx.plugin(LlmRuntime)
+  const credentials = await withGoKey(ctx)
   try {
     await assert.rejects(
       async () => { await ctx.plugin(plugin, { models: ['no-such-model'] }) },
@@ -113,6 +133,7 @@ test('a selection that names nothing fails the composition, naming the route and
         && error.message.includes('no-such-model'),
     )
   } finally {
+    await credentials.dispose()
     await runtime.dispose()
   }
 })
@@ -121,6 +142,7 @@ test('settings-declared extras override the entry\'s own, per key', async () => 
   const plugin = await import(PACKAGE_NAME)
   const ctx = new Context()
   const runtime = await ctx.plugin(LlmRuntime)
+  const credentials = await withGoKey(ctx)
   const settings = await ctx.plugin(SettingsDocument)
   let mounted
   try {
@@ -144,6 +166,7 @@ test('settings-declared extras override the entry\'s own, per key', async () => 
   } finally {
     await mounted?.dispose()
     await settings.dispose()
+    await credentials.dispose()
     await runtime.dispose()
   }
 })
@@ -152,6 +175,7 @@ test('settings-declared codex extras reach the route without a restart', async (
   const plugin = await import(PACKAGE_NAME)
   const ctx = new Context()
   const runtime = await ctx.plugin(LlmRuntime)
+  const credentials = await withGoKey(ctx)
   const settings = await ctx.plugin(SettingsDocument)
   let mounted
   try {
@@ -172,6 +196,7 @@ test('settings-declared codex extras reach the route without a restart', async (
   } finally {
     await mounted?.dispose()
     await settings.dispose()
+    await credentials.dispose()
     await runtime.dispose()
   }
 })

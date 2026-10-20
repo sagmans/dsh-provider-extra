@@ -36,8 +36,12 @@ export const DEEPSEEK_V41_FLASH_ID = 'deepseek-flash'
 /** Display name for DeepSeek V4.1 Flash, matching the OpenCode Go model list. */
 export const DEEPSEEK_V41_FLASH_NAME = 'DeepSeek V4.1 Flash'
 
-/** Default template sibling an extra model inherits its wire behavior from. */
-export const DEFAULT_EXTRA_MODEL_TEMPLATE = 'deepseek-v4-flash'
+/**
+ * Default template sibling an extra model inherits its wire behavior from. It
+ * must be an id every supported pi-ai catalog ships: the 1.3.0 catalog dropped
+ * DeepSeek V4 Flash, and a missing template fails the shipped extra above.
+ */
+export const DEFAULT_EXTRA_MODEL_TEMPLATE = 'deepseek-v4.1-flash'
 
 /** Shipped extras for ids the installed catalog predates while the gateway already serves them. */
 const DEFAULT_EXTRA_MODELS: readonly ExtraModelSpec[] = [

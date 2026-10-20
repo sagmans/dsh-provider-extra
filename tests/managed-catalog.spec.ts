@@ -8,11 +8,22 @@ import * as plugin from '../src/index.ts'
 const ROUTE = 'openai'
 const MODEL = 'gpt-5.6-luna'
 const SELECTION = { provider: ROUTE, model: MODEL }
+const API_KEY_REF = 'OPENAI_API_KEY'
+const TEST_KEY = 'local-test-key'
 const catalog = () => ({
   version: 1,
-  providers: [{ id: ROUTE, name: 'OpenAI API', source: ROUTE, auth: { apiKeyRef: 'OPENAI_API_KEY' }, models: [{ id: MODEL, name: 'GPT 5.6 Luna' }] }],
+  providers: [{ id: ROUTE, name: 'OpenAI API', source: ROUTE, auth: { apiKeyRef: API_KEY_REF }, models: [{ id: MODEL, name: 'GPT 5.6 Luna' }] }],
   default: { ...SELECTION },
 })
+
+/**
+ * The 0.2.1 adapter lists a route's models only once its credential resolves,
+ * so listing assertions run against an in-memory key rather than the process
+ * environment, which would couple the result to the developer's shell.
+ */
+const withTestKey = (ctx: Context) => ctx.plugin((owner: Context) => owner.provide('credentials', {
+  resolve: async (ref: string) => ref === API_KEY_REF ? { value: TEST_KEY } : undefined,
+}))
 
 /** A section mount would give a second document authority over managed membership. */
 class ForbiddenSettings extends Service {
@@ -32,6 +43,7 @@ test('managed snapshot owns listing, resolution and default without settings ove
   const ctx = new Context()
   const runtime = await ctx.plugin(LlmRuntime)
   const settings = await ctx.plugin(ForbiddenSettings)
+  const credentials = await withTestKey(ctx)
   try {
     const mounted = await ctx.plugin(plugin, { catalog: catalog() } as never)
     try {
@@ -43,7 +55,7 @@ test('managed snapshot owns listing, resolution and default without settings ove
       await assert.rejects(defaults.saveSelection(SELECTION), { code: 'CONFIG_PERSISTENCE_UNAVAILABLE' })
       assert.deepEqual(defaults.currentSelection(), SELECTION)
     } finally { await mounted.dispose() }
-  } finally { await settings.dispose(); await runtime.dispose() }
+  } finally { await credentials.dispose(); await settings.dispose(); await runtime.dispose() }
 })
 
 test('empty managed catalog selects none and never expands additive routes', async () => {
@@ -73,6 +85,7 @@ test('invalid complete candidate mounts neither its valid route nor default serv
 test('Cordis rejects a later default provider without replacing the managed owner', async () => {
   const ctx = new Context()
   const runtime = await ctx.plugin(LlmRuntime)
+  const credentials = await withTestKey(ctx)
   const mounted = await ctx.plugin(plugin, { catalog: catalog() } as never)
   try {
     const owner = ctx.get('agentDefaultModel')
@@ -84,7 +97,7 @@ test('Cordis rejects a later default provider without replacing the managed owne
     assert.equal(ctx.get('agentDefaultModel'), owner)
     assert.deepEqual(owner.currentSelection(), SELECTION)
     assert.deepEqual((await ctx.llm.listModels(ROUTE)).map(model => model.id), [MODEL])
-  } finally { await mounted.dispose(); await runtime.dispose() }
+  } finally { await mounted.dispose(); await credentials.dispose(); await runtime.dispose() }
 })
 
 test('competing default owner rejects before managed routes mount', async () => {
@@ -119,7 +132,9 @@ test('successful reload replaces rows and defaults while prepared metadata retai
       const oldContext = structuredClone(prepared.context)
       const candidate = catalog()
       Object.assign(candidate.providers[0]!.models[0]!, { metadata: { contextWindow: 123456 } })
-      await mounted.update({ catalog: candidate })
+      // Cordis 4.0.3+ update() only schedules the restart; await() settles the new generation.
+      mounted.update({ catalog: candidate })
+      await mounted.await()
       const current = await ctx.llm.prepareCall(SELECTION)
       assert.notDeepEqual(current.context, oldContext)
       assert.deepEqual(prepared.context, oldContext)
@@ -131,6 +146,7 @@ test('successful reload replaces rows and defaults while prepared metadata retai
 test('a competing adapter added later cannot tear down the valid catalog on reload', async () => {
   const ctx = new Context()
   const runtime = await ctx.plugin(LlmRuntime)
+  const credentials = await withTestKey(ctx)
   const mounted = await ctx.plugin(plugin, { catalog: catalog() } as never)
   const external = await ctx.plugin({ inject: ['llm'], apply(owner: Context) {
     owner.llm.registerAdapter(['external'], {
@@ -144,12 +160,13 @@ test('a competing adapter added later cannot tear down the valid catalog on relo
     await external.dispose()
     assert.deepEqual((await ctx.llm.listModels(ROUTE)).map(model => model.id), [MODEL])
     assert.deepEqual(ctx.get('agentDefaultModel').currentSelection(), SELECTION)
-  } finally { await external.dispose(); await mounted.dispose(); await runtime.dispose() }
+  } finally { await external.dispose(); await mounted.dispose(); await credentials.dispose(); await runtime.dispose() }
 })
 
 test('failed catalog reload preserves valid rows and default', async () => {
   const ctx = new Context()
   const runtime = await ctx.plugin(LlmRuntime)
+  const credentials = await withTestKey(ctx)
   try {
     const mounted = await ctx.plugin(plugin, { catalog: catalog() } as never)
     try {
@@ -159,5 +176,5 @@ test('failed catalog reload preserves valid rows and default', async () => {
       assert.deepEqual((await ctx.llm.listModels(ROUTE)).map(model => model.id), [MODEL])
       assert.deepEqual(ctx.get('agentDefaultModel').currentSelection(), SELECTION)
     } finally { await mounted.dispose() }
-  } finally { await runtime.dispose() }
+  } finally { await credentials.dispose(); await runtime.dispose() }
 })

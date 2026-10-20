@@ -9,7 +9,7 @@ import type { StreamChunk } from '@deepseek-ai/dsh-llm'
 import * as plugin from '../src/index.ts'
 
 const ROUTE = 'opencode-go-session'
-const MODEL = 'deepseek-v4-flash'
+const MODEL = 'deepseek-v4.1-flash'
 const REF = 'CATALOG_TEST_KEY'
 const KEY = 'local-test-key'
 const COLLISION = 'CATALOG_OWNER_COLLISION'
@@ -48,6 +48,9 @@ for (const directory of [false, true]) {
     const diagnostics: unknown[] = []
     ctx.logger.exporter({ export(message) { if (message.type === 'error') diagnostics.push(...message.args) } })
     const runtime = await ctx.plugin(LlmRuntime)
+    // The 0.2.1 adapter lists a route's models only once its credential
+    // resolves, so recovery is proven against a stored in-memory key.
+    const credentials = await ctx.plugin((owner: Context) => owner.provide('credentials', { resolve: async () => ({ value: KEY }) }))
     const mounted = await ctx.plugin(plugin, { catalog: catalog() } as never)
     const defaults = ctx.get('agentDefaultModel')
     const prepared = await ctx.llm.prepareCall(SELECTION)
@@ -78,7 +81,7 @@ for (const directory of [false, true]) {
       assert.equal(diagnostics.filter(item => (item as { code?: string })?.code === COLLISION).length, 2)
       await external.dispose()
       assert.deepEqual(defaults.currentSelection(), SELECTION)
-    } finally { await another?.dispose(); await external?.dispose(); await mounted.dispose(); await runtime.dispose() }
+    } finally { await another?.dispose(); await external?.dispose(); await mounted.dispose(); await credentials.dispose(); await runtime.dispose() }
   })
 }
 
@@ -152,7 +155,9 @@ test('legitimate reload retains captured dispatch and does not interrupt an alre
     const prepared = await ctx.llm.prepareCall(SELECTION)
     const replacement = catalog(endpoint)
     replacement.providers[0]!.headers[HEADER] = SECOND
-    await mounted.update({ catalog: replacement })
+    // Cordis 4.0.3+ update() only schedules the restart; await() settles the new generation.
+    mounted.update({ catalog: replacement })
+    await mounted.await()
     const active = drain(prepared.stream({ ...prepared.config, messages: [] }))
     await started
     external = await ctx.plugin(competing())

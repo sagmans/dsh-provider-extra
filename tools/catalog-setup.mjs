@@ -26,6 +26,13 @@ const SUPPORT = new Set([CORE, PACKAGE, '@deepseek-ai/dsh-llm-retry', '@deepseek
 const OPAQUE = new Set(['@deepseek-ai/cordis-plugin-group', '@deepseek-ai/cordis-plugin-include'])
 const PROVIDER_LIKE = /(?:^|[-/])(?:llm|provider)(?:[-/]|$)|agent-default-model/
 const USAGE = 'node tools/catalog-setup.mjs --helper /path/run-plugin-from-worktree.sh --source-home /path/source --home /path/new-clone --profile NAME --catalog /private/config.json [--dsh /path/dsh/lib/bin.js] [--allow-row ID]...'
+/**
+ * Value every credential reference resolves to inside the verification runtime only.
+ * Harness 0.2.1 lists a route's models only once its key resolves, so listing is
+ * checked against this placeholder; it never leaves that runtime, no provider
+ * request is made with it, and the operator's real credentials are never read.
+ */
+const VERIFY_PLACEHOLDER_KEY = 'catalog-setup-placeholder'
 /** Row provenance is not visible here, so an operator must assert a provider-like row that registers nothing. */
 const ALLOW_ROW_HINT = '; pass ' + ALLOW_ROW + ' ID only if that row registers no model provider and no default owner'
 
@@ -117,7 +124,7 @@ function inspect(rows, allowed = new Set()) {
   return { active, permitted }
 }
 
-/** A tiny isolated runtime verifies catalog APIs without mounting credentials, apps, or provider requests. */
+/** A tiny isolated runtime verifies catalog APIs without real credentials, apps, or provider requests. */
 async function verifyCatalog(host, pluginFile, config) {
   const { Context } = await import(pathToFileURL(host.require.resolve('@deepseek-ai/cordis')).href)
   const { default: LlmRuntime } = await import(pathToFileURL(host.require.resolve(CORE)).href)
@@ -126,6 +133,9 @@ async function verifyCatalog(host, pluginFile, config) {
   if (!snapshot) throw new Error('catalog input must explicitly contain catalog')
   const ctx = new Context()
   const runtime = await ctx.plugin(LlmRuntime)
+  const credentials = await ctx.plugin(owner => owner.provide('credentials', {
+    resolve: async () => ({ value: VERIFY_PLACEHOLDER_KEY }),
+  }))
   let mounted
   try {
     mounted = await ctx.plugin(plugin, config)
@@ -142,6 +152,7 @@ async function verifyCatalog(host, pluginFile, config) {
     return count
   } finally {
     await mounted?.dispose()
+    await credentials.dispose()
     await runtime.dispose()
   }
 }

@@ -6,7 +6,8 @@ import LlmRuntime from '@deepseek-ai/dsh-llm'
 import type { SectionHooks } from '../src/index.ts'
 import * as plugin from '../src/index.ts'
 import type { ExtraModelSpec } from '../src/extra-models.ts'
-import { DEFAULT_EXTRA_MODEL_TEMPLATE, OPENCODE_GO_PROVIDER_ID } from '../src/opencode-go.ts'
+import { DEFAULT_EXTRA_MODEL_TEMPLATE, DEFAULT_OPENCODE_API_KEY_ENV, OPENCODE_GO_PROVIDER_ID } from '../src/opencode-go.ts'
+import { MemoryCredentials } from './login-host-fixture.ts'
 import { DEFAULT_CODEX_ROUTE_ID } from '../src/codex.ts'
 
 const SETTINGS_SERVICE = 'settings'
@@ -27,6 +28,7 @@ const PUBLISHES = [
   { name: 'changed extras', section: CHANGED_SECTION },
 ]
 const UNKNOWN_MODEL = 'UNKNOWN_MODEL'
+const GO_TEST_KEY = 'local-test-key'
 const DYNAMIC_ROUTES = [
   {
     name: 'Go', route: OPENCODE_GO_PROVIDER_ID, entry: ENTRY_GO, updated: UPDATED_GO, added: ADDED_GO,
@@ -75,6 +77,11 @@ async function withProvider(
   const runtime = await ctx.plugin(LlmRuntime)
   let settings!: PublishingSettings
   const settingsMount = await ctx.plugin((owner: Context) => { settings = new PublishingSettings(owner) })
+  // The 0.2.1 adapter lists the Go route's models only once its key resolves,
+  // so the listing assertions run against an in-memory key, never the shell's.
+  const store = new MemoryCredentials()
+  store.values.set(DEFAULT_OPENCODE_API_KEY_ENV, GO_TEST_KEY)
+  const credentials = await ctx.plugin((owner: Context) => owner.provide('credentials', store as never))
   try {
     const mounted = await ctx.plugin(plugin, {
       extraModels: [ENTRY_GO],
@@ -88,6 +95,7 @@ async function withProvider(
       await mounted.dispose()
     }
   } finally {
+    await credentials.dispose()
     await settingsMount.dispose()
     await runtime.dispose()
   }

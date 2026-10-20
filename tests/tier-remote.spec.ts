@@ -1,6 +1,6 @@
 /** RPC must retain the provider owner's capability and persistence boundaries. */
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { test, type TestContext } from 'node:test'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
@@ -14,6 +14,49 @@ const WRITE_OUTCOMES = ['resolve', 'reject'] as const
 const PRIVATE_FAILURE = '/private/example-provider-settings'
 const CANCELLED_CODE = 'gateway/cancelled'
 interface Remote { describe(provider: unknown, model: unknown, signal?: AbortSignal): Promise<TierView>; select(provider: unknown, model: unknown, tier?: unknown, signal?: AbortSignal): Promise<void> }
+
+/** Owner identity the installed gateway exempts from the remote-access policy, as an in-process caller. */
+const OWNER_PRINCIPAL = Object.freeze({ kind: 'owner' })
+/** Peer id for the single in-process caller each test drives the gateway as. */
+const OWNER_PEER_ID = 'tier-remote-owner'
+
+/** Gateway invocation in the shape the specs drive: one method, its named arguments, and an optional cancellation. */
+type GatewayInvoke = (method: string, args: unknown, signal?: AbortSignal) => Promise<unknown>
+
+/**
+ * The installed harness gateway, mounted the way the host composes it. The
+ * 0.2.1 gateway injects remote access and requires every caller to name the
+ * Peer it speaks for, so the specs call it as the owner over a live Peer: that
+ * keeps the assertions on descriptor and argument validation rather than on a
+ * policy this plugin does not own.
+ * @param t - the test whose teardown releases the host services and the Peer.
+ * @returns the host context and an owner-scoped invoker for the tier namespace.
+ */
+async function installedGateway(t: TestContext): Promise<{ ctx: Context; invoke: GatewayInvoke }> {
+  const local = createRequire(import.meta.url)
+  const cli = createRequire(local.resolve('@deepseek-ai/dsh/package.json'))
+  const host = createRequire(cli.resolve('@deepseek-ai/dsh-web-app'))
+  const load = (name: string) => import(pathToFileURL(host.resolve(name)).href)
+  const [{ Context: HostContext }, { default: Registry }, { default: RemoteAccess }, { default: Gateway }] = await Promise.all([
+    load('@deepseek-ai/cordis'), load('@deepseek-ai/dsh-typert-registry'), load('@deepseek-ai/dsh-api-remote-access'),
+    load('@deepseek-ai/dsh-api-gateway'),
+  ])
+  const ctx: Context = new HostContext()
+  const registry = await ctx.plugin(Registry)
+  const access = await ctx.plugin(RemoteAccess)
+  const gateway = await ctx.plugin(Gateway)
+  const lifetime = new AbortController()
+  t.after(async () => { lifetime.abort(); await gateway.dispose(); await access.dispose(); await registry.dispose() })
+  const peer = Object.freeze({
+    id: OWNER_PEER_ID, ctx, principal: OWNER_PRINCIPAL, signal: lifetime.signal, interactions: 'none',
+    dispose: () => { lifetime.abort(); return Promise.resolve() },
+  })
+  const invoke: GatewayInvoke = (method, args, signal) => {
+    const service = ctx.get('typertGateway') as { invoke(request: unknown): Promise<unknown> }
+    return service.invoke({ namespace: TIER_NAMESPACE, method, args, peer, signal })
+  }
+  return { ctx, invoke }
+}
 
 test('optional remote mounts strict descriptors, validates writes, and disposes', async () => {
   const ctx = new Context()
@@ -53,17 +96,7 @@ test('optional remote mounts strict descriptors, validates writes, and disposes'
 })
 
 test('installed gateway accepts strict descriptors and rejects malformed RPC arguments', async t => {
-  const local = createRequire(import.meta.url)
-  const cli = createRequire(local.resolve('@deepseek-ai/dsh/package.json'))
-  const host = createRequire(cli.resolve('@deepseek-ai/dsh-web-app'))
-  const load = (name: string) => import(pathToFileURL(host.resolve(name)).href)
-  const [{ Context: HostContext }, { default: Registry }, { default: Gateway }] = await Promise.all([
-    load('@deepseek-ai/cordis'), load('@deepseek-ai/dsh-typert-registry'), load('@deepseek-ai/dsh-api-gateway'),
-  ])
-  const ctx: Context = new HostContext()
-  const registry = await ctx.plugin(Registry)
-  const gateway = await ctx.plugin(Gateway)
-  t.after(async () => { await gateway.dispose(); await registry.dispose() })
+  const { ctx, invoke } = await installedGateway(t)
   let selected: string | undefined
   const calls: unknown[][] = []
   const provider = await ctx.plugin((owner: Context) => owner.provide('providerServiceTiers', {
@@ -73,8 +106,6 @@ test('installed gateway accepts strict descriptors and rejects malformed RPC arg
   const remote = await ctx.plugin(mountTierRemote)
   t.after(async () => { await remote.dispose(); await provider.dispose() })
   await settle()
-  const service = ctx.get('typertGateway') as { invoke(request: unknown): Promise<unknown> }
-  const invoke = (method: string, args: unknown, signal?: AbortSignal) => service.invoke({ namespace: TIER_NAMESPACE, method, args, signal })
   const args = { provider: ROUTE[0], model: ROUTE[1] }
   assert.deepEqual(await invoke('describe', args), { choices: CHOICES })
   await invoke('select', { ...args, tier: 'priority' })
@@ -92,17 +123,7 @@ test('installed gateway accepts strict descriptors and rejects malformed RPC arg
 })
 
 for (const outcome of WRITE_OUTCOMES) test('real gateway survives provider replacement while a submitted write will ' + outcome, async t => {
-  const local = createRequire(import.meta.url)
-  const cli = createRequire(local.resolve('@deepseek-ai/dsh/package.json'))
-  const host = createRequire(cli.resolve('@deepseek-ai/dsh-web-app'))
-  const load = (name: string) => import(pathToFileURL(host.resolve(name)).href)
-  const [{ Context: HostContext }, { default: Registry }, { default: Gateway }] = await Promise.all([
-    load('@deepseek-ai/cordis'), load('@deepseek-ai/dsh-typert-registry'), load('@deepseek-ai/dsh-api-gateway'),
-  ])
-  const ctx: Context = new HostContext()
-  const registry = await ctx.plugin(Registry)
-  const gateway = await ctx.plugin(Gateway)
-  t.after(async () => { await gateway.dispose(); await registry.dispose() })
+  const { ctx, invoke } = await installedGateway(t)
   let start!: () => void
   const started = new Promise<void>(resolve => { start = resolve })
   let finish!: () => void
@@ -120,9 +141,7 @@ for (const outcome of WRITE_OUTCOMES) test('real gateway survives provider repla
   const remote = await ctx.plugin(mountTierRemote)
   t.after(async () => { await remote.dispose(); await first.dispose() })
   await settle()
-  const gatewayService = ctx.get('typertGateway') as { invoke(request: unknown): Promise<unknown> }
   const args = { provider: ROUTE[0], model: ROUTE[1] }
-  const invoke = (method: string, args: unknown, signal?: AbortSignal) => gatewayService.invoke({ namespace: TIER_NAMESPACE, method, args, signal })
   const caller = new AbortController()
   const pending = invoke('select', { ...args, tier: 'priority' }, caller.signal)
   const rejected = assert.rejects(pending, { code: CANCELLED_CODE })
