@@ -3,12 +3,15 @@
  *
  * The OpenCode Go gateway rejects requests that carry no session identity
  * (HTTP 400 MissingSessionID) and uses a stable per-conversation id to optimize
- * routing and prompt caching. The shipped dsh pi-ai adapter forwards the
- * session id into pi-ai's options, but pi-ai emits session headers only for
- * providers whose compat opts in, so this route injects the header itself at
- * the provider delegate — the one boundary every dispatch path (direct
- * stream() and the runtime's prepareCall()) reaches with the per-request
- * options still in hand.
+ * routing and prompt caching. pi-ai's own opencode-go provider already stamps
+ * the request's session id, but it stays silent for sessionless requests and
+ * defers to any configured static header of the same name, which would pin
+ * every conversation to one stale identity. This route therefore injects the
+ * header itself, so the configured fallback answers sessionless requests and
+ * the live id beats a static one; pi-ai then sees the header and adds nothing.
+ * The injection sits at the provider delegate — the one boundary every
+ * dispatch path (direct stream() and the runtime's prepareCall()) reaches
+ * with the per-request options still in hand.
  *
  * @module dsh-provider-extra/opencode-go
  */
