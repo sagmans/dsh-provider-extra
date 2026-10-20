@@ -1,6 +1,55 @@
+# Dependabot policy. The supply chain window lives in pnpm-workspace.yaml, so the
+# cooldown below mirrors it: a bot pull request and `pnpm install` should never
+# disagree about which release is old enough to use.
 version: 2
 updates:
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  - package-ecosystem: npm
+    directory: /
     schedule:
-      interval: "weekly"
+      interval: weekly
+    open-pull-requests-limit: 5
+    cooldown:
+      # minimumReleaseAge: 10080 in pnpm-workspace.yaml, expressed in days. The
+      # workspace exempts the whole @deepseek-ai/* and @earendil-works/* scopes
+      # so a verified harness release, and the pi-ai it resolves, can be pinned
+      # by hand inside the window; the bot still waits the full week.
+      default-days: 7
+    groups:
+      # The harness matrix guard requires every harness pin, mounted or compiled
+      # against, to name one verified release. The line therefore moves in one
+      # pull request, which must also add that release to dshReleases (RELEASE.md).
+      # Listed first because a dependency joins the first group it matches.
+      # cordis and pi-ai are in the group because the harness resolves its own
+      # copies of both: either one moved alone leaves two copies in the tree and
+      # fails the typecheck or the reload tests.
+      harness:
+        patterns: ['@deepseek-ai/dsh', '@deepseek-ai/dsh-*', '@deepseek-ai/cordis', '@earendil-works/pi-ai']
+      # One pull request for the toolchain that verifies the plugin, so review
+      # attention stays on the runtime packages that actually ship.
+      dev-toolchain:
+        dependency-type: development
+        patterns: ['*']
+        update-types: [minor, patch]
+    ignore:
+      # @types/node majors track Node majors, so a types major moves only with a
+      # deliberate runtime move. Types must never lead the engine.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+      # Pi 1.4.0 and later are outside the Pi line this plugin supports, so no
+      # update may land there. A version range, unlike update-types, also binds
+      # security updates, so an advisory cannot pull the pin past the line either.
+      - dependency-name: '@earendil-works/*'
+        versions: ['>=1.4.0']
+
+  # Every action is pinned by commit SHA, and nothing else raises those pins.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      # A compromised action release is the same risk the npm window guards
+      # against, so a new action pin waits out the same week.
+      default-days: 7
+    groups:
+      actions:
+        patterns: ['*']
