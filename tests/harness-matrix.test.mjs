@@ -7,7 +7,7 @@ import { admitsVersion, checkMatrix, compareVersions, satisfiesRange } from '../
 const RANGE = '>=0.2.1-rc.1 <0.3.0-0'
 const RELEASES = ['0.2.1-rc.2']
 /** The vendor peer that admits the model-adapter line those releases ship. */
-const VENDOR_PEER = '>=1.1.0 <1.4.0'
+const VENDOR_PEER = '>=1.1.0 <1.4.0-0'
 
 /** A manifest that satisfies every rule, so one rule can be broken at a time. */
 function consistent(overrides = {}) {
@@ -18,7 +18,7 @@ function consistent(overrides = {}) {
     dsh: { compatibility: { dsh: RANGE, dshReleases: Object.fromEntries(RELEASES.map(release => [release, 'compatible'])) } },
     devDependencies: { '@deepseek-ai/dsh-llm': '0.2.1-rc.2' },
     ...rest,
-    peerDependencies: { '@deepseek-ai/dsh-llm': RANGE, '@deepseek-ai/cordis': '^4.0.5', '@earendil-works/pi-ai': VENDOR_PEER, ...peerDependencies },
+    peerDependencies: { '@deepseek-ai/dsh-llm': RANGE, '@deepseek-ai/cordis': '>=4.0.5 <4.1.0-0', '@earendil-works/pi-ai': VENDOR_PEER, ...peerDependencies },
   }
 }
 
