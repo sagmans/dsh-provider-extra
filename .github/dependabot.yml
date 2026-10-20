@@ -19,8 +19,11 @@ updates:
       # against, to name one verified release. The line therefore moves in one
       # pull request, which must also add that release to dshReleases (RELEASE.md).
       # Listed first because a dependency joins the first group it matches.
+      # cordis and pi-ai are in the group because the harness resolves its own
+      # copies of both: either one moved alone leaves two copies in the tree and
+      # fails the typecheck or the reload tests.
       harness:
-        patterns: ['@deepseek-ai/dsh', '@deepseek-ai/dsh-*']
+        patterns: ['@deepseek-ai/dsh', '@deepseek-ai/dsh-*', '@deepseek-ai/cordis', '@earendil-works/pi-ai']
       # One pull request for the toolchain that verifies the plugin, so review
       # attention stays on the runtime packages that actually ship.
       dev-toolchain:
