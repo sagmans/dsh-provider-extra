@@ -11,6 +11,7 @@ carry a breaking change, and a patch carries only fixes.
 ### Security
 
 - Development installs resolve `@modelcontextprotocol/client` `2.3.1` through the scoped `pnpm-workspace.yaml` override, clearing GHSA-6prh-2h8m-c8cw: the HTTP client transports and OAuth requests of earlier releases followed cross-origin redirects and re-sent custom headers and request bodies. The `@modelcontextprotocol/sdk` floor moves to `1.32.1` for the same advisory. The published package is unchanged.
+- Development installs resolve `fflate` `0.8.3` and `fast-uri` `3.1.8` through scoped `pnpm-workspace.yaml` overrides, clearing GHSA-px8p-9vwx-vf98 (a malformed ZIP64 archive sends `unzipSync` into an infinite loop) and GHSA-hrr3-gc8f-f4qj (a percent-encoded host escapes case normalization). The published package is unchanged.
 
 ### Compatibility
 
