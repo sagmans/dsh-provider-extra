@@ -21,6 +21,8 @@ const PRIVATE_FAILURE = '/private/example-token'
 const READ_FAILURE = 'Could not load service tiers; reopen /service-tier to retry'
 const SAVE_FAILURE = 'Could not confirm service tier; check writable shared storage, then reopen /service-tier before retrying'
 const settle = () => new Promise<void>(resolve => setImmediate(resolve))
+/** Gateway export subpath whose browser bundle is the stock Remote facade. */
+const GATEWAY_CLIENT_EXPORT = './client'
 
 /** Mirrors the published popupSelect contract; no unavailable disabled-row extension. */
 interface Option { readonly id: string; readonly label: string; readonly detail?: string; readonly active?: boolean }
@@ -318,7 +320,14 @@ test('stock npm Remote facade permits popup calls from a restricted plugin conte
   const cordis = await import(pathToFileURL(host.resolve('@deepseek-ai/cordis')).href)
   const { default: Registry } = await import(pathToFileURL(host.resolve('@deepseek-ai/dsh-typert-registry')).href)
   let gateway: { factory(require: (id: string) => unknown): { inject: string[]; apply: (ctx: Context) => void } } | undefined
-  const artifact = readFileSync(host.resolve('@deepseek-ai/dsh-api-gateway/client'), 'utf8')
+  // The browser bundle is the facade a restricted client loads. Since 0.2.1 the
+  // client export also carries a node condition, which a Node resolve would pick,
+  // so the browser target is read from the package's own export map.
+  const gatewayManifest = host.resolve('@deepseek-ai/dsh-api-gateway/package.json')
+  const { exports: gatewayExports } = JSON.parse(readFileSync(gatewayManifest, 'utf8')) as {
+    exports: Record<string, { browser: string }>
+  }
+  const artifact = readFileSync(new URL(gatewayExports[GATEWAY_CLIENT_EXPORT]!.browser, pathToFileURL(gatewayManifest)), 'utf8')
   runInNewContext(artifact, { AbortController, AbortSignal, console, crypto,
     window: { __ModuleLoader__: { load(value: typeof gateway) { gateway = value } } },
   })

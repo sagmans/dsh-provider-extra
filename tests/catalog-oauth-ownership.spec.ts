@@ -114,7 +114,9 @@ for (const stage of STAGES) for (const topology of TOPOLOGIES) {
         const defaults = ctx.get('agentDefaultModel')
         const candidate = structuredClone(config)
         candidate.catalog.providers[0]!.models[0]!.name = RELOADED_MODEL_NAME
-        await mounted.update(candidate)
+        // Cordis 4.0.3+ update() only schedules the restart; await() settles the new generation.
+        mounted.update(candidate)
+        await mounted.await()
         assert.notEqual(ctx.get('agentDefaultModel'), defaults)
         assert.equal((await ctx.llm.resolveModelInfo(ROUTE, MODEL)).name, RELOADED_MODEL_NAME)
       }

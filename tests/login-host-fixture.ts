@@ -11,7 +11,7 @@ import * as plugin from '../src/index.ts'
 
 export const ROUTE = 'go-alias'
 export const SOURCE = 'opencode-go'
-export const MODEL = 'deepseek-v4-flash'
+export const MODEL = 'deepseek-v4.1-flash'
 export const REF = 'MANAGED_LOGIN_TEST_KEY'
 export const KEY = 'local-new-test-key'
 export const OLD_KEY = 'local-old-test-key'

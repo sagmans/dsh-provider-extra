@@ -8,6 +8,19 @@ carry a breaking change, and a patch carries only fixes.
 
 ## [Unreleased]
 
+### Compatibility
+
+- **Breaking:** Support DeepSeek Harness `0.2.1-rc.2` with pi-ai `1.3.0`, and drop hosts before `0.2.1-rc.1`. The supported range is now `>=0.2.1-rc.1 <0.3.0-0`, and the pi-ai peer is `>=1.1.0 <1.4.0-0`. Older hosts ship pi-ai `0.x` and are verified only with `0.8.1`; keep `0.8.1` there.
+- The cordis and schemastery peers stop below their next minor: `>=4.0.5 <4.1.0-0` and `>=3.18.5 <3.19.0-0`. The caret ranges also admitted `4.1` and `3.19`, which no verified harness ships.
+- The harness peers declare that range instead of `*`. The harness now refuses this plugin on a host it cannot serve, instead of failing the first turn. The upper bound `<0.3.0-0` keeps `0.3.0` release candidates out.
+
+### Fixed
+
+- The shipped OpenCode Go extra `deepseek-flash` clones `deepseek-v4.1-flash`. pi-ai `1.3.0` removed `deepseek-v4-flash`, so the old template failed the route.
+- `catalog-setup` verification lists models again on `0.2.1` hosts, which list a route's models only once its key resolves. It uses a local placeholder key, never a real credential.
+- The source tests no longer hang when a catalog mount fails; they fail in about a second.
+- The browser client build no longer depends on the TypeScript compiler API, which TypeScript 7 removes.
+
 ## [0.8.1] - 2026-10-14
 
 ### Compatibility

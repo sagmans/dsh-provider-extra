@@ -34,7 +34,10 @@ function resolveConfig(document: Record<string, unknown>): ConfigShape {
 }
 
 /** One catalog id the installed pi-ai catalog ships, for whitelist cases. */
-const CATALOG_MODEL_ID = 'deepseek-v4-flash'
+const CATALOG_MODEL_ID = 'deepseek-v4.1-flash'
+
+/** The display name the installed catalog ships for that id. */
+const CATALOG_MODEL_NAME = 'DeepSeek V4.1 Flash'
 
 /** A declared extra cloning the catalog sibling above. */
 const DECLARED_EXTRA = { id: 'my-flash', template: CATALOG_MODEL_ID }
@@ -222,10 +225,10 @@ describe('DeepSeek V4.1 Flash catalog entry', () => {
 describe('settings-declared extra models', () => {
   it('serves a declared model cloned from its template', () => {
     const models = buildOpenCodeGoProfile({
-      ...baseRoute, extraModels: [{ id: 'my-flash', template: 'deepseek-v4-flash' }],
+      ...baseRoute, extraModels: [{ id: 'my-flash', template: CATALOG_MODEL_ID }],
     }).piProvider!.getModels()
     const extra = models.find(model => model.id === 'my-flash')
-    const template = models.find(model => model.id === 'deepseek-v4-flash')!
+    const template = models.find(model => model.id === CATALOG_MODEL_ID)!
     assert.notEqual(extra, undefined, 'route serves the declared model')
     // Unnamed declarations read as their template; identity answers to the route.
     assert.equal(extra!.name, template.name)
@@ -244,11 +247,11 @@ describe('settings-declared extra models', () => {
 
   it('leaves a catalog-shipped id to the catalog', () => {
     const profile = buildOpenCodeGoProfile({
-      ...baseRoute, extraModels: [{ id: 'deepseek-v4-flash', name: 'Renamed' }],
+      ...baseRoute, extraModels: [{ id: CATALOG_MODEL_ID, name: 'Renamed' }],
     })
     assert.equal(
-      profile.piProvider!.getModels().find(model => model.id === 'deepseek-v4-flash')!.name,
-      'DeepSeek V4 Flash',
+      profile.piProvider!.getModels().find(model => model.id === CATALOG_MODEL_ID)!.name,
+      CATALOG_MODEL_NAME,
     )
   })
 
@@ -263,7 +266,7 @@ describe('settings-declared extra models', () => {
   })
 
   it('streams a declared extra through the mock gateway with the session header', async () => {
-    const instance = adapter({ extraModels: [{ id: 'my-flash', template: 'deepseek-v4-flash' }] })
+    const instance = adapter({ extraModels: [{ id: 'my-flash', template: CATALOG_MODEL_ID }] })
     const chunks = await viaRuntime(instance, request('session-extra', 'my-flash'))
     assert.equal(lastSessionHeader(), 'session-extra')
     assert.equal(chunks.at(-1)?.type, 'finish')

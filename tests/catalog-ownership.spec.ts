@@ -9,7 +9,7 @@ import type { StreamChunk } from '@deepseek-ai/dsh-llm'
 import * as plugin from '../src/index.ts'
 
 const ROUTE = 'opencode-go-session'
-const MODEL = 'deepseek-v4-flash'
+const MODEL = 'deepseek-v4.1-flash'
 const REF = 'CATALOG_TEST_KEY'
 const KEY = 'local-test-key'
 const COLLISION = 'CATALOG_OWNER_COLLISION'
@@ -48,6 +48,9 @@ for (const directory of [false, true]) {
     const diagnostics: unknown[] = []
     ctx.logger.exporter({ export(message) { if (message.type === 'error') diagnostics.push(...message.args) } })
     const runtime = await ctx.plugin(LlmRuntime)
+    // The 0.2.1 adapter lists a route's models only once its credential
+    // resolves, so recovery is proven against a stored in-memory key.
+    const credentials = await ctx.plugin((owner: Context) => owner.provide('credentials', { resolve: async () => ({ value: KEY }) }))
     const mounted = await ctx.plugin(plugin, { catalog: catalog() } as never)
     const defaults = ctx.get('agentDefaultModel')
     const prepared = await ctx.llm.prepareCall(SELECTION)
@@ -78,7 +81,7 @@ for (const directory of [false, true]) {
       assert.equal(diagnostics.filter(item => (item as { code?: string })?.code === COLLISION).length, 2)
       await external.dispose()
       assert.deepEqual(defaults.currentSelection(), SELECTION)
-    } finally { await another?.dispose(); await external?.dispose(); await mounted.dispose(); await runtime.dispose() }
+    } finally { await another?.dispose(); await external?.dispose(); await mounted.dispose(); await credentials.dispose(); await runtime.dispose() }
   })
 }
 
@@ -105,7 +108,7 @@ test('a collision during asynchronous credential lookup fails before provider di
   } finally { release(); await external?.dispose(); await mounted.dispose(); await credentials.dispose(); await runtime.dispose() }
 })
 
-test('legitimate reload retains captured dispatch and does not interrupt an already-started request', async () => {
+test('legitimate reload retains captured dispatch and does not interrupt an already-started request', async t => {
   const seen: string[] = []
   let requestStarted!: () => void
   const started = new Promise<void>(resolve => { requestStarted = resolve })
@@ -125,20 +128,36 @@ test('legitimate reload retains captured dispatch and does not interrupt an alre
       })
     })
   })
+  // A listening server keeps the spec process alive, so each resource is queued
+  // for release as soon as it exists: a mount or setup step that throws would
+  // otherwise skip every later cleanup and hang the whole run instead of
+  // failing this test. Release runs newest first, as the finally block did.
+  const cleanup: (() => unknown)[] = []
+  t.after(async () => { for (const release of cleanup.reverse()) await release() })
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+  cleanup.push(() => {
+    releaseResponse()
+    server.closeAllConnections()
+    return new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+  })
   const endpoint = 'http://127.0.0.1:' + (server.address() as AddressInfo).port
   const ctx = new Context()
   const diagnostics: unknown[] = []
   ctx.logger.exporter({ export(message) { if (message.type === 'error') diagnostics.push(...message.args) } })
   const runtime = await ctx.plugin(LlmRuntime)
+  cleanup.push(() => runtime.dispose())
   const credentials = await ctx.plugin((owner: Context) => owner.provide('credentials', { resolve: async () => ({ value: KEY }) }))
+  cleanup.push(() => credentials.dispose())
   const mounted = await ctx.plugin(plugin, { catalog: catalog(endpoint) } as never)
+  cleanup.push(() => mounted.dispose())
   let external
   try {
     const prepared = await ctx.llm.prepareCall(SELECTION)
     const replacement = catalog(endpoint)
     replacement.providers[0]!.headers[HEADER] = SECOND
-    await mounted.update({ catalog: replacement })
+    // Cordis 4.0.3+ update() only schedules the restart; await() settles the new generation.
+    mounted.update({ catalog: replacement })
+    await mounted.await()
     const active = drain(prepared.stream({ ...prepared.config, messages: [] }))
     await started
     external = await ctx.plugin(competing())
@@ -151,8 +170,7 @@ test('legitimate reload retains captured dispatch and does not interrupt an alre
     assert.deepEqual(seen, [FIRST, SECOND])
     assert.equal(diagnostics.filter(item => (item as { code?: string })?.code === COLLISION).length, 1)
   } finally {
-    releaseResponse(); await external?.dispose(); await mounted.dispose(); await credentials.dispose(); await runtime.dispose()
-    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+    releaseResponse(); await external?.dispose()
   }
 })
 test('successive managed reloads replace only their own default and remain usable', async t => {

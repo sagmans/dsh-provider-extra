@@ -47,15 +47,17 @@ packed candidate in a cloned home (see [README.md](README.md#development-and-ver
 **The harness matrix has two sides.** `dsh.compatibility.dsh` is the range a
 profile and the peers accept; `dsh.compatibility.dshReleases` lists what the
 gates ran against; the harness `devDependencies` compile against exactly one of
-those. The harness peers stay `*` on purpose — npm resolves a peer against the
-consumer's tree, and a peer range cannot span two prerelease lines — while a
-mounted package names the range or one verified release.
+those. The harness peers carry the range, never `*`: the dsh plugin gate reads
+them with prereleases included, and npm reads them strictly, so the range gives
+each prerelease `X.Y.Z` tuple its own `>=a <b` alternative and bounds lines at
+`-0`. A mounted package names the range or one verified release.
 `node tools/harness-matrix.mjs` fails when the three disagree, and
 [RELEASE.md](RELEASE.md#harness-matrix) owns the bump.
 
 **A verified release is published inside the release-age window**, so
-`pnpm-workspace.yaml` excludes the vendor's scope from it; a harness mount also
-resolves that same vendor's packages, which the exclusion has to cover.
+`pnpm-workspace.yaml` exempts each lockfile entry still inside the window by
+its exact `name@version`, never a name pattern or a scope, and records when the
+list can be dropped.
 
 **The packaged examples are checked for synthetic identifiers.** Every catalog
 and model declaration in shipped configuration, examples, and documentation
