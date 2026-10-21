@@ -21,6 +21,10 @@ carry a breaking change, and a patch carries only fixes.
 - The source tests no longer hang when a catalog mount fails; they fail in about a second.
 - The browser client build no longer depends on the TypeScript compiler API, which TypeScript 7 removes.
 
+### Changed
+
+- Development tooling moves to TypeScript `7.0.2`, `@types/node` `26.6.5` and tsx `4.23.15`. The emitted `dist/` is unchanged apart from import quote style. The test lockfile resolves `@modelcontextprotocol/client` `2.3.0` (GHSA-6prh-2h8m-c8cw).
+
 ## [0.8.1] - 2026-10-14
 
 ### Compatibility
