@@ -23,6 +23,7 @@ carry a breaking change, and a patch carries only fixes.
 
 - Development tooling moves to `@types/node` 26.6.5 and `tsx` 4.23.15. The published package is unchanged.
 - Development builds use TypeScript 7.0.2. The published modules behave the same; the compiler now writes rewritten relative import paths with single quotes.
+- A signed `v*` tag push now publishes automatically through npm OIDC trusted publishing. Only admins can push a `v*` tag, so the tag push is the release approval, and the `npm-release` environment no longer waits for a reviewer. The release helper creates and accepts that reviewer-less environment, and `scripts/npm/target.env` names the tag-ruleset bypass user as `RELEASE_OWNER` instead of `REVIEWER`. The published package is unchanged.
 
 ### Security
 
