@@ -340,9 +340,13 @@ allowBuilds:
 #   GHSA-jqcg-44mw-7w3h  proxy-addr
 #   GHSA-ch52-4w7c-c8xp  http-cache-semantics
 #   GHSA-wq5f-xc86-pv6w  sharp
+#   GHSA-px8p-9vwx-vf98  fflate
+#   GHSA-hrr3-gc8f-f4qj  fast-uri
 overrides:
   '@modelcontextprotocol/client@<2.3.0': ^2.3.1
   '@modelcontextprotocol/sdk@<1.32.0': ^1.32.1
   'proxy-addr@<2.0.8': ^2.0.8
   'http-cache-semantics@<4.2.1': ^4.2.1
   'sharp@<0.35.5': ^0.35.5
+  'fflate@>=0.8.0 <0.8.3': ^0.8.3
+  'fast-uri@>=3.0.0 <3.1.8': ^3.1.8
