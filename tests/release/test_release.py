@@ -39,7 +39,7 @@ class ReleaseTests(unittest.TestCase):
             "DRY_RUN": "0", "CONFIRM": "", "SCENARIO": "absent",
             "NPM_BIN": str(self.cwd / "npm"), "GH_BIN": str(self.cwd / "gh"),
             "GIT_BIN": str(self.cwd / "git"), "CALL_LOG": str(self.cwd / "calls.jsonl"),
-            "REVIEWER": "example", "TAG_PATTERN": "v*", "RULESET_NAME": "release-tags",
+            "RELEASE_OWNER": "example", "TAG_PATTERN": "v*", "RULESET_NAME": "release-tags",
         }
         for name in ("npm", "gh", "git"):
             tool = self.cwd / name
@@ -263,6 +263,8 @@ class ReleaseTests(unittest.TestCase):
         result = self.run_helper("setup-github-release", DRY_RUN="1")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('"can_admins_bypass": false', result.stdout)
+        # The admin-only tag push is the release approval, so no reviewer gate is created.
+        self.assertNotIn('"reviewers"', result.stdout)
         self.assertIn('"type": "tag"', result.stdout)
         self.assert_no_mutation()
         self.assertTrue(any("--paginate" in call for call in self.calls()))

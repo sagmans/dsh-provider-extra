@@ -9,13 +9,17 @@ ACTION = "setup-github-release"
 HOST = "github.com"
 ADMIN_ROLE_ID = 5
 SAFE_NAME = r"[A-Za-z0-9][A-Za-z0-9._-]*"
-REVIEWER_PATTERN = r"[A-Za-z0-9][A-Za-z0-9-]{0,38}"
+OWNER_PATTERN = r"[A-Za-z0-9][A-Za-z0-9-]{0,38}"
+# A signed `v*` tag push by an admin is the release approval, so the environment
+# carries only the tag deployment policy; any other protection, such as a
+# required reviewer or wait timer, is drift from that decision.
+ENVIRONMENT_PROTECTIONS = ("branch_policy",)
 TAG_PATTERN = r"[A-Za-z0-9._/-]+\*?"
 
 
 def setup_github(target):
     _, environment = target.workflow()
-    reviewer = setting("REVIEWER", REVIEWER_PATTERN)
+    owner = setting("RELEASE_OWNER", OWNER_PATTERN)
     tag = setting("TAG_PATTERN", TAG_PATTERN)
     require(".." not in tag and "//" not in tag and not tag.startswith("/"), "invalid TAG_PATTERN")
     ruleset_name = setting("RULESET_NAME", SAFE_NAME)
@@ -49,17 +53,16 @@ def setup_github(target):
     require(isinstance(repo, dict) and repo.get("full_name") == target.repo
             and isinstance(repo.get("permissions"), dict) and repo["permissions"].get("admin") is True,
             "expected repository administration access not verified")
-    user = get(f"users/{reviewer}")
-    require(isinstance(user, dict) and user.get("login", "").lower() == reviewer.lower()
-            and type(user.get("id")) is int and user["id"] > 0, "reviewer identity not verified")
-    reviewer_id = user["id"]
+    user = get(f"users/{owner}")
+    require(isinstance(user, dict) and user.get("login", "").lower() == owner.lower()
+            and type(user.get("id")) is int and user["id"] > 0, "release owner identity not verified")
+    owner_id = user["id"]
     environment_endpoint = f"repos/{target.repo}/environments/{environment}"
     policies_endpoint = f"{environment_endpoint}/deployment-branch-policies"
     rulesets_endpoint = f"repos/{target.repo}/rulesets"
     branch_policy = {"protected_branches": False, "custom_branch_policies": True}
     environment_payload = {
         "can_admins_bypass": False,
-        "reviewers": [{"type": "User", "id": reviewer_id}],
         "deployment_branch_policy": branch_policy,
     }
     ruleset_payload = {
@@ -67,11 +70,11 @@ def setup_github(target):
         "conditions": {"ref_name": {"include": [f"refs/tags/{tag}"], "exclude": []}},
         "rules": [{"type": "creation"}, {"type": "update"}, {"type": "deletion"}],
         # A role-based bypass does not survive a change of repository owner: the
-        # control then blocks even the release owner, so the reviewer is named
+        # control then blocks even the release owner, so the owner is named
         # directly as well and the gate keeps admitting a human.
         "bypass_actors": [
             {"actor_id": ADMIN_ROLE_ID, "actor_type": "RepositoryRole", "bypass_mode": "always"},
-            {"actor_id": reviewer_id, "actor_type": "User", "bypass_mode": "always"},
+            {"actor_id": owner_id, "actor_type": "User", "bypass_mode": "always"},
         ],
     }
 
@@ -85,14 +88,8 @@ def setup_github(target):
             protections = current.get("protection_rules", [])
             require(isinstance(protections, list) and all(isinstance(rule, dict) for rule in protections),
                     "unexpected environment protections")
-            reviews = [rule for rule in protections if rule.get("type") == "required_reviewers"]
-            require(len(reviews) == 1, "existing reviewer controls conflict")
-            reviewers = reviews[0].get("reviewers", [])
-            require(len(reviewers) == 1 and isinstance(reviewers[0], dict)
-                    and reviewers[0].get("type") == "User"
-                    and isinstance(reviewers[0].get("reviewer"), dict)
-                    and reviewers[0]["reviewer"].get("id") == reviewer_id,
-                    "existing reviewer controls conflict")
+            require(all(rule.get("type") in ENVIRONMENT_PROTECTIONS for rule in protections),
+                    "existing environment protections conflict; refusing overwrite")
             policies = pages(policies_endpoint, "branch_policies")
             require(len(policies) <= 1 and all(policy.get("name") == tag and policy.get("type") == "tag" for policy in policies),
                     "existing deployment policies conflict; branch and tag policies are distinct")
