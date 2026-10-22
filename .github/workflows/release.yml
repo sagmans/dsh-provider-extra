@@ -29,7 +29,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # The released artefact is built from this tree, so its registry signatures
-      # are checked before the tag can reach the approval gate.
+      # are checked before the tag can reach the publish job.
       - name: Dependency signatures
         run: npm audit signatures
       # RELEASE.md requires the tag and package.json version to match; fail the
@@ -50,8 +50,9 @@ jobs:
     # per RELEASE.md.
     if: github.ref_name != 'v0.1.0'
     runs-on: ubuntu-latest
-    # Approval gate: this environment requires the release owner's review, so
-    # every publish is an explicit human decision.
+    # The environment admits only `v*` tags, and the tag ruleset admits only
+    # admins, so the signed tag push is the release approval and no reviewer
+    # waits here. npm trusted publishing is also bound to this environment.
     environment: npm-release
     timeout-minutes: 15
     permissions:

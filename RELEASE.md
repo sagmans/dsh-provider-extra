@@ -96,7 +96,7 @@ DRY_RUN=1 python3 scripts/npm/release.py harden-publishing
 CONFIRM=harden-publishing python3 scripts/npm/release.py harden-publishing
 ```
 
-- `setup-github-release` creates the approval-gated `npm-release` environment and an admin-only `v*` tag ruleset. It refuses to overwrite conflicting existing controls. GitHub drops role-based bypass actors when a repository changes owner, which leaves tag creation closed even to the release owner, so after a move confirm the ruleset still admits a human before tagging.
+- `setup-github-release` creates the `npm-release` environment, which admits only `v*` tags and has no required reviewer, and an admin-only `v*` tag ruleset. The ruleset makes the signed tag push the release approval. It refuses to overwrite conflicting existing controls. GitHub drops role-based bypass actors when a repository changes owner, which leaves tag creation closed even to the release owner, so after a move confirm the ruleset still admits a human before tagging.
 - `configure-trust` binds publication to this repository's `release.yml` on the `npm-release` environment. The registry answers a publish grant with stage publish included, so that pair is the accepted configuration; a stage-only grant carries no publish authority and is refused, as is any conflicting existing trust.
 - `harden-publishing` requires two-factor authentication for publication and disallows traditional tokens, so the OIDC flow is the only publish path. Confirm the package settings on npmjs.com afterwards; the helper does not claim MFA readback.
 
@@ -116,7 +116,7 @@ git tag -s -a "v${PKG_VERSION}" -m "v${PKG_VERSION}" <merged-sha>
 git push origin "v${PKG_VERSION}"
 ```
 
-The tag push runs `release.yml`: it re-verifies the candidate, then the publish job waits for the release owner's approval on the `npm-release` environment before publishing through OIDC trusted publishing with automatic provenance. Create the GitHub release from the tag using the drafted notes after publication succeeds.
+The tag push runs `release.yml`: it re-verifies the candidate, then the publish job publishes automatically through OIDC trusted publishing with automatic provenance. Only an admin can push a `v*` tag, so the signed tag push is the release approval; the `npm-release` environment has no required reviewer. Create the GitHub release from the tag using the drafted notes after publication succeeds.
 
 ## Rollback
 
@@ -125,4 +125,5 @@ The tag push runs `release.yml`: it re-verifies the candidate, then the publish 
   npm deprecate "@sagmans/dsh-provider-extra@<version>" "<reason>; use @sagmans/dsh-provider-extra@<replacement> instead"
   ```
 - **Bad route behaviour:** patch release; never disable a running profile or rewrite a user's stored conversations or credentials.
+- **Publish gate:** to require a human approval after the tag push again, add a required reviewer to the `npm-release` environment in the repository settings. `setup-github-release` then reports that environment as a conflict until its expected protections change too.
 - **Broken trust configuration:** fix it with `configure-trust` after inspecting `npm trust list`; revoking credentials or changing account security needs separate approval.
