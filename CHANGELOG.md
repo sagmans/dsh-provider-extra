@@ -19,6 +19,10 @@ carry a breaking change, and a patch carries only fixes.
 - The cordis and schemastery peers stop below their next minor: `>=4.0.5 <4.1.0-0` and `>=3.18.5 <3.19.0-0`. The caret ranges also admitted `4.1` and `3.19`, which no verified harness ships.
 - The harness peers declare that range instead of `*`. The harness now refuses this plugin on a host it cannot serve, instead of failing the first turn. The upper bound `<0.3.0-0` keeps `0.3.0` release candidates out.
 
+### Changed
+
+- Development tooling moves to `@types/node` 26.6.5 and `tsx` 4.23.15. The published package is unchanged.
+
 ### Fixed
 
 - The shipped OpenCode Go extra `deepseek-flash` clones `deepseek-v4.1-flash`. pi-ai `1.3.0` removed `deepseek-v4-flash`, so the old template failed the route.
