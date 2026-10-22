@@ -26,7 +26,7 @@ Catalog presence does not prove endpoint availability, pricing, or metadata accu
 
 ## Requirements
 
-- Node.js 24 LTS (verified with 24.20.0).
+- Node.js 24 LTS (verified with 24.22.1).
 - pnpm 11.21.0 for this repository.
 - A DeepSeek Harness install on the supported line: `>=0.2.1-rc.1 <0.3.0-0`, verified against `0.2.1-rc.2` (see [RELEASE.md](RELEASE.md#harness-matrix)). The range is declared in `dsh.compatibility.dsh` and on every harness peer, so the harness refuses this plugin on a host outside it instead of failing the first turn. Hosts before `0.2.1-rc.1` ship the pi-ai `0.x` model catalog; use `@sagmans/dsh-provider-extra@0.8.1` there.
 

@@ -24,6 +24,10 @@ carry a breaking change, and a patch carries only fixes.
 - Development tooling moves to `@types/node` 26.6.5 and `tsx` 4.23.15. The published package is unchanged.
 - Development builds use TypeScript 7.0.2. The published modules behave the same; the compiler now writes rewritten relative import paths with single quotes.
 
+### Security
+
+- The daily harness-matrix job runs on Node.js `24.22.1` (was `24.20.0`), the 24.x security release that fixes CVE-2026-111497 (Brotli decoder out-of-bounds write) and CVE-2026-105483 and CVE-2026-106069 (TLS hostname check bypass). Checks and tests pass on `24.22.1`. The published package is unchanged.
+
 ### Fixed
 
 - The shipped OpenCode Go extra `deepseek-flash` clones `deepseek-v4.1-flash`. pi-ai `1.3.0` removed `deepseek-v4-flash`, so the old template failed the route.
