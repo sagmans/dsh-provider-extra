@@ -8,6 +8,10 @@ carry a breaking change, and a patch carries only fixes.
 
 ## [Unreleased]
 
+### Security
+
+- Development installs resolve `@modelcontextprotocol/client` `2.3.1` through the scoped `pnpm-workspace.yaml` override, clearing GHSA-6prh-2h8m-c8cw: the HTTP client transports and OAuth requests of earlier releases followed cross-origin redirects and re-sent custom headers and request bodies. The `@modelcontextprotocol/sdk` floor moves to `1.32.1` for the same advisory. The published package is unchanged.
+
 ### Compatibility
 
 - **Breaking:** Support DeepSeek Harness `0.2.1-rc.2` with pi-ai `1.3.0`, and drop hosts before `0.2.1-rc.1`. The supported range is now `>=0.2.1-rc.1 <0.3.0-0`, and the pi-ai peer is `>=1.1.0 <1.4.0-0`. Older hosts ship pi-ai `0.x` and are verified only with `0.8.1`; keep `0.8.1` there.
