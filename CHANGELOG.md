@@ -29,6 +29,7 @@ carry a breaking change, and a patch carries only fixes.
 ### Security
 
 - The daily harness-matrix job runs on Node.js `24.22.1` (was `24.20.0`), the 24.x security release that fixes CVE-2026-111497 (Brotli decoder out-of-bounds write) and CVE-2026-105483 and CVE-2026-106069 (TLS hostname check bypass). Checks and tests pass on `24.22.1`. The published package is unchanged.
+- Both release jobs also pin Node.js `24.22.1` instead of the runner's floating `24`, so the release can no longer verify or publish on an unpatched cached runtime. The published package contents are unchanged.
 
 ### Fixed
 
