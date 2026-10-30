@@ -28,7 +28,7 @@ Catalog presence does not prove endpoint availability, pricing, or metadata accu
 
 - Node.js 24 LTS (verified with 24.22.1).
 - pnpm 11.21.0 for this repository.
-- A DeepSeek Harness install on the supported line: `>=0.2.1-rc.1 <0.3.0-0`, verified against `0.2.1-rc.2` (see [RELEASE.md](RELEASE.md#harness-matrix)). The range is declared in `dsh.compatibility.dsh` and on every harness peer, so the harness refuses this plugin on a host outside it instead of failing the first turn. Hosts before `0.2.1-rc.1` ship the pi-ai `0.x` model catalog; use `@sagmans/dsh-provider-extra@0.8.1` there.
+- A DeepSeek Harness install on the supported line: `>=0.2.1-rc.1 <0.3.0-0`, verified against `0.2.1-rc.2` and `0.2.1-rc.3` (see [RELEASE.md](RELEASE.md#harness-matrix)). The range is declared in `dsh.compatibility.dsh` and on every harness peer, so the harness refuses this plugin on a host outside it instead of failing the first turn. Hosts before `0.2.1-rc.1` ship the pi-ai `0.x` model catalog; use `@sagmans/dsh-provider-extra@0.8.1` there.
 
 ## Install
 
@@ -42,7 +42,7 @@ dsh plugin --profile tui add @sagmans/dsh-provider-extra
 A release of the harness CLI is installable without a launcher already on `PATH`:
 
 ```sh
-pnpm dlx @deepseek-ai/dsh@0.2.1-rc.2 plugin --profile web add @sagmans/dsh-provider-extra
+pnpm dlx @deepseek-ai/dsh@0.2.1-rc.3 plugin --profile web add @sagmans/dsh-provider-extra
 ```
 
 The package declares `dsh.bundle.patch`. The CLI adds it to the profile's bundle list, and its patch loads the compiled plugin automatically. A bare `pnpm link` is not the registration procedure.
@@ -304,7 +304,7 @@ pnpm audit --audit-level high
 
 `check` runs type checking, source tests, the harness matrix guard, the build, integration tests, release guards, and the package smoke. `node tools/harness-matrix.mjs` reads the declared range, the verified releases, and what every harness package declares, and fails when the three disagree; `pnpm run matrix` is the same check.
 Package checks reject non-synthetic catalog/model declarations in shipped configuration and documentation.
-Development setup tests use synthetic credentials-free profiles; the setup helper stays outside the npm package. The plain-Node smoke test mounts both compiled routes in the real Cordis/LLM runtime. Two CLI tests exercise add, repeated add, profile overrides, and remove in disposable web/TUI profiles; they drive the registry CLI this repository develops against (`@deepseek-ai/dsh@0.2.1-rc.2`), so no harness checkout is needed.
+Development setup tests use synthetic credentials-free profiles; the setup helper stays outside the npm package. The plain-Node smoke test mounts both compiled routes in the real Cordis/LLM runtime. Two CLI tests exercise add, repeated add, profile overrides, and remove in disposable web/TUI profiles; they drive the registry CLI this repository develops against (`@deepseek-ai/dsh@0.2.1-rc.3`), so no harness checkout is needed.
 
 Tests use a local mock gateway or seeded grants. They require no API key, OAuth login, or paid provider requests.
 

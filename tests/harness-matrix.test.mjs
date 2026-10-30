@@ -107,8 +107,8 @@ test('a vendor peer admits every version the served lines ship', () => {
   assert.match(checkMatrix(dropped)[0], /peer dependency @earendil-works\/pi-ai is missing/u)
   // A new verified line cannot skip the vendor question.
   const unrecorded = consistent()
-  unrecorded.dsh.compatibility.dshReleases['0.2.1-rc.3'] = 'compatible'
-  assert.match(checkMatrix(unrecorded)[0], /verified release 0\.2\.1-rc\.3 has no recorded vendor pin/u)
+  unrecorded.dsh.compatibility.dshReleases['0.2.1-rc.4'] = 'compatible'
+  assert.match(checkMatrix(unrecorded)[0], /verified release 0\.2\.1-rc\.4 has no recorded vendor pin/u)
 })
 
 test('a caret keeps the minor of a 0.x vendor line, and a bounded range stops at its upper bound', () => {
