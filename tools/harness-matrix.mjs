@@ -198,6 +198,7 @@ export function verifiedReleases(manifest) {
  */
 const LINE_VENDOR_PINS = {
   '0.2.1-rc.2': { '@earendil-works/pi-ai': '1.3.0' },
+  '0.2.1-rc.3': { '@earendil-works/pi-ai': '1.4.0' },
 }
 
 /**
