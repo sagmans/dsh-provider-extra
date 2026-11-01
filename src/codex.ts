@@ -11,20 +11,29 @@
  * @module dsh-provider-extra/codex
  */
 
-import { defaultProviderAuthContext } from '@earendil-works/pi-ai'
-import type { Api, AuthContext, Credential, CredentialInfo, CredentialStore, Model, Provider, Transport } from '@earendil-works/pi-ai'
-import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
+import type { CredentialKey, CredentialRecord } from '@deepseek-ai/dsh-credentials'
 import {
   credentialKey,
   credentialKeyId,
   credentialKeyScope,
   isCredentialKeySegment,
 } from '@deepseek-ai/dsh-credentials'
-import type { CredentialKey, CredentialRecord } from '@deepseek-ai/dsh-credentials'
 import { LlmError, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
-import { resolveExtraModels, selectWhitelistedModels } from './extra-models.ts'
+import type {
+  Api,
+  AuthContext,
+  Credential,
+  CredentialInfo,
+  CredentialStore,
+  Model,
+  Provider,
+  Transport,
+} from '@earendil-works/pi-ai'
+import { defaultProviderAuthContext } from '@earendil-works/pi-ai'
+import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
 import type { ExtraModelSpec } from './extra-models.ts'
+import { resolveExtraModels, selectWhitelistedModels } from './extra-models.ts'
 
 /** pi-ai catalog id of the ChatGPT-subscription provider this route serves. */
 export const CODEX_CATALOG_ID = 'openai-codex'
@@ -79,8 +88,13 @@ export interface CodexCredentialService {
  * unrepresentable.
  */
 function jsonImage(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(entry => entry === undefined ? null : jsonImage(entry))
-  if (typeof value === 'object' && value !== null && Object.getPrototypeOf(value) === Object.prototype) {
+  if (Array.isArray(value))
+    return value.map((entry) => (entry === undefined ? null : jsonImage(entry)))
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    Object.getPrototypeOf(value) === Object.prototype
+  ) {
     const image: Record<string, unknown> = {}
     for (const [key, member] of Object.entries(value)) {
       if (member !== undefined) image[key] = jsonImage(member)
@@ -96,8 +110,8 @@ function toPiCredential(record: CredentialRecord | undefined): Credential | unde
   if (record.kind === 'api-key') {
     return {
       type: 'api_key',
-      ...record.key === undefined ? {} : { key: record.key },
-      ...record.env === undefined ? {} : { env: { ...record.env } },
+      ...(record.key === undefined ? {} : { key: record.key }),
+      ...(record.env === undefined ? {} : { env: { ...record.env } }),
     }
   }
   return record.payload as Credential
@@ -108,8 +122,8 @@ function toRecord(credential: Credential): CredentialRecord {
   if (credential.type === 'api_key') {
     return {
       kind: 'api-key',
-      ...credential.key === undefined ? {} : { key: credential.key },
-      ...credential.env === undefined ? {} : { env: { ...credential.env } },
+      ...(credential.key === undefined ? {} : { key: credential.key }),
+      ...(credential.env === undefined ? {} : { env: { ...credential.env } }),
     }
   }
   return { kind: 'grant', payload: jsonImage(credential) }
@@ -130,7 +144,7 @@ export class HarnessCredentialStore implements CredentialStore {
   }
 
   async list(): Promise<readonly CredentialInfo[]> {
-    const stored = await this.credentials()?.listRecords() ?? []
+    const stored = (await this.credentials()?.listRecords()) ?? []
     const mine: CredentialInfo[] = []
     for (const entry of stored) {
       // Records another plugin owns are not this collection's to report:
@@ -150,16 +164,18 @@ export class HarnessCredentialStore implements CredentialStore {
   ): Promise<Credential | undefined> {
     if (!isCredentialKeySegment(providerId)) {
       throw new LlmError(
-        'dsh-provider-extra: provider id "' + providerId + '" cannot address a stored credential record (a record id is a'
-        + ' lowercase hyphenated identifier)',
+        'dsh-provider-extra: provider id "' +
+          providerId +
+          '" cannot address a stored credential record (a record id is a' +
+          ' lowercase hyphenated identifier)',
         'UNSTORABLE_PROVIDER_ID',
       )
     }
     const credentials = this.credentials()
     if (credentials === undefined) {
       throw new LlmError(
-        'dsh-provider-extra: this composition mounts no credentials service, so there is nowhere to store the'
-        + ' credential a sign-in produces; mount one (dsh-credentials-local) to sign in',
+        'dsh-provider-extra: this composition mounts no credentials service, so there is nowhere to store the' +
+          ' credential a sign-in produces; mount one (dsh-credentials-local) to sign in',
         'NO_CREDENTIAL_STORE',
       )
     }
@@ -211,7 +227,10 @@ interface TransportStreamOptions {
  * @param config - the route configuration.
  * @returns the options with the transport pinned, or unchanged when none is.
  */
-export function withTransport<T extends TransportStreamOptions>(options: T | undefined, config: CodexRouteConfig): T | undefined {
+export function withTransport<T extends TransportStreamOptions>(
+  options: T | undefined,
+  config: CodexRouteConfig,
+): T | undefined {
   if (config.transport === undefined || options === undefined) return options
   return { ...options, transport: config.transport }
 }
@@ -224,11 +243,13 @@ export function withTransport<T extends TransportStreamOptions>(options: T | und
  * @throws Error when the installed pi-ai catalog no longer ships Codex.
  */
 export function catalogCodex(): Provider {
-  const found = builtinProviders().find(provider => provider.id === CODEX_CATALOG_ID)
+  const found = builtinProviders().find((provider) => provider.id === CODEX_CATALOG_ID)
   if (found === undefined) {
     throw new Error(
-      'dsh-provider-extra: the installed pi-ai catalog has no provider "' + CODEX_CATALOG_ID + '";'
-      + ' pin @earendil-works/pi-ai to a catalog that ships it',
+      'dsh-provider-extra: the installed pi-ai catalog has no provider "' +
+        CODEX_CATALOG_ID +
+        '";' +
+        ' pin @earendil-works/pi-ai to a catalog that ships it',
     )
   }
   return found
@@ -239,8 +260,12 @@ export function catalogCodex(): Provider {
  * catalog provider so its API implementation and OAuth quirks survive, while
  * identity and models answer to the route configuration.
  */
-function routeProvider(config: CodexRouteConfig, catalog: Provider, models: readonly Model<Api>[]): Provider {
-  const routed: Model<Api>[] = models.map(model => ({
+function routeProvider(
+  config: CodexRouteConfig,
+  catalog: Provider,
+  models: readonly Model<Api>[],
+): Provider {
+  const routed: Model<Api>[] = models.map((model) => ({
     ...model,
     provider: config.provider,
   }))
@@ -252,8 +277,10 @@ function routeProvider(config: CodexRouteConfig, catalog: Provider, models: read
     name: config.displayName,
     auth: catalog.auth,
     getModels: () => routed,
-    stream: (model, context, options) => catalog.stream(model, context, withTransport(options, config)),
-    streamSimple: (model, context, options) => catalog.streamSimple(model, context, withTransport(options, config)),
+    stream: (model, context, options) =>
+      catalog.stream(model, context, withTransport(options, config)),
+    streamSimple: (model, context, options) =>
+      catalog.streamSimple(model, context, withTransport(options, config)),
   }
 }
 
@@ -284,7 +311,11 @@ export function buildCodexProfile(config: CodexRouteConfig): ResolvedPiAiProvide
   // Selection runs last so a whitelist may name a declared extra exactly as it
   // names a catalog model, and so a typo in either is refused here rather than
   // served as a route quietly missing a model.
-  const models = selectWhitelistedModels(config.provider, [...catalog.getModels(), ...extras.models], config.models)
+  const models = selectWhitelistedModels(
+    config.provider,
+    [...catalog.getModels(), ...extras.models],
+    config.models,
+  )
   return {
     provider: config.provider,
     displayName: config.displayName,
@@ -324,5 +355,8 @@ export function codexAuth(credentials: () => CodexCredentialService | undefined)
   credentials: CredentialStore
   authContext: AuthContext
 } {
-  return { credentials: new HarnessCredentialStore(credentials), authContext: defaultProviderAuthContext() }
+  return {
+    credentials: new HarnessCredentialStore(credentials),
+    authContext: defaultProviderAuthContext(),
+  }
 }

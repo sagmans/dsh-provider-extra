@@ -30,41 +30,47 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import Schema from '@deepseek-ai/schemastery'
-import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
-import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
-import { LlmError, assertUsableApiKey, resolveImageAttachmentAccess } from '@deepseek-ai/dsh-llm'
-import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-commands'
+import { assertUsableApiKey, LlmError, resolveImageAttachmentAccess } from '@deepseek-ai/dsh-llm'
+import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
+import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
+import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-user-questions'
+import Schema from '@deepseek-ai/schemastery'
 import type { Transport } from '@earendil-works/pi-ai'
+import type { CatalogConfig } from './catalog.ts'
+import { compileCatalog } from './catalog.ts'
+import { mountCatalog } from './catalog-runtime.ts'
+import type { CodexCredentialService, CodexRouteConfig } from './codex.ts'
 import {
+  buildCodexProfile,
+  CODEX_TRANSPORTS,
+  codexApiKey,
+  codexAuth,
+  DEFAULT_CODEX_DISPLAY_NAME,
+  DEFAULT_CODEX_ROUTE_ID,
+} from './codex.ts'
+import type { ExtraModelSpec } from './extra-models.ts'
+import { DEFAULT_LOGIN_COMMAND_NAME } from './login-command.ts'
+import { mountLoginCommand } from './login-host.ts'
+import type { OpenCodeGoRouteConfig } from './opencode-go.ts'
+import {
+  buildOpenCodeGoProfile,
   DEFAULT_EXTRA_MODEL_TEMPLATE,
   DEFAULT_OPENCODE_API_KEY_ENV,
   OPENCODE_GO_PROVIDER_ID,
-  buildOpenCodeGoProfile,
 } from './opencode-go.ts'
-import type { OpenCodeGoRouteConfig } from './opencode-go.ts'
-import type { ExtraModelSpec } from './extra-models.ts'
-import {
-  DEFAULT_CODEX_DISPLAY_NAME,
-  DEFAULT_CODEX_ROUTE_ID,
-  buildCodexProfile,
-  codexApiKey,
-  codexAuth,
-} from './codex.ts'
-import { CODEX_TRANSPORTS } from './codex.ts'
-import type { CodexCredentialService, CodexRouteConfig } from './codex.ts'
-import { DEFAULT_LOGIN_COMMAND_NAME } from './login-command.ts'
-import { mountLoginCommand } from './login-host.ts'
-import { compileCatalog } from './catalog.ts'
-import type { CatalogConfig } from './catalog.ts'
-import { mountCatalog } from './catalog-runtime.ts'
-import { mountServiceTiers, withServiceTiers, SERVICE_TIER_CHOICES } from './service-tiers.ts'
 import type { TierSelectionConfig } from './service-tiers.ts'
+import { mountServiceTiers, SERVICE_TIER_CHOICES, withServiceTiers } from './service-tiers.ts'
 
+export type {
+  CatalogConfig,
+  CatalogModel,
+  CatalogProvider,
+  CatalogSelection,
+  CatalogSnapshot,
+} from './catalog.ts'
 export { compileCatalog } from './catalog.ts'
-export type { CatalogConfig, CatalogProvider, CatalogModel, CatalogSelection, CatalogSnapshot } from './catalog.ts'
 export { buildCatalogProfile } from './catalog-routes.ts'
 
 /** Settings namespace configuration surfaces address this plugin's section by. */
@@ -131,37 +137,43 @@ export interface Config {
 // The assertion carries the one thing schemastery cannot state: every array in
 // this entry is read-only to the plugin, which only ever copies it, while an
 // array member schema is typed as the mutable array it validates.
-export const Config: Schema<Config> = Schema.transform(Schema.object({
-  // Keep raw catalog presence: schemastery otherwise materializes absent arrays.
-  catalog: Schema.any(),
-  // The validated Config transform owns this array; profile edits reconcile it atomically.
-  serviceTierSelections: Schema.array(Schema.object({
-    provider: Schema.string().required(),
-    model: Schema.string().required(),
-    tier: Schema.union(SERVICE_TIER_CHOICES.map(choice => choice.id)).required(),
-  })).default([]),
-  apiKeyEnv: Schema.string().role('credential-ref').default(DEFAULT_OPENCODE_API_KEY_ENV),
-  routeId: Schema.string().default(OPENCODE_GO_PROVIDER_ID),
-  displayName: Schema.string().default('OpenCode Go'),
-  baseURL: Schema.string(),
-  fallbackSessionId: Schema.string(),
-  headers: Schema.dict(Schema.string()),
-  extraModels: Schema.array(goExtraModelSchema),
-  models: Schema.array(Schema.string()),
-  codexEnabled: Schema.boolean().default(true),
-  codexRouteId: Schema.string().default(DEFAULT_CODEX_ROUTE_ID),
-  codexDisplayName: Schema.string().default(DEFAULT_CODEX_DISPLAY_NAME),
-  codexExtraModels: Schema.array(codexExtraModelSchema),
-  codexModels: Schema.array(Schema.string()),
-  codexTransport: Schema.union(CODEX_TRANSPORTS),
-  loginCommandEnabled: Schema.boolean().default(true),
-  loginCommandName: Schema.string().default(DEFAULT_LOGIN_COMMAND_NAME),
-}), (value) => {
-  // Object-level validation also sees explicit null, which field transforms skip.
-  // Loader validates before disposal, retaining the previous snapshot on failure.
-  compileCatalog(value.catalog)
-  return value
-}, true) as Schema<Config>
+export const Config: Schema<Config> = Schema.transform(
+  Schema.object({
+    // Keep raw catalog presence: schemastery otherwise materializes absent arrays.
+    catalog: Schema.any(),
+    // The validated Config transform owns this array; profile edits reconcile it atomically.
+    serviceTierSelections: Schema.array(
+      Schema.object({
+        provider: Schema.string().required(),
+        model: Schema.string().required(),
+        tier: Schema.union(SERVICE_TIER_CHOICES.map((choice) => choice.id)).required(),
+      }),
+    ).default([]),
+    apiKeyEnv: Schema.string().role('credential-ref').default(DEFAULT_OPENCODE_API_KEY_ENV),
+    routeId: Schema.string().default(OPENCODE_GO_PROVIDER_ID),
+    displayName: Schema.string().default('OpenCode Go'),
+    baseURL: Schema.string(),
+    fallbackSessionId: Schema.string(),
+    headers: Schema.dict(Schema.string()),
+    extraModels: Schema.array(goExtraModelSchema),
+    models: Schema.array(Schema.string()),
+    codexEnabled: Schema.boolean().default(true),
+    codexRouteId: Schema.string().default(DEFAULT_CODEX_ROUTE_ID),
+    codexDisplayName: Schema.string().default(DEFAULT_CODEX_DISPLAY_NAME),
+    codexExtraModels: Schema.array(codexExtraModelSchema),
+    codexModels: Schema.array(Schema.string()),
+    codexTransport: Schema.union(CODEX_TRANSPORTS),
+    loginCommandEnabled: Schema.boolean().default(true),
+    loginCommandName: Schema.string().default(DEFAULT_LOGIN_COMMAND_NAME),
+  }),
+  (value) => {
+    // Object-level validation also sees explicit null, which field transforms skip.
+    // Loader validates before disposal, retaining the previous snapshot on failure.
+    compileCatalog(value.catalog)
+    return value
+  },
+  true,
+) as Schema<Config>
 
 /**
  * One configured model selection, or nothing when the entry declared none.
@@ -215,7 +227,13 @@ export interface SectionHooks<T> {
  * here by behavior rather than by a version string.
  */
 interface SectionOwner {
-  installSection?<T>(owner: Context, ns: string, schema: unknown, entry: T, hooks: SectionHooks<T>): void
+  installSection?<T>(
+    owner: Context,
+    ns: string,
+    schema: unknown,
+    entry: T,
+    hooks: SectionHooks<T>,
+  ): void
 }
 
 /**
@@ -239,25 +257,27 @@ export function apply(ctx: Context, config: Config): void {
     provider: config.routeId,
     displayName: config.displayName,
     apiKeyEnv: config.apiKeyEnv,
-    ...config.baseURL === undefined ? {} : { baseURL: config.baseURL },
-    ...config.fallbackSessionId === undefined ? {} : { fallbackSessionId: config.fallbackSessionId },
-    ...config.headers === undefined ? {} : { headers: { ...config.headers } },
-    ...models === undefined ? {} : { models },
+    ...(config.baseURL === undefined ? {} : { baseURL: config.baseURL }),
+    ...(config.fallbackSessionId === undefined
+      ? {}
+      : { fallbackSessionId: config.fallbackSessionId }),
+    ...(config.headers === undefined ? {} : { headers: { ...config.headers } }),
+    ...(models === undefined ? {} : { models }),
   }
 
   const codex: CodexRouteConfig = {
     provider: config.codexRouteId,
     displayName: config.codexDisplayName,
-    ...codexModels === undefined ? {} : { models: codexModels },
-    ...config.codexTransport === undefined ? {} : { transport: config.codexTransport },
+    ...(codexModels === undefined ? {} : { models: codexModels }),
+    ...(config.codexTransport === undefined ? {} : { transport: config.codexTransport }),
   }
 
   // The entry's own declarations are the base layer the settings section sits
   // over, and the value the routes serve on a harness with no settings document
   // at all — which is why they seed the thunk below instead of only the base.
   const entry: ProviderExtraSection = {
-    extraModels: [...config.extraModels ?? []],
-    codexExtraModels: [...config.codexExtraModels ?? []],
+    extraModels: [...(config.extraModels ?? [])],
+    codexExtraModels: [...(config.codexExtraModels ?? [])],
   }
 
   // A declared selection is configuration, not a request fact, so it is proven
@@ -267,7 +287,8 @@ export function apply(ctx: Context, config: Config): void {
   // way. The extras a selection resolves against at this point are the entry's
   // own, because a settings document may not have arrived yet.
   if (models !== undefined) buildOpenCodeGoProfile({ ...route, extraModels: entry.extraModels })
-  if (codexModels !== undefined) buildCodexProfile({ ...codex, extraModels: entry.codexExtraModels })
+  if (codexModels !== undefined)
+    buildCodexProfile({ ...codex, extraModels: entry.codexExtraModels })
 
   // The catalog check stays boot-time even though settings can now extend the
   // profile per request: a catalog drift (pi-ai no longer shipping Codex) must
@@ -281,7 +302,11 @@ export function apply(ctx: Context, config: Config): void {
       buildCodexProfile({ provider: codex.provider, displayName: codex.displayName })
       codexServable = true
     } catch (error) {
-      ctx.logger.error('dsh-provider-extra: codex route "' + codex.provider + '" disabled; the installed pi-ai catalog cannot serve it')
+      ctx.logger.error(
+        'dsh-provider-extra: codex route "' +
+          codex.provider +
+          '" disabled; the installed pi-ai catalog cannot serve it',
+      )
       ctx.logger.error(error)
     }
   }
@@ -294,20 +319,35 @@ export function apply(ctx: Context, config: Config): void {
     const section = currentSection()
     // Selections stay bound to the entry extras that passed mount-time validation.
     const entries: [string, ResolvedPiAiProviderProfile][] = [
-      [route.provider, buildOpenCodeGoProfile({
-        ...route, extraModels: models !== undefined ? entry.extraModels : section.extraModels,
-      })],
+      [
+        route.provider,
+        buildOpenCodeGoProfile({
+          ...route,
+          extraModels: models !== undefined ? entry.extraModels : section.extraModels,
+        }),
+      ],
     ]
     if (codexServable) {
-      entries.push([codex.provider, buildCodexProfile({
-        ...codex, extraModels: codexModels !== undefined ? entry.codexExtraModels : section.codexExtraModels,
-      })])
+      entries.push([
+        codex.provider,
+        buildCodexProfile({
+          ...codex,
+          extraModels:
+            codexModels !== undefined ? entry.codexExtraModels : section.codexExtraModels,
+        }),
+      ])
     }
     return new Map(entries)
   }
   const servedProviders = new Set<string>()
-  const sourceFor = (provider: string): string | undefined => provider === codex.provider && codexServable ? DEFAULT_CODEX_ROUTE_ID : undefined
-  const tiers = mountServiceTiers(ctx, config, () => new Map([...profiles()].filter(([provider]) => servedProviders.has(provider))), sourceFor)
+  const sourceFor = (provider: string): string | undefined =>
+    provider === codex.provider && codexServable ? DEFAULT_CODEX_ROUTE_ID : undefined
+  const tiers = mountServiceTiers(
+    ctx,
+    config,
+    () => new Map([...profiles()].filter(([provider]) => servedProviders.has(provider))),
+    sourceFor,
+  )
   const adapter = new PiAiAdapter({
     profiles: () => withServiceTiers(profiles(), tiers.current, sourceFor),
     resolveApiKey: async (provider) => {
@@ -315,15 +355,19 @@ export function apply(ctx: Context, config: Config): void {
       // from a key: absent here is what lets the collection store serve it.
       if (provider === codex.provider) return codexApiKey()
       const credentials = ctx.get('credentials') as CredentialService | undefined
-      const hit = credentials !== undefined
-        ? (await credentials.resolve(route.apiKeyEnv))?.value
-        : process.env[route.apiKeyEnv]
+      const hit =
+        credentials !== undefined
+          ? (await credentials.resolve(route.apiKeyEnv))?.value
+          : process.env[route.apiKeyEnv]
       if (hit !== undefined && hit.length > 0) {
         return assertUsableApiKey(hit, name, route.apiKeyEnv)
       }
       throw new LlmError(
-        'dsh-provider-extra: no credential for route "' + route.provider + '"; its profile resolves ' + route.apiKeyEnv
-        + ', which is not set — store it through the credentials service or export it',
+        'dsh-provider-extra: no credential for route "' +
+          route.provider +
+          '"; its profile resolves ' +
+          route.apiKeyEnv +
+          ', which is not set — store it through the credentials service or export it',
         'MISSING_CREDENTIAL',
       )
     },
@@ -338,17 +382,25 @@ export function apply(ctx: Context, config: Config): void {
     // the filesystem service still sends the image, only without the
     // model-facing normalized-copy path.
     resolveAttachments: () => ctx.get('attachments'),
-    resolveImageAccess: (attachments, ref) => resolveImageAttachmentAccess(
-      attachments,
-      hostPath => ctx.get('fs')?.processPathFromHostPath(hostPath),
-      ref,
-    ),
+    resolveImageAccess: (attachments, ref) =>
+      resolveImageAttachmentAccess(
+        attachments,
+        (hostPath) => ctx.get('fs')?.processPathFromHostPath(hostPath),
+        ref,
+      ),
     // A stored replay state the installed pi-ai cannot reconstruct already
     // degrades to provider-neutral content; naming it keeps that downgrade
     // diagnosable instead of silent.
     onReplayDegrade: ({ provider, model, reason }) => {
-      ctx.logger.warn('dsh-provider-extra: unusable replay state on assistant history for route "'
-        + provider + '/' + model + '"; sending that message as provider-neutral content (' + reason + ')')
+      ctx.logger.warn(
+        'dsh-provider-extra: unusable replay state on assistant history for route "' +
+          provider +
+          '/' +
+          model +
+          '"; sending that message as provider-neutral content (' +
+          reason +
+          ')',
+      )
     },
   })
 
@@ -359,8 +411,12 @@ export function apply(ctx: Context, config: Config): void {
     ctx.llm.registerAdapter([route.provider], adapter)
     servedProviders.add(route.provider)
   } catch (error) {
-    ctx.logger.error('dsh-provider-extra: route "' + route.provider + '" was refused;'
-      + " remove it from llm-pi-ai's providers section to serve it here")
+    ctx.logger.error(
+      'dsh-provider-extra: route "' +
+        route.provider +
+        '" was refused;' +
+        " remove it from llm-pi-ai's providers section to serve it here",
+    )
     ctx.logger.error(error)
     return
   }
@@ -373,22 +429,32 @@ export function apply(ctx: Context, config: Config): void {
       ctx.llm.registerAdapter([codex.provider], adapter)
       servedProviders.add(codex.provider)
     } catch (error) {
-      ctx.logger.warn('dsh-provider-extra: codex route "' + codex.provider + '" stays with its existing owner;'
-        + " remove it from llm-pi-ai's providers section to serve it here")
+      ctx.logger.warn(
+        'dsh-provider-extra: codex route "' +
+          codex.provider +
+          '" stays with its existing owner;' +
+          " remove it from llm-pi-ai's providers section to serve it here",
+      )
       ctx.logger.warn(error)
     }
   }
   try {
-    ctx.llm.registerConfigurableProviders([{
-      provider: route.provider,
-      displayName: route.displayName,
-      settingsNs: SETTINGS_NS,
-      settingsPath: [route.provider],
-    }])
+    ctx.llm.registerConfigurableProviders([
+      {
+        provider: route.provider,
+        displayName: route.displayName,
+        settingsNs: SETTINGS_NS,
+        settingsPath: [route.provider],
+      },
+    ])
   } catch (error) {
     // llm-pi-ai already lists every catalog id in the directory, including
     // opencode-go; its entry keeps serving the Models page here.
-    ctx.logger.warn('dsh-provider-extra: directory entry for "' + route.provider + '" stays with its existing owner')
+    ctx.logger.warn(
+      'dsh-provider-extra: directory entry for "' +
+        route.provider +
+        '" stays with its existing owner',
+    )
     ctx.logger.warn(error)
   }
   ctx.inject(['settings'], (settingsCtx) => {
@@ -403,11 +469,15 @@ export function apply(ctx: Context, config: Config): void {
     // stands in for it where none does; the settings service falls back to this
     // same value when it detaches.
     settings.installSection(ctx, SETTINGS_NS, SectionSchema, entry, {
-      setSource: (source) => { currentSection = source },
+      setSource: (source) => {
+        currentSection = source
+      },
       // No registration facts derive from the section: the route set is fixed
       // at composition and the adapter rebuilds its snapshot on every
       // operation, so a committed extras change applies alone.
-      onChange: () => { /* per-operation snapshot; no swap needed */ },
+      onChange: () => {
+        /* per-operation snapshot; no swap needed */
+      },
     })
   })
   mountLoginCommand(ctx, config, { profiles })

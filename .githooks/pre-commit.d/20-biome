@@ -1,0 +1,47 @@
+#!/bin/sh
+# Lints and format-checks the staged files with Biome, so a style or lint
+# finding is fixed before it lands instead of failing the pre-push run later.
+# Biome reads the staged blobs, not the working tree: the index is copied to
+# a scratch directory, so a partial `git add -p` is checked as it will be
+# committed. A missing Biome install blocks the commit.
+set -eu
+
+# Helpers (staged_git, pushed_shas, at_sha, darwin_only) from .githooks/lib.
+# shellcheck source=/dev/null
+. "${HOOK_HELPERS:?run from .githooks (scripts/setup-hooks)}"
+
+CONFIG='biome.jsonc'
+top=$(git rev-parse --show-toplevel)
+biome="$top/node_modules/.bin/biome"
+if [ ! -x "$biome" ]; then
+	echo "pre-commit: $(basename -- "$0"): Biome is not installed; run pnpm install" >&2
+	exit 1
+fi
+
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/hook-biome.XXXXXX") || exit 1
+# Only the mktemp directory this hook created, never a computed parent.
+cleanup() {
+	case "$tmp" in
+	*/hook-biome.*) rm -rf -- "$tmp" ;;
+	esac
+}
+# A signal still ends the hook with a failure after the cleanup.
+trap cleanup EXIT
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
+
+# Added, copied, modified and renamed paths: a deleted file has nothing to check.
+list="$tmp/staged"
+staged_git diff --cached --name-only --diff-filter=ACMR -z >"$list" || exit 1
+[ -s "$list" ] || exit 0
+
+xargs -0 env GIT_INDEX_FILE="$PROJECT_HOOK_INDEX_FILE" git checkout-index --prefix="$tmp/root/" -- <"$list" || exit 1
+# The staged config is checked out with the files, so a config change is
+# judged by the rules it brings (-f: it may already be among the staged files).
+staged_git checkout-index -f --prefix="$tmp/root/" -- "$CONFIG" || exit 1
+# The scratch copy has no .git, so Biome cannot read .gitignore there; the
+# staged paths are already the exact set to check.
+# Infos never block, so they stay out of the commit output; `pnpm run lint`
+# still lists them.
+(cd "$tmp/root" && xargs -0 "$biome" check --vcs-enabled=false --error-on-warnings \
+	--diagnostic-level=warn --no-errors-on-unmatched --files-ignore-unknown=true -- <"$list")

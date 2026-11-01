@@ -13,8 +13,8 @@
  * @module dsh-provider-extra/extra-models
  */
 
-import type { Api, Model } from '@earendil-works/pi-ai'
 import { LlmError } from '@deepseek-ai/dsh-llm'
+import type { Api, Model } from '@earendil-works/pi-ai'
 
 /**
  * One declared model: an id plus the catalog sibling it clones.
@@ -48,7 +48,7 @@ export function resolveExtraModels(
 ): { models: Model<Api>[]; modelErrors: Map<string, string> } {
   const models: Model<Api>[] = []
   const modelErrors = new Map<string, string>()
-  const shipped = new Set(catalog.map(model => model.id))
+  const shipped = new Set(catalog.map((model) => model.id))
   const byId = new Map<string, ExtraModelSpec>()
   for (const spec of specs) byId.set(spec.id, spec)
   for (const spec of byId.values()) {
@@ -59,14 +59,26 @@ export function resolveExtraModels(
     if (shipped.has(spec.id)) continue
     const templateId = spec.template ?? fallbackTemplate
     if (templateId === undefined) {
-      modelErrors.set(spec.id, 'dsh-provider-extra: extra model "' + spec.id + '" names no template'
-        + ' and this route ships no default sibling to clone')
+      modelErrors.set(
+        spec.id,
+        'dsh-provider-extra: extra model "' +
+          spec.id +
+          '" names no template' +
+          ' and this route ships no default sibling to clone',
+      )
       continue
     }
-    const template = catalog.find(model => model.id === templateId)
+    const template = catalog.find((model) => model.id === templateId)
     if (template === undefined) {
-      modelErrors.set(spec.id, 'dsh-provider-extra: extra model "' + spec.id + '" names template "' + templateId + '",'
-        + ' which the installed catalog does not describe')
+      modelErrors.set(
+        spec.id,
+        'dsh-provider-extra: extra model "' +
+          spec.id +
+          '" names template "' +
+          templateId +
+          '",' +
+          ' which the installed catalog does not describe',
+      )
       continue
     }
     models.push({ ...template, id: spec.id, name: spec.name ?? template.name })
@@ -96,7 +108,7 @@ export function selectWhitelistedModels(
   whitelist?: readonly string[],
 ): Model<Api>[] {
   if (whitelist === undefined) return [...models]
-  const byId = new Map(models.map(model => [model.id, model]))
+  const byId = new Map(models.map((model) => [model.id, model]))
   const selected: Model<Api>[] = []
   const seen = new Set<string>()
   for (const id of whitelist) {
@@ -107,8 +119,12 @@ export function selectWhitelistedModels(
     const model = byId.get(id)
     if (model === undefined) {
       throw new LlmError(
-        'dsh-provider-extra: route "' + route + '" declares model "' + id + '" in its model selection,'
-        + ' but neither the installed pi-ai catalog nor an extra model declaration provides it',
+        'dsh-provider-extra: route "' +
+          route +
+          '" declares model "' +
+          id +
+          '" in its model selection,' +
+          ' but neither the installed pi-ai catalog nor an extra model declaration provides it',
         'UNKNOWN_MODEL',
       )
     }

@@ -74,7 +74,9 @@
     "test:release": "python3 -m unittest discover -s tests/release -p 'test_*.py'",
     "pack-smoke": "node tools/pack-smoke.mjs",
     "matrix": "node tools/harness-matrix.mjs",
-    "check": "pnpm run typecheck && pnpm test && node tools/harness-matrix.mjs && pnpm run build && pnpm run test:build && pnpm run test:release && pnpm run pack-smoke",
+    "lint": "biome ci --error-on-warnings .",
+    "lint:fix": "biome check --write .",
+    "check": "pnpm run lint && pnpm run typecheck && pnpm test && node tools/harness-matrix.mjs && pnpm run build && pnpm run test:build && pnpm run test:release && pnpm run pack-smoke",
     "prepack": "pnpm run build",
     "prepublishOnly": "pnpm run typecheck && pnpm test && pnpm run test:release"
   },
@@ -99,9 +101,10 @@
     }
   },
   "devDependencies": {
+    "@biomejs/biome": "2.6.3",
     "@deepseek-ai/cordis": "4.0.5",
-    "@deepseek-ai/dsh-commands": "0.2.1-rc.3",
     "@deepseek-ai/dsh": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-commands": "0.2.1-rc.3",
     "@deepseek-ai/dsh-credentials": "0.2.1-rc.3",
     "@deepseek-ai/dsh-credentials-local": "0.2.1-rc.3",
     "@deepseek-ai/dsh-llm": "0.2.1-rc.3",

@@ -17,18 +17,26 @@ import type { LoginChoice, LoginCommandHost } from './login-contract.ts'
 async function statusLine(host: LoginCommandHost, choice: LoginChoice): Promise<string> {
   const reference = await host.reference(choice.providerId)
   if (reference !== undefined) {
-    const where = reference.source === undefined ? 'not set' : 'set from ' + reference.source
-    return '  ' + choice.providerName + ' — API key ' + reference.ref + ' (' + where + ')'
+    const where = reference.source === undefined ? 'not set' : `set from ${reference.source}`
+    return `  ${choice.providerName} — API key ${reference.ref} (${where})`
   }
   const stored = await host.stored(choice.providerId)
-  return '  ' + choice.providerName + ' — ' + (stored === undefined ? 'not signed in' : 'signed in (' + stored + ')')
+  return (
+    '  ' +
+    choice.providerName +
+    ' — ' +
+    (stored === undefined ? 'not signed in' : `signed in (${stored})`)
+  )
 }
 
 /** Answer how each provider authenticates today. */
 export async function statusOf(host: LoginCommandHost): Promise<CommandResult> {
   const choices = host.choices()
   if (choices.length === 0) {
-    return { kind: 'error', text: 'dsh-provider-extra: this composition mounts no provider with an interactive sign-in' }
+    return {
+      kind: 'error',
+      text: 'dsh-provider-extra: this composition mounts no provider with an interactive sign-in',
+    }
   }
   const seen = new Set<string>()
   const lines: string[] = []

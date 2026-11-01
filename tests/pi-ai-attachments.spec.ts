@@ -25,8 +25,8 @@ import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { after, before, describe, it } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
-import { LlmRuntime, createToolResultMessage } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, LlmAdapter, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
+import { createToolResultMessage, LlmRuntime } from '@deepseek-ai/dsh-llm'
 import { apply } from '../src/index.ts'
 import { buildOpenCodeGoProfile } from '../src/opencode-go.ts'
 
@@ -47,11 +47,11 @@ const HOST_PATH = '/host/attachments/v1/objects/ac/acce.png'
 /** Where the fake filesystem maps that host path inside the tool world. */
 const WORLD_PATH = '/world/attachments/acce.png'
 /** Durable id the fake store resolves; a traversal-shaped id must not. */
-const IMAGE_ID = 'sha256:' + 'a'.repeat(64)
+const IMAGE_ID = `sha256:${'a'.repeat(64)}`
 
 /** Protocols the route's catalog serves with an image-capable model. */
 const PROTOCOLS = ['openai-completions', 'anthropic-messages', 'openai-responses'] as const
-type Protocol = typeof PROTOCOLS[number]
+type Protocol = (typeof PROTOCOLS)[number]
 
 /**
  * The route's own catalog, read once to pick one image-capable model per
@@ -59,15 +59,24 @@ type Protocol = typeof PROTOCOLS[number]
  * this discovery free of the mock server's lifecycle.
  */
 const catalogProfile = buildOpenCodeGoProfile({
-  provider: ROUTE, displayName: 'Attach (test)', apiKeyEnv: API_KEY_ENV, baseURL: 'http://127.0.0.1:1/v1',
+  provider: ROUTE,
+  displayName: 'Attach (test)',
+  apiKeyEnv: API_KEY_ENV,
+  baseURL: 'http://127.0.0.1:1/v1',
 })
 const CATALOG = catalogProfile.piProvider!.getModels()
-const IMAGE_MODEL_BY_PROTOCOL = new Map<Protocol, string>(PROTOCOLS.map(protocol => {
-  const model = CATALOG.find(candidate => candidate.api === protocol && candidate.input?.includes('image'))
-  assert.notEqual(model, undefined, 'installed catalog ships an image-capable ' + protocol + ' model')
-  return [protocol, model!.id]
-}))
-const TEXT_MODEL = CATALOG.find(candidate => candidate.api === 'openai-completions' && !candidate.input?.includes('image'))
+const IMAGE_MODEL_BY_PROTOCOL = new Map<Protocol, string>(
+  PROTOCOLS.map((protocol) => {
+    const model = CATALOG.find(
+      (candidate) => candidate.api === protocol && candidate.input?.includes('image'),
+    )
+    assert.notEqual(model, undefined, `installed catalog ships an image-capable ${protocol} model`)
+    return [protocol, model!.id]
+  }),
+)
+const TEXT_MODEL = CATALOG.find(
+  (candidate) => candidate.api === 'openai-completions' && !candidate.input?.includes('image'),
+)
 assert.notEqual(TEXT_MODEL, undefined, 'installed catalog ships a text-only completions model')
 
 /** One request the mock gateway received, in arrival order. */
@@ -81,69 +90,123 @@ let serverUrl = ''
 
 /** One server-sent event, the framing every provider's SSE parser reads. */
 function sse(event: string, data: unknown): string {
-  return 'event: ' + event + '\ndata: ' + JSON.stringify(data) + '\n\n'
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
 }
 
 /** OpenAI Chat Completions: one text delta, one stop, then DONE. */
 function completionsReply(model: string): string {
-  return 'data: ' + JSON.stringify({
-    id: 'chatcmpl-attach', object: 'chat.completion.chunk', created: 0, model,
-    choices: [{ index: 0, delta: { role: 'assistant', content: 'seen' }, finish_reason: null }],
-  }) + '\n\n'
-    + 'data: ' + JSON.stringify({
-      id: 'chatcmpl-attach', object: 'chat.completion.chunk', created: 0, model,
+  return (
+    'data: ' +
+    JSON.stringify({
+      id: 'chatcmpl-attach',
+      object: 'chat.completion.chunk',
+      created: 0,
+      model,
+      choices: [{ index: 0, delta: { role: 'assistant', content: 'seen' }, finish_reason: null }],
+    }) +
+    '\n\n' +
+    'data: ' +
+    JSON.stringify({
+      id: 'chatcmpl-attach',
+      object: 'chat.completion.chunk',
+      created: 0,
+      model,
       choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
       usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-    }) + '\n\n'
-    + 'data: [DONE]\n\n'
+    }) +
+    '\n\n' +
+    'data: [DONE]\n\n'
+  )
 }
 
 /** Anthropic Messages: message, one text block, end_turn. */
 function anthropicReply(model: string): string {
-  return sse('message_start', {
-    type: 'message_start',
-    message: {
-      id: 'msg_attach', type: 'message', role: 'assistant', model, content: [],
-      stop_reason: null, stop_sequence: null, usage: { input_tokens: 1, output_tokens: 0 },
-    },
-  })
-    + sse('content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })
-    + sse('content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'seen' } })
-    + sse('content_block_stop', { type: 'content_block_stop', index: 0 })
-    + sse('message_delta', {
-      type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 1 },
-    })
-    + sse('message_stop', { type: 'message_stop' })
+  return (
+    sse('message_start', {
+      type: 'message_start',
+      message: {
+        id: 'msg_attach',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [],
+        stop_reason: null,
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 0 },
+      },
+    }) +
+    sse('content_block_start', {
+      type: 'content_block_start',
+      index: 0,
+      content_block: { type: 'text', text: '' },
+    }) +
+    sse('content_block_delta', {
+      type: 'content_block_delta',
+      index: 0,
+      delta: { type: 'text_delta', text: 'seen' },
+    }) +
+    sse('content_block_stop', { type: 'content_block_stop', index: 0 }) +
+    sse('message_delta', {
+      type: 'message_delta',
+      delta: { stop_reason: 'end_turn', stop_sequence: null },
+      usage: { output_tokens: 1 },
+    }) +
+    sse('message_stop', { type: 'message_stop' })
+  )
 }
 
 /** OpenAI Responses: one message item, one text delta, a completed terminal event. */
 function responsesReply(model: string): string {
-  return sse('response.created', {
-    type: 'response.created', response: { id: 'resp_attach', object: 'response', status: 'in_progress', model, output: [] },
-  })
-    + sse('response.output_item.added', {
-      type: 'response.output_item.added', output_index: 0,
-      item: { id: 'msg_attach', type: 'message', status: 'in_progress', role: 'assistant', content: [] },
-    })
-    + sse('response.output_text.delta', {
-      type: 'response.output_text.delta', item_id: 'msg_attach', output_index: 0, content_index: 0, delta: 'seen',
-    })
-    + sse('response.completed', {
+  return (
+    sse('response.created', {
+      type: 'response.created',
+      response: { id: 'resp_attach', object: 'response', status: 'in_progress', model, output: [] },
+    }) +
+    sse('response.output_item.added', {
+      type: 'response.output_item.added',
+      output_index: 0,
+      item: {
+        id: 'msg_attach',
+        type: 'message',
+        status: 'in_progress',
+        role: 'assistant',
+        content: [],
+      },
+    }) +
+    sse('response.output_text.delta', {
+      type: 'response.output_text.delta',
+      item_id: 'msg_attach',
+      output_index: 0,
+      content_index: 0,
+      delta: 'seen',
+    }) +
+    sse('response.completed', {
       type: 'response.completed',
       response: {
-        id: 'resp_attach', object: 'response', status: 'completed', model,
-        output: [{
-          id: 'msg_attach', type: 'message', status: 'completed', role: 'assistant',
-          content: [{ type: 'output_text', text: 'seen', annotations: [] }],
-        }],
+        id: 'resp_attach',
+        object: 'response',
+        status: 'completed',
+        model,
+        output: [
+          {
+            id: 'msg_attach',
+            type: 'message',
+            status: 'completed',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'seen', annotations: [] }],
+          },
+        ],
         usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
       },
     })
+  )
 }
 
 const server = createServer((request, response) => {
   let body = ''
-  request.on('data', chunk => { body += chunk })
+  request.on('data', (chunk) => {
+    body += chunk
+  })
   request.on('end', () => {
     // The route config overrides every model's catalog base, so the mock
     // accepts whatever path each SDK appends and ignores query strings.
@@ -151,16 +214,24 @@ const server = createServer((request, response) => {
     captured.push({ path, body })
     response.writeHead(200, { 'content-type': 'text/event-stream' })
     let model = 'unknown'
-    try { model = JSON.parse(body).model ?? 'unknown' } catch { /* a non-JSON body still gets a well-formed stream */ }
-    response.end(path.endsWith('/messages') ? anthropicReply(model)
-      : path.endsWith('/responses') ? responsesReply(model)
-        : completionsReply(model))
+    try {
+      model = JSON.parse(body).model ?? 'unknown'
+    } catch {
+      /* a non-JSON body still gets a well-formed stream */
+    }
+    response.end(
+      path.endsWith('/messages')
+        ? anthropicReply(model)
+        : path.endsWith('/responses')
+          ? responsesReply(model)
+          : completionsReply(model),
+    )
   })
 })
 
 before(async () => {
-  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
-  serverUrl = 'http://127.0.0.1:' + (server.address() as AddressInfo).port + '/gateway'
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  serverUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/gateway`
   process.env[API_KEY_ENV] = 'test-key'
 })
 
@@ -191,42 +262,66 @@ interface MountedRoute {
  * and the store double enforces the real provider's reference and object
  * validation so a refusal can be told apart from a missing seam.
  */
-function mount(options: { attachments?: boolean; fs?: boolean; fault?: StoreFault; codex?: boolean } = {}): MountedRoute {
+function mount(
+  options: { attachments?: boolean; fs?: boolean; fault?: StoreFault; codex?: boolean } = {},
+): MountedRoute {
   const adapters: LlmAdapter[] = []
   const warnings: string[] = []
   const attachments = {
     async readImageRequest(ref: { attachmentId: string; mediaType: string }) {
       if (options.fault === 'missing-object') {
-        throw attachmentFailure('ATTACHMENT_NOT_FOUND', 'no stored object for ' + ref.attachmentId)
+        throw attachmentFailure('ATTACHMENT_NOT_FOUND', `no stored object for ${ref.attachmentId}`)
       }
       if (options.fault === 'corrupt-object') {
-        throw attachmentFailure('ATTACHMENT_CORRUPT', 'stored object does not match the reference metadata')
+        throw attachmentFailure(
+          'ATTACHMENT_CORRUPT',
+          'stored object does not match the reference metadata',
+        )
       }
       return {
-        attachmentId: ref.attachmentId, mediaType: ref.mediaType,
-        bytes: IMAGE_BYTES.byteLength, width: 1, height: 1, data: IMAGE_BYTES,
+        attachmentId: ref.attachmentId,
+        mediaType: ref.mediaType,
+        bytes: IMAGE_BYTES.byteLength,
+        width: 1,
+        height: 1,
+        data: IMAGE_BYTES,
       }
     },
     imageHostPath: (ref: { attachmentId: string }) => {
       // The real provider validates the durable id before computing a path;
       // a traversal-shaped reference never reaches the host filesystem.
       if (ref.attachmentId !== IMAGE_ID) {
-        throw attachmentFailure('INVALID_ATTACHMENT_REF', 'not a durable attachment id: ' + ref.attachmentId)
+        throw attachmentFailure(
+          'INVALID_ATTACHMENT_REF',
+          `not a durable attachment id: ${ref.attachmentId}`,
+        )
       }
       return HOST_PATH
     },
   }
-  const fs = { processPathFromHostPath: (hostPath: string) => hostPath === HOST_PATH ? WORLD_PATH : undefined }
+  const fs = {
+    processPathFromHostPath: (hostPath: string) =>
+      hostPath === HOST_PATH ? WORLD_PATH : undefined,
+  }
   const ctx = {
     fiber: { entry: { options: { id: 'attachment-test' } } },
     provide: () => {},
-    effect: (execute: () => (() => void)) => execute(),
+    effect: (execute: () => () => void) => execute(),
     on: () => () => {},
     llm: {
-      registerAdapter: (_providers: readonly string[], adapter: LlmAdapter) => { adapters.push(adapter); return {} },
+      registerAdapter: (_providers: readonly string[], adapter: LlmAdapter) => {
+        adapters.push(adapter)
+        return {}
+      },
       registerConfigurableProviders: () => ({}),
     },
-    logger: { info: () => {}, warn: (message: unknown) => { warnings.push(String(message)) }, error: () => {} },
+    logger: {
+      info: () => {},
+      warn: (message: unknown) => {
+        warnings.push(String(message))
+      },
+      error: () => {},
+    },
     get: (name: string) => {
       if (name === 'attachments') return options.attachments === false ? undefined : attachments
       if (name === 'fs') return options.fs === false ? undefined : fs
@@ -245,15 +340,23 @@ function mount(options: { attachments?: boolean; fs?: boolean; fault?: StoreFaul
     loginCommandEnabled: false,
     loginCommandName: 'dsh-provider-extra-login',
   })
-  assert.equal(adapters.length, options.codex === true ? 2 : 1, 'each enabled route registers exactly one adapter')
+  assert.equal(
+    adapters.length,
+    options.codex === true ? 2 : 1,
+    'each enabled route registers exactly one adapter',
+  )
   return { adapter: adapters[0]!, adapters, warnings }
 }
 
 /** A durable image reference as the attachment service publishes it. */
 function imageRef(overrides: Record<string, unknown> = {}) {
   return {
-    attachmentId: IMAGE_ID, mediaType: 'image/png',
-    bytes: IMAGE_BYTES.byteLength, width: 1, height: 1, name: 'shot.png',
+    attachmentId: IMAGE_ID,
+    mediaType: 'image/png',
+    bytes: IMAGE_BYTES.byteLength,
+    width: 1,
+    height: 1,
+    name: 'shot.png',
     ...overrides,
   }
 }
@@ -261,7 +364,8 @@ function imageRef(overrides: Record<string, unknown> = {}) {
 /** One user turn carrying a durable image reference beside its text. */
 function imageMessage(ref: Record<string, unknown> = imageRef()): Message {
   return {
-    id: 'image-m1', role: 'user',
+    id: 'image-m1',
+    role: 'user',
     content: [
       { type: 'text', text: 'inspect this render' },
       { type: 'image', attachment: ref },
@@ -283,27 +387,54 @@ function imageMessage(ref: Record<string, unknown> = imageRef()): Message {
  */
 function replayedToolResultHistory(): Message[] {
   return [
-    { id: 'user-ask', role: 'user', content: [{ type: 'text', text: 'read the screenshot' }], source: { kind: 'user' } },
     {
-      id: 'assistant-call', role: 'assistant',
-      content: [{ type: 'tool-call', id: 'call-1', name: 'read_image', arguments: '{"path":"/tmp/shot.png"}' }],
-      source: { kind: 'model', provider: ROUTE, model: IMAGE_MODEL_BY_PROTOCOL.get('openai-completions')! },
+      id: 'user-ask',
+      role: 'user',
+      content: [{ type: 'text', text: 'read the screenshot' }],
+      source: { kind: 'user' },
+    },
+    {
+      id: 'assistant-call',
+      role: 'assistant',
+      content: [
+        {
+          type: 'tool-call',
+          id: 'call-1',
+          name: 'read_image',
+          arguments: '{"path":"/tmp/shot.png"}',
+        },
+      ],
+      source: {
+        kind: 'model',
+        provider: ROUTE,
+        model: IMAGE_MODEL_BY_PROTOCOL.get('openai-completions')!,
+      },
     },
     createToolResultMessage({
       callId: 'call-1',
-      content: [{ type: 'text', text: 'image read' }, { type: 'image', attachment: imageRef() }],
+      content: [
+        { type: 'text', text: 'image read' },
+        { type: 'image', attachment: imageRef() },
+      ],
       isError: false,
       // The ids and the reference are branded on both lines, and this fixture
       // stands in for a tool result the harness built: the same cast the rest of
       // this history makes.
     } as unknown as Parameters<typeof createToolResultMessage>[0]) as unknown as Message,
-    { id: 'user-next', role: 'user', content: [{ type: 'text', text: 'describe it' }], source: { kind: 'user' } },
+    {
+      id: 'user-next',
+      role: 'user',
+      content: [{ type: 'text', text: 'describe it' }],
+      source: { kind: 'user' },
+    },
   ] as unknown as Message[]
 }
 
 /** One dispatch through the path the runtime drives: prepare once, then stream. */
 async function stream(
-  adapter: LlmAdapter, model: string, messages: Message[],
+  adapter: LlmAdapter,
+  model: string,
+  messages: Message[],
 ): Promise<{ chunks: StreamChunk[]; requests: CapturedRequest[] }> {
   const before = captured.length
   const prepared = await adapter.prepareCall(ROUTE, model)
@@ -323,7 +454,7 @@ function terminal(chunks: StreamChunk[]): Extract<StreamChunk, { type: 'finish' 
 /** Every request body that carried the durable bytes. */
 function bodiesWithImage(requests: CapturedRequest[]): CapturedRequest[] {
   const base64 = IMAGE_BYTES.toString('base64')
-  return requests.filter(request => request.body.includes(base64))
+  return requests.filter((request) => request.body.includes(base64))
 }
 
 /**
@@ -333,14 +464,19 @@ function bodiesWithImage(requests: CapturedRequest[]): CapturedRequest[] {
  * message it was meant to protect.
  */
 async function refusal(
-  adapter: LlmAdapter, model: string, messages: Message[],
+  adapter: LlmAdapter,
+  model: string,
+  messages: Message[],
 ): Promise<{ code: string | undefined; message: string }> {
   const before = captured.length
   let code: string | undefined
   let message = ''
   try {
     const { chunks } = await stream(adapter, model, messages)
-    const reason = terminal(chunks).reason as { kind: string; failure?: { code?: string; message?: string } }
+    const reason = terminal(chunks).reason as {
+      kind: string
+      failure?: { code?: string; message?: string }
+    }
     assert.equal(reason.kind, 'error', 'the request is refused rather than answered')
     code = reason.failure?.code
     message = reason.failure?.message ?? ''
@@ -355,11 +491,15 @@ async function refusal(
 
 describe('durable image attachments on the registered route', () => {
   for (const protocol of PROTOCOLS) {
-    it('carries the image to the wire on ' + protocol, async () => {
+    it(`carries the image to the wire on ${protocol}`, async () => {
       const { adapter } = mount()
       const model = IMAGE_MODEL_BY_PROTOCOL.get(protocol)!
       const { chunks, requests } = await stream(adapter, model, [imageMessage()])
-      assert.equal(terminal(chunks).reason.kind, 'stop', 'the turn succeeds, not merely finishes: ' + JSON.stringify(terminal(chunks).reason))
+      assert.equal(
+        terminal(chunks).reason.kind,
+        'stop',
+        `the turn succeeds, not merely finishes: ${JSON.stringify(terminal(chunks).reason)}`,
+      )
       assert.equal(requests.length, 1, 'one request reaches the gateway')
       assert.equal(bodiesWithImage(requests).length, 1, 'that request carries the attachment bytes')
     })
@@ -369,8 +509,16 @@ describe('durable image attachments on the registered route', () => {
     const { adapter } = mount()
     const model = IMAGE_MODEL_BY_PROTOCOL.get('openai-completions')!
     const { chunks, requests } = await stream(adapter, model, replayedToolResultHistory())
-    assert.equal(terminal(chunks).reason.kind, 'stop', 'the replayed history does not refuse the turn')
-    assert.equal(bodiesWithImage(requests).length, 1, 'the replayed tool result still carries its image')
+    assert.equal(
+      terminal(chunks).reason.kind,
+      'stop',
+      'the replayed history does not refuse the turn',
+    )
+    assert.equal(
+      bodiesWithImage(requests).length,
+      1,
+      'the replayed tool result still carries its image',
+    )
   })
 
   it('names the normalized host copy mapped into the tool world', async () => {
@@ -392,7 +540,9 @@ describe('durable image attachments on the registered route', () => {
   it('refuses a traversal-shaped reference before transport', async () => {
     const { adapter } = mount()
     const model = IMAGE_MODEL_BY_PROTOCOL.get('openai-completions')!
-    const refused = await refusal(adapter, model, [imageMessage(imageRef({ attachmentId: '../../outside' }))])
+    const refused = await refusal(adapter, model, [
+      imageMessage(imageRef({ attachmentId: '../../outside' })),
+    ])
     assert.equal(refused.code, 'INVALID_ATTACHMENT_REF')
   })
 
@@ -426,12 +576,20 @@ describe('durable image attachments on the registered route', () => {
     runtime.registerAdapter([ROUTE], adapter)
     const before = captured.length
     const chunks: StreamChunk[] = []
-    for await (const chunk of runtime.stream({ provider: ROUTE, model: TEXT_MODEL!.id, messages: [imageMessage()] })) chunks.push(chunk)
+    for await (const chunk of runtime.stream({
+      provider: ROUTE,
+      model: TEXT_MODEL!.id,
+      messages: [imageMessage()],
+    }))
+      chunks.push(chunk)
     assert.equal(terminal(chunks).reason.kind, 'stop')
     const requests = captured.slice(before)
     assert.equal(requests.length, 1)
     assert.equal(bodiesWithImage(requests).length, 0, 'a text-only model receives no image bytes')
-    assert.ok(requests[0]!.body.includes('image omitted'), 'the occurrence reaches the model as placeholder text')
+    assert.ok(
+      requests[0]!.body.includes('image omitted'),
+      'the occurrence reaches the model as placeholder text',
+    )
   })
 })
 
@@ -440,15 +598,29 @@ describe('replay-state diagnostics on the registered route', () => {
     const { adapter, warnings } = mount()
     const model = IMAGE_MODEL_BY_PROTOCOL.get('openai-completions')!
     const assistant = {
-      id: 'assistant-m1', role: 'assistant',
+      id: 'assistant-m1',
+      role: 'assistant',
       content: [{ type: 'text', text: 'prior answer' }],
       // A version the installed pi-ai adapter cannot replay: conversion degrades
       // instead of failing, and the plugin's logger is the only proof it happened.
-      source: { kind: 'model', provider: ROUTE, model, replayState: { response: { kind: 'pi-ai', version: 999 } } },
+      source: {
+        kind: 'model',
+        provider: ROUTE,
+        model,
+        replayState: { response: { kind: 'pi-ai', version: 999 } },
+      },
     } as unknown as Message
-    const user = { id: 'user-m2', role: 'user', content: [{ type: 'text', text: 'continue' }], source: { kind: 'user' } } as unknown as Message
+    const user = {
+      id: 'user-m2',
+      role: 'user',
+      content: [{ type: 'text', text: 'continue' }],
+      source: { kind: 'user' },
+    } as unknown as Message
     await stream(adapter, model, [imageMessage(), assistant, user])
-    assert.ok(warnings.some(warning => warning.includes('unusable replay state')), 'degrade is observable')
+    assert.ok(
+      warnings.some((warning) => warning.includes('unusable replay state')),
+      'degrade is observable',
+    )
   })
 })
 
@@ -458,8 +630,11 @@ describe('the Codex subscription route', () => {
     const runtime = new LlmRuntime(new Context())
     runtime.registerAdapter([CODEX_ROUTE], adapters.at(-1)!)
     const models = await runtime.listModels(CODEX_ROUTE)
-    const reported = models.find(model => model.id === CODEX_ROUTE_MODEL)
+    const reported = models.find((model) => model.id === CODEX_ROUTE_MODEL)
     assert.notEqual(reported, undefined, 're-keying preserves every catalog model')
-    assert.ok(reported!.inputModalities?.includes('image'), 'the model that failed still accepts images')
+    assert.ok(
+      reported!.inputModalities?.includes('image'),
+      'the model that failed still accepts images',
+    )
   })
 })

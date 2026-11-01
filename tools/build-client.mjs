@@ -56,16 +56,24 @@ try {
   const config = join(scratch, 'tsconfig.json')
   const outDir = join(scratch, 'out')
   const sourcePath = fileURLToPath(SOURCE)
-  await writeFile(config, JSON.stringify({
-    compilerOptions: { ...COMPILER_OPTIONS, rootDir: dirname(sourcePath), outDir },
-    files: [sourcePath],
-  }), ENCODING)
+  await writeFile(
+    config,
+    JSON.stringify({
+      compilerOptions: { ...COMPILER_OPTIONS, rootDir: dirname(sourcePath), outDir },
+      files: [sourcePath],
+    }),
+    ENCODING,
+  )
   execFileSync(process.execPath, [projectCompiler(), '-p', config], { stdio: 'inherit' })
   const compiled = await readFile(join(outDir, EMITTED_NAME), ENCODING)
   if (RUNTIME_REQUIRE.test(compiled)) throw new Error(RUNTIME_IMPORT)
   const metadata = JSON.parse(await readFile(METADATA, ENCODING))
-  const wrapper = 'window.__ModuleLoader__.load({id:' + JSON.stringify(metadata.name)
-    + ',factory(require){const exports={};\n' + compiled + '\nreturn exports;}});\n'
+  const wrapper =
+    'window.__ModuleLoader__.load({id:' +
+    JSON.stringify(metadata.name) +
+    ',factory(require){const exports={};\n' +
+    compiled +
+    '\nreturn exports;}});\n'
   await mkdir(new URL('dist/', ROOT), { recursive: true })
   await writeFile(OUTPUT, wrapper, ENCODING)
 } finally {

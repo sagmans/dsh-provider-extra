@@ -16,9 +16,7 @@
             "metadata": {
               "api": "openai-responses",
               "reasoning": false,
-              "input": [
-                "text"
-              ],
+              "input": ["text"],
               "cost": {
                 "input": 0,
                 "output": 0,

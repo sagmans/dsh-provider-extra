@@ -1,15 +1,15 @@
 /** Managed composition uses one immutable adapter snapshot and no settings overlay. */
 import type { Context } from '@deepseek-ai/cordis'
+import { assertUsableApiKey, LlmError, resolveImageAttachmentAccess } from '@deepseek-ai/dsh-llm'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
-import { LlmError, assertUsableApiKey, resolveImageAttachmentAccess } from '@deepseek-ai/dsh-llm'
-import { codexAuth } from './codex.ts'
-import type { CodexCredentialService } from './codex.ts'
 import type { CatalogSnapshot } from './catalog.ts'
 import { catalogDefault } from './catalog-default.ts'
-import { mountLoginCommand } from './login-host.ts'
+import type { CodexCredentialService } from './codex.ts'
+import { codexAuth } from './codex.ts'
 import type { LoginConfig } from './login-host.ts'
-import { mountServiceTiers, withServiceTiers } from './service-tiers.ts'
+import { mountLoginCommand } from './login-host.ts'
 import type { TierSelectionConfig } from './service-tiers.ts'
+import { mountServiceTiers, withServiceTiers } from './service-tiers.ts'
 
 const PLUGIN_NAME = 'dsh-provider-extra'
 const OWNER_COLLISION = 'CATALOG_OWNER_COLLISION'
@@ -19,20 +19,32 @@ interface Credentials extends CodexCredentialService {
 }
 
 /** Preflight prevents even an unrelated competing row from expanding managed membership. */
-function assertCatalogOwnership(ctx: Context, ownedRoutes: readonly string[] = [], defaultOwner?: unknown): void {
+function assertCatalogOwnership(
+  ctx: Context,
+  ownedRoutes: readonly string[] = [],
+  defaultOwner?: unknown,
+): void {
   const currentDefault = ctx.get('agentDefaultModel') as unknown
-  if ((currentDefault !== undefined && currentDefault !== defaultOwner)
-    || ctx.llm.listProviders().some(provider => !ownedRoutes.includes(provider.id))
-    || ctx.llm.listConfigurableProviders().length > 0) {
+  if (
+    (currentDefault !== undefined && currentDefault !== defaultOwner) ||
+    ctx.llm.listProviders().some((provider) => !ownedRoutes.includes(provider.id)) ||
+    ctx.llm.listConfigurableProviders().length > 0
+  ) {
     throw new LlmError(
-      'dsh-provider-extra: ' + OWNER_COLLISION + ': disable competing provider and agent-default-model rows in this opted-in profile before mounting catalog',
+      'dsh-provider-extra: ' +
+        OWNER_COLLISION +
+        ': disable competing provider and agent-default-model rows in this opted-in profile before mounting catalog',
       OWNER_COLLISION,
     )
   }
 }
 
 /** Immutable closures also keep prepared and in-flight calls on their original revision. */
-export function mountCatalog(ctx: Context, snapshot: CatalogSnapshot, config: LoginConfig & TierSelectionConfig): void {
+export function mountCatalog(
+  ctx: Context,
+  snapshot: CatalogSnapshot,
+  config: LoginConfig & TierSelectionConfig,
+): void {
   assertCatalogOwnership(ctx)
   let ownershipError: unknown
   const requireOwnership = (): void => {
@@ -41,17 +53,30 @@ export function mountCatalog(ctx: Context, snapshot: CatalogSnapshot, config: Lo
   const auth = codexAuth(() => ctx.get('credentials') as Credentials | undefined)
   const credentialId = (route: string): string => {
     const configured = snapshot.providers.get(route)?.auth
-    return configured !== undefined && 'credentialProvider' in configured ? configured.credentialProvider : route
+    return configured !== undefined && 'credentialProvider' in configured
+      ? configured.credentialProvider
+      : route
   }
   const sourceFor = (route: string): string | undefined => snapshot.providers.get(route)?.source
-  const tiers = mountServiceTiers(ctx, config, () => { requireOwnership(); return snapshot.profiles }, sourceFor)
+  const tiers = mountServiceTiers(
+    ctx,
+    config,
+    () => {
+      requireOwnership()
+      return snapshot.profiles
+    },
+    sourceFor,
+  )
   const adapter = new PiAiAdapter({
-    profiles: () => { requireOwnership(); return withServiceTiers(snapshot.profiles, tiers.current, sourceFor) },
+    profiles: () => {
+      requireOwnership()
+      return withServiceTiers(snapshot.profiles, tiers.current, sourceFor)
+    },
     auth: {
       ...auth,
       // Route aliases must share the source provider's existing OAuth grant.
       credentials: {
-        read: async route => {
+        read: async (route) => {
           requireOwnership()
           try {
             return await auth.credentials.read(credentialId(route))
@@ -62,7 +87,7 @@ export function mountCatalog(ctx: Context, snapshot: CatalogSnapshot, config: Lo
         modify: async (route, change) => {
           requireOwnership()
           try {
-            return await auth.credentials.modify(credentialId(route), current => {
+            return await auth.credentials.modify(credentialId(route), (current) => {
               // A rotated token must persist; the outer guard still blocks model dispatch.
               requireOwnership()
               return change(current)
@@ -71,7 +96,7 @@ export function mountCatalog(ctx: Context, snapshot: CatalogSnapshot, config: Lo
             requireOwnership()
           }
         },
-        delete: route => {
+        delete: (route) => {
           requireOwnership()
           return auth.credentials.delete(credentialId(route))
         },
@@ -80,9 +105,9 @@ export function mountCatalog(ctx: Context, snapshot: CatalogSnapshot, config: Lo
           // composition must not report routes it can no longer dispatch to.
           requireOwnership()
           const stored = await auth.credentials.list()
-          return [...snapshot.providers.values()].flatMap(provider => {
+          return [...snapshot.providers.values()].flatMap((provider) => {
             if (provider.auth === undefined || !('credentialProvider' in provider.auth)) return []
-            const record = stored.find(item => item.providerId === credentialId(provider.id))
+            const record = stored.find((item) => item.providerId === credentialId(provider.id))
             return record === undefined ? [] : [{ ...record, providerId: provider.id }]
           })
         },
@@ -93,21 +118,40 @@ export function mountCatalog(ctx: Context, snapshot: CatalogSnapshot, config: Lo
       // stops a newly conflicting composition before credential-backed dispatch.
       requireOwnership()
       const configured = snapshot.providers.get(route)
-      if (configured === undefined) throw new LlmError('dsh-provider-extra: unknown catalog route "' + route + '"', 'UNKNOWN_PROVIDER')
+      if (configured === undefined)
+        throw new LlmError(
+          `dsh-provider-extra: unknown catalog route "${route}"`,
+          'UNKNOWN_PROVIDER',
+        )
       if (configured.auth === undefined || !('apiKeyRef' in configured.auth)) return undefined
       const ref = configured.auth.apiKeyRef
       const credentials = ctx.get('credentials') as Credentials | undefined
-      const key = credentials === undefined ? process.env[ref] : (await credentials.resolve(ref))?.value
+      const key =
+        credentials === undefined ? process.env[ref] : (await credentials.resolve(ref))?.value
       requireOwnership()
       if (key !== undefined && key.length > 0) return assertUsableApiKey(key, PLUGIN_NAME, ref)
-      throw new LlmError('dsh-provider-extra: no credential for route "' + route + '"; its Config references ' + ref, 'MISSING_CREDENTIAL')
+      throw new LlmError(
+        `dsh-provider-extra: no credential for route "${route}"; its Config references ${ref}`,
+        'MISSING_CREDENTIAL',
+      )
     },
     resolveAttachments: () => ctx.get('attachments'),
-    resolveImageAccess: (attachments, ref) => resolveImageAttachmentAccess(
-      attachments, hostPath => ctx.get('fs')?.processPathFromHostPath(hostPath), ref,
-    ),
+    resolveImageAccess: (attachments, ref) =>
+      resolveImageAttachmentAccess(
+        attachments,
+        (hostPath) => ctx.get('fs')?.processPathFromHostPath(hostPath),
+        ref,
+      ),
     onReplayDegrade: ({ provider, model, reason }) => {
-      ctx.logger.warn('dsh-provider-extra: unusable replay state for "' + provider + '/' + model + '" (' + reason + ')')
+      ctx.logger.warn(
+        'dsh-provider-extra: unusable replay state for "' +
+          provider +
+          '/' +
+          model +
+          '" (' +
+          reason +
+          ')',
+      )
     },
   })
   const routes = [...snapshot.profiles.keys()]
@@ -133,16 +177,25 @@ export function mountCatalog(ctx: Context, snapshot: CatalogSnapshot, config: Lo
   // A public update veto runs before disposal, so a competing late-mounted
   // adapter cannot turn a refused reload into loss of the last valid catalog.
   let activeGeneration = true
-  ctx.effect(() => () => { activeGeneration = false })
+  ctx.effect(() => () => {
+    activeGeneration = false
+  })
   ctx.on('internal/update', (next, _noSave, proceed) => {
     // A retired snapshot must not veto replacement of the current catalog owner.
     if (!activeGeneration) return proceed()
     if (next.catalog !== undefined) assertCatalogOwnership(ctx, routes, defaults)
     return proceed()
   })
-  mountLoginCommand(ctx, config, { catalog: snapshot, profiles: () => snapshot.profiles, requireOwnership })
+  mountLoginCommand(ctx, config, {
+    catalog: snapshot,
+    profiles: () => snapshot.profiles,
+    requireOwnership,
+  })
   ctx.inject(['settings'], (child) => {
-    const settings = child.get('settings') as { configure?: (options: { auto: boolean }, fiber: typeof ctx.fiber) => () => void }
-    if (typeof settings.configure === 'function') child.effect(() => settings.configure!({ auto: false }, ctx.fiber))
+    const settings = child.get('settings') as {
+      configure?: (options: { auto: boolean }, fiber: typeof ctx.fiber) => () => void
+    }
+    if (typeof settings.configure === 'function')
+      child.effect(() => settings.configure!({ auto: false }, ctx.fiber))
   })
 }

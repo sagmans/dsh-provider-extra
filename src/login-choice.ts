@@ -23,7 +23,10 @@ const PICKER_QUESTION_ID = 'provider'
 
 /** Route identity can be case-sensitive even when method words are not. */
 export function words(rawInput: string): string[] {
-  return rawInput.trim().split(/\s+/u).filter(word => word.length > 0)
+  return rawInput
+    .trim()
+    .split(/\s+/u)
+    .filter((word) => word.length > 0)
 }
 
 /** The label one choice shows: its provider alone when that provider has a single method. */
@@ -33,7 +36,7 @@ function choiceLabel(choice: LoginChoice, shared: boolean): string {
   // the name onto it again reads as a stutter to the human choosing from it.
   return choice.methodLabel.toLowerCase().includes(choice.providerName.toLowerCase())
     ? choice.methodLabel
-    : choice.providerName + ' (' + choice.methodLabel + ')'
+    : `${choice.providerName} (${choice.methodLabel})`
 }
 
 /** The option label for one choice; method labels disambiguate multi-auth providers. */
@@ -42,9 +45,14 @@ function optionLabels(choices: readonly LoginChoice[]): string[] {
   for (const choice of choices) {
     perProvider.set(choice.providerId, (perProvider.get(choice.providerId) ?? 0) + 1)
   }
-  const labels = choices.map(choice => choiceLabel(choice, (perProvider.get(choice.providerId) ?? 0) > 1))
-  return labels.map((label, index) => labels.filter(candidate => candidate === label).length > 1
-    ? label + ' · ' + choices[index]!.providerId + ' · ' + choices[index]!.authType : label)
+  const labels = choices.map((choice) =>
+    choiceLabel(choice, (perProvider.get(choice.providerId) ?? 0) > 1),
+  )
+  return labels.map((label, index) =>
+    labels.filter((candidate) => candidate === label).length > 1
+      ? `${label} · ${choices[index]!.providerId} · ${choices[index]!.authType}`
+      : label,
+  )
 }
 
 /** The question the picker asks, one option per provider-method pair. */
@@ -56,21 +64,21 @@ export function pickerQuestion(choices: readonly LoginChoice[]): AskUserQuestion
     question: 'Which provider do you want to sign in to?',
     options: choices.map((choice, index) => ({
       label: labels[index] ?? choice.providerName,
-      description: choice.methodLabel + ' · ' + choice.providerId,
+      description: `${choice.methodLabel} · ${choice.providerId}`,
     })),
   }
 }
 
 /** The free text a single-question answer carries, if any. */
 export function answerText(answer: AskUserQuestionAnswer, questionId: string): string | undefined {
-  const item = answer.answers.find(entry => entry.id === questionId)
+  const item = answer.answers.find((entry) => entry.id === questionId)
   const custom = item?.custom?.trim()
   return custom === undefined || custom.length === 0 ? undefined : custom
 }
 
 /** The option labels a single-question answer carries. */
 export function answerLabels(answer: AskUserQuestionAnswer, questionId: string): string[] {
-  return answer.answers.find(entry => entry.id === questionId)?.selected ?? []
+  return answer.answers.find((entry) => entry.id === questionId)?.selected ?? []
 }
 
 /**
@@ -95,22 +103,27 @@ export function resolveChoice(
   // A bare method is useful only when it identifies exactly one credential owner.
   const method = input.length === 1 ? input[0]!.toLowerCase() : undefined
   if (method !== KEY_WORD && method !== OAUTH_WORD) return undefined
-  const matches = choices.filter(choice => choice.authType === (method === KEY_WORD ? 'api_key' : 'oauth'))
+  const matches = choices.filter(
+    (choice) => choice.authType === (method === KEY_WORD ? 'api_key' : 'oauth'),
+  )
   return matches.length === 1 ? matches[0] : undefined
 }
 
 /** The choice a provider id (and optional method word) names. */
-export function choiceByWords(choices: readonly LoginChoice[], input: readonly string[]): LoginChoice | undefined {
+export function choiceByWords(
+  choices: readonly LoginChoice[],
+  input: readonly string[],
+): LoginChoice | undefined {
   const providerId = input[0]
   if (providerId === undefined || input.length > 2) return undefined
-  let named = choices.filter(choice => choice.providerId === providerId)
+  let named = choices.filter((choice) => choice.providerId === providerId)
   if (named.length === 0) {
-    named = choices.filter(choice => choice.providerId.toLowerCase() === providerId.toLowerCase())
-    if (new Set(named.map(choice => choice.providerId)).size !== 1) return undefined
+    named = choices.filter((choice) => choice.providerId.toLowerCase() === providerId.toLowerCase())
+    if (new Set(named.map((choice) => choice.providerId)).size !== 1) return undefined
   }
   const method = input[1]?.toLowerCase()
   if (method === undefined) return named[0]
   if (method !== KEY_WORD && method !== OAUTH_WORD) return undefined
   const authType: LoginAuthType = method === KEY_WORD ? 'api_key' : 'oauth'
-  return named.find(choice => choice.authType === authType)
+  return named.find((choice) => choice.authType === authType)
 }

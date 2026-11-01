@@ -67,7 +67,11 @@ export class PendingCredentialStore implements CredentialStore {
  * Throws the provider's own explanation when it refuses, so the human can tell
  * a mistyped key from a key that lacks a plan or a region.
  */
-export async function proveApiKey(models: KeyProbe, providerId: string, signal?: AbortSignal): Promise<void> {
+export async function proveApiKey(
+  models: KeyProbe,
+  providerId: string,
+  signal?: AbortSignal,
+): Promise<void> {
   signal?.throwIfAborted()
   const model = models.getModels(providerId)[0]
   if (model === undefined) throw new Error(NO_MODELS_PREFIX + providerId)

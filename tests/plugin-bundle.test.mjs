@@ -3,8 +3,8 @@ import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
 
 const PACKAGE_NAME = '@sagmans/dsh-provider-extra'
 const CLI_PACKAGE = '@deepseek-ai/dsh'
@@ -12,7 +12,9 @@ const ROOT = fileURLToPath(new URL('../', import.meta.url))
 // The profile mechanics under test belong to the CLI that ships to users, so
 // the suite drives the registry build rather than a source checkout; the bin
 // path comes from that package's own manifest instead of a guessed layout.
-const CLI_MANIFEST = JSON.parse(readFileSync(join(ROOT, 'node_modules', CLI_PACKAGE, 'package.json'), 'utf8'))
+const CLI_MANIFEST = JSON.parse(
+  readFileSync(join(ROOT, 'node_modules', CLI_PACKAGE, 'package.json'), 'utf8'),
+)
 const CLI = join(ROOT, 'node_modules', CLI_PACKAGE, CLI_MANIFEST.bin.dsh)
 const PROFILES = ['web', 'tui']
 const TIMEOUT_MS = 30_000
@@ -38,7 +40,8 @@ for (const profile of PROFILES) {
       assert.equal(result.status, 0, result.stderr || result.error?.message)
       return result.stdout
     }
-    const manifest = () => JSON.parse(readFileSync(join(home, 'profiles', profile, 'package.json'), 'utf8'))
+    const manifest = () =>
+      JSON.parse(readFileSync(join(home, 'profiles', profile, 'package.json'), 'utf8'))
     try {
       run('plugin', '--profile', profile, 'add', '--offline', '--ignore-scripts', `link:${ROOT}`)
       assert.ok(manifest().dsh.profile.bundles.includes(PACKAGE_NAME))

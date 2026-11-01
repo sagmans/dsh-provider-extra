@@ -1,7 +1,20 @@
 /** Real homes exercise durable policy without touching profile configuration. */
 import assert from 'node:assert/strict'
 import { fork } from 'node:child_process'
-import { chmod, mkdir, mkdtemp, open, readFile, readdir, rm, stat, symlink, unlink, writeFile, type FileHandle } from 'node:fs/promises'
+import {
+  chmod,
+  type FileHandle,
+  mkdir,
+  mkdtemp,
+  open,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  unlink,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { it, type TestContext } from 'node:test'
@@ -16,13 +29,14 @@ const PRIVATE_DIRECTORY = 0o700
 const PRIVATE_FILE = 0o600
 const PERMISSIONS = 0o777
 const READ_FAILURE = 'service tier storage record is unreadable or invalid'
-const UNCERTAIN_WRITE = 'service tier was written, but durability could not be confirmed; reload the selection before retrying'
+const UNCERTAIN_WRITE =
+  'service tier was written, but durability could not be confirmed; reload the selection before retrying'
 const SYNC_FAILURE = 'simulated directory sync failure'
 const WINDOWS_PLATFORM = 'win32'
 const WINDOWS_UNSUPPORTED = 'service tier persistence is unsupported on Windows'
 const validTier = (value: string): boolean => [PRIORITY, STANDARD, 'auto'].includes(value)
 
-it('shares fresh pair selections and explicit provider defaults without modifying configuration', async t => {
+it('shares fresh pair selections and explicit provider defaults without modifying configuration', async (t) => {
   const home = await mkdtemp(join(tmpdir(), 'tier-store-'))
   t.after(() => rm(home, { recursive: true, force: true }))
   const config = join(home, 'cordis.yml')
@@ -45,7 +59,7 @@ it('shares fresh pair selections and explicit provider defaults without modifyin
   assert.equal((await stat(join(directory, records[0]!))).mode & PERMISSIONS, PRIVATE_FILE)
 })
 
-it('rejects malformed, oversized, mismatched, and noncanonical records without returning configured policy', async t => {
+it('rejects malformed, oversized, mismatched, and noncanonical records without returning configured policy', async (t) => {
   const home = await mkdtemp(join(tmpdir(), 'tier-store-'))
   t.after(() => rm(home, { recursive: true, force: true }))
   const store = createTierStore(home, validTier)
@@ -54,10 +68,16 @@ it('rejects malformed, oversized, mismatched, and noncanonical records without r
   const path = join(directory, (await readdir(directory))[0]!)
   const record = { version: 1, provider: PROVIDER, model: MODEL, tier: PRIORITY }
   const badRecords = [
-    '{', 'null', '[]', JSON.stringify({ ...record, version: 2 }),
-    JSON.stringify({ ...record, provider: 'other' }), JSON.stringify({ ...record, model: 'other' }),
-    JSON.stringify({ ...record, tier: 'fast' }), JSON.stringify({ ...record, tier: false }),
-    JSON.stringify({ ...record, extra: true }), JSON.stringify({ provider: PROVIDER, model: MODEL, tier: PRIORITY }),
+    '{',
+    'null',
+    '[]',
+    JSON.stringify({ ...record, version: 2 }),
+    JSON.stringify({ ...record, provider: 'other' }),
+    JSON.stringify({ ...record, model: 'other' }),
+    JSON.stringify({ ...record, tier: 'fast' }),
+    JSON.stringify({ ...record, tier: false }),
+    JSON.stringify({ ...record, extra: true }),
+    JSON.stringify({ provider: PROVIDER, model: MODEL, tier: PRIORITY }),
     JSON.stringify(record) + ' '.repeat(32 * 1024),
   ]
   for (const value of badRecords) {
@@ -69,33 +89,50 @@ it('rejects malformed, oversized, mismatched, and noncanonical records without r
 })
 
 /** IPC gates ensure both real writers start together and every observed record is complete. */
-async function concurrentWrites(t: TestContext, home: string, pairs: readonly (readonly [string, string, string])[]): Promise<void> {
+async function concurrentWrites(
+  t: TestContext,
+  home: string,
+  pairs: readonly (readonly [string, string, string])[],
+): Promise<void> {
   const store = createTierStore(home, validTier)
   let observations = 0
   const workers = pairs.map(([provider, model, tier]) => {
-    const child = fork(new URL('./tier-store-worker.ts', import.meta.url), [home, provider, model, tier], {
-      execArgv: ['--import', 'tsx/esm'], stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+    const child = fork(
+      new URL('./tier-store-worker.ts', import.meta.url),
+      [home, provider, model, tier],
+      {
+        execArgv: ['--import', 'tsx/esm'],
+        stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+      },
+    )
+    t.after(() => {
+      if (child.exitCode === null) child.kill()
     })
-    t.after(() => { if (child.exitCode === null) child.kill() })
     let errors = ''
-    child.stderr!.on('data', value => { errors += String(value) })
+    child.stderr!.on('data', (value) => {
+      errors += String(value)
+    })
     let readError: unknown
     const ready = new Promise<void>((resolve, reject) => {
       child.once('error', reject)
-      child.once('exit', code => { if (code !== 0) reject(new Error(errors)) })
-      child.on('message', message => {
+      child.once('exit', (code) => {
+        if (code !== 0) reject(new Error(errors))
+      })
+      child.on('message', (message) => {
         if (message === 'ready') resolve()
         if (message === 'written') {
           try {
             assert.ok([PRIORITY, STANDARD].includes(store.read(provider, model) as string))
             observations++
-          } catch (error) { readError = error }
+          } catch (error) {
+            readError = error
+          }
         }
       })
     })
     const done = new Promise<void>((resolve, reject) => {
       child.once('error', reject)
-      child.once('exit', code => {
+      child.once('exit', (code) => {
         if (readError) reject(readError)
         else if (code !== 0) reject(new Error(errors))
         else resolve()
@@ -103,16 +140,21 @@ async function concurrentWrites(t: TestContext, home: string, pairs: readonly (r
     })
     return { child, ready, done }
   })
-  await Promise.all(workers.map(worker => worker.ready))
+  await Promise.all(workers.map((worker) => worker.ready))
   for (const worker of workers) worker.child.send('start')
-  await Promise.all(workers.map(worker => worker.done))
+  await Promise.all(workers.map((worker) => worker.done))
   assert.ok(observations > pairs.length)
 }
 
-it('retains different pair writes from simultaneous separate processes with safe collision-resistant paths', { timeout: 15_000 }, async t => {
+it('retains different pair writes from simultaneous separate processes with safe collision-resistant paths', {
+  timeout: 15_000,
+}, async (t) => {
   const home = await mkdtemp(join(tmpdir(), 'tier-store-'))
   t.after(() => rm(home, { recursive: true, force: true }))
-  const pairs = [['../example-provider', 'a/b', PRIORITY], ['../example-provider/a', 'b', STANDARD]] as const
+  const pairs = [
+    ['../example-provider', 'a/b', PRIORITY],
+    ['../example-provider/a', 'b', STANDARD],
+  ] as const
   await concurrentWrites(t, home, pairs)
   const reader = createTierStore(home, validTier)
   assert.equal(reader.read(pairs[0][0], pairs[0][1]), PRIORITY)
@@ -122,20 +164,24 @@ it('retains different pair writes from simultaneous separate processes with safe
   for (const name of records) assert.match(name, /^[a-f0-9]{64}\.json$/)
 })
 
-it('exposes only complete same-pair records while separate processes race', { timeout: 15_000 }, async t => {
+it('exposes only complete same-pair records while separate processes race', {
+  timeout: 15_000,
+}, async (t) => {
   const home = await mkdtemp(join(tmpdir(), 'tier-store-'))
   t.after(() => rm(home, { recursive: true, force: true }))
   const store = createTierStore(home, validTier)
   await store.write(PROVIDER, MODEL, PRIORITY)
-  await concurrentWrites(t, home, [[PROVIDER, MODEL, PRIORITY], [PROVIDER, MODEL, STANDARD]])
+  await concurrentWrites(t, home, [
+    [PROVIDER, MODEL, PRIORITY],
+    [PROVIDER, MODEL, STANDARD],
+  ])
   assert.ok([PRIORITY, STANDARD].includes(store.read(PROVIDER, MODEL) as string))
   await store.write(PROVIDER, MODEL, null)
   assert.equal(createTierStore(home, validTier).read(PROVIDER, MODEL), null)
   assert.equal((await readdir(join(home, DIRECTORY))).length, 1)
 })
 
-
-it('preserves the last selection on write failure and cleans exclusive temporaries after rename failure', async t => {
+it('preserves the last selection on write failure and cleans exclusive temporaries after rename failure', async (t) => {
   const home = await mkdtemp(join(tmpdir(), 'tier-store-'))
   t.after(() => rm(home, { recursive: true, force: true }))
   const store = createTierStore(home, validTier)
@@ -157,7 +203,7 @@ it('preserves the last selection on write failure and cleans exclusive temporari
   assert.deepEqual(await readdir(directory), records)
 })
 
-it('rejects redirected and public state without touching symlink targets', async t => {
+it('rejects redirected and public state without touching symlink targets', async (t) => {
   const home = await mkdtemp(join(tmpdir(), 'tier-store-'))
   t.after(() => rm(home, { recursive: true, force: true }))
   const store = createTierStore(home, validTier)
@@ -189,24 +235,37 @@ it('rejects redirected and public state without touching symlink targets', async
   assert.equal(await readFile(target, 'utf8'), original)
 })
 
-it('rejects invalid identities, tiers, and unresolved homes before creating storage', async t => {
+it('rejects invalid identities, tiers, and unresolved homes before creating storage', async (t) => {
   const home = await mkdtemp(join(tmpdir(), 'tier-store-'))
   t.after(() => rm(home, { recursive: true, force: true }))
   const store = createTierStore(home, validTier)
-  for (const [provider, model] of [['', MODEL], [PROVIDER, ' '], ['a'.repeat(2048), MODEL], [PROVIDER, '\u0000']]) {
-    await assert.rejects(store.write(provider!, model!, PRIORITY), /invalid service tier storage selection/)
+  for (const [provider, model] of [
+    ['', MODEL],
+    [PROVIDER, ' '],
+    ['a'.repeat(2048), MODEL],
+    [PROVIDER, '\u0000'],
+  ]) {
+    await assert.rejects(
+      store.write(provider!, model!, PRIORITY),
+      /invalid service tier storage selection/,
+    )
   }
-  await assert.rejects(store.write(PROVIDER, MODEL, 'fast'), /invalid service tier storage selection/)
+  await assert.rejects(
+    store.write(PROVIDER, MODEL, 'fast'),
+    /invalid service tier storage selection/,
+  )
   for (const missing of [undefined, '', 'relative-home']) {
     const unavailable = createTierStore(missing, validTier)
     assert.equal(unavailable.read(PROVIDER, MODEL), undefined)
-    await assert.rejects(unavailable.write(PROVIDER, MODEL, PRIORITY), /resolved profileContext.home is required/)
+    await assert.rejects(
+      unavailable.write(PROVIDER, MODEL, PRIORITY),
+      /resolved profileContext.home is required/,
+    )
   }
   assert.deepEqual(await readdir(home), [])
 })
 
-
-it('syncs newly created directory entries and reports post-rename uncertainty without rolling back concurrent writes', async t => {
+it('syncs newly created directory entries and reports post-rename uncertainty without rolling back concurrent writes', async (t) => {
   const home = await mkdtemp(join(tmpdir(), 'tier-store-'))
   t.after(() => rm(home, { recursive: true, force: true }))
   const store = createTierStore(home, validTier)
@@ -226,10 +285,18 @@ it('syncs newly created directory entries and reports post-rename uncertainty wi
         homeSynced = true
         return
       }
-      assert.equal(homeSynced, true, 'new store directory must survive before a selection can be acknowledged')
+      assert.equal(
+        homeSynced,
+        true,
+        'new store directory must survive before a selection can be acknowledged',
+      )
       if (failNextCommit) {
         failNextCommit = false
-        assert.equal(store.read(PROVIDER, MODEL), null, 'rename has already published the explicit clear')
+        assert.equal(
+          store.read(PROVIDER, MODEL),
+          null,
+          'rename has already published the explicit clear',
+        )
         await store.write(PROVIDER, MODEL, STANDARD)
         throw new Error(SYNC_FAILURE)
       }
@@ -242,7 +309,7 @@ it('syncs newly created directory entries and reports post-rename uncertainty wi
   assert.equal((await readdir(join(home, DIRECTORY))).length, 1)
 })
 
-it('fails before publishing when the home directory cannot be synchronized', async t => {
+it('fails before publishing when the home directory cannot be synchronized', async (t) => {
   const home = await mkdtemp(join(tmpdir(), 'tier-store-'))
   t.after(() => rm(home, { recursive: true, force: true }))
   const store = createTierStore(home, validTier)
@@ -260,8 +327,7 @@ it('fails before publishing when the home directory cannot be synchronized', asy
   assert.equal((await readdir(join(home, DIRECTORY))).length, 1)
 })
 
-
-it('rejects Windows persistence without creating state that disables configured fallback', async t => {
+it('rejects Windows persistence without creating state that disables configured fallback', async (t) => {
   const home = await mkdtemp(join(tmpdir(), 'tier-store-'))
   t.after(() => rm(home, { recursive: true, force: true }))
   const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!

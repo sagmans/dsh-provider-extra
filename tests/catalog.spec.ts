@@ -1,19 +1,32 @@
 /** Managed declarations must remain authoritative without consulting a live provider. */
 import assert from 'node:assert/strict'
-import { after, before, describe, it } from 'node:test'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
+import { after, before, describe, it } from 'node:test'
 import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
-import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
-import { getSupportedThinkingLevels, defaultProviderAuthContext, InMemoryCredentialStore, normalizeContext } from '@earendil-works/pi-ai'
+import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { Api, Model } from '@earendil-works/pi-ai'
+import {
+  defaultProviderAuthContext,
+  getSupportedThinkingLevels,
+  InMemoryCredentialStore,
+  normalizeContext,
+} from '@earendil-works/pi-ai'
+import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
+import type {
+  CatalogAuth,
+  CatalogConfig,
+  CatalogFilter,
+  CatalogModel,
+  CatalogProvider,
+} from '../src/catalog.ts'
 import { compileCatalog } from '../src/catalog.ts'
-import type { CatalogAuth, CatalogConfig, CatalogFilter, CatalogProvider, CatalogModel } from '../src/catalog.ts'
 import { buildCatalogProfile } from '../src/catalog-routes.ts'
 
 /** Membership is the profile's, so coverage ranges over every installed backend. */
-const SOURCES = builtinProviders().filter(provider => provider.getModels().length > 0).map(provider => provider.id)
+const SOURCES = builtinProviders()
+  .filter((provider) => provider.getModels().length > 0)
+  .map((provider) => provider.id)
 const WIRE_ID = 'managed-wire-id'
 const ROUTE = 'managed-route'
 const NAME = 'Managed model'
@@ -27,7 +40,12 @@ const FIRST_GENERATION = 'generation-one'
 const NEXT_GENERATION = 'generation-two'
 const TEST_KEY = 'catalog-test-key'
 const REQUEST_DEFAULT = 1024
-const CODEX_TOKEN = 'test.' + Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'test-account' } })).toString('base64url') + '.test'
+const CODEX_TOKEN =
+  'test.' +
+  Buffer.from(
+    JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'test-account' } }),
+  ).toString('base64url') +
+  '.test'
 const captured: { headers: Headers; body: { model: string } }[] = []
 let endpoint: string
 let upgrades = 0
@@ -35,20 +53,44 @@ let upgrades = 0
 /** Loopback-only SSE exercises real delegates without contacting providers or reading credentials. */
 const server = createServer((request, response) => {
   let body = ''
-  request.on('data', chunk => { body += chunk })
+  request.on('data', (chunk) => {
+    body += chunk
+  })
   request.on('end', () => {
-    const payload = request.url?.includes('/codex/responses') ? { model: 'codex' } : JSON.parse(body)
-    captured.push({ headers: new Headers(request.headers as Record<string, string>), body: payload })
+    const payload = request.url?.includes('/codex/responses')
+      ? { model: 'codex' }
+      : JSON.parse(body)
+    captured.push({
+      headers: new Headers(request.headers as Record<string, string>),
+      body: payload,
+    })
     response.writeHead(200, { 'content-type': 'text/event-stream' })
     if (request.url?.includes('/codex/responses')) {
-      response.end('data: ' + JSON.stringify({ type: 'response.completed', response: {
-        id: 'local-response', status: 'completed', output: [],
-        usage: { input_tokens: 1, output_tokens: 0, total_tokens: 1 },
-      } }) + '\n\n')
-    } else response.end('data: ' + JSON.stringify({
-      id: 'local-completion', object: 'chat.completion.chunk', created: 0, model: payload.model,
-      choices: [{ index: 0, delta: { content: 'local reply' }, finish_reason: 'stop' }],
-    }) + '\n\ndata: [DONE]\n\n')
+      response.end(
+        'data: ' +
+          JSON.stringify({
+            type: 'response.completed',
+            response: {
+              id: 'local-response',
+              status: 'completed',
+              output: [],
+              usage: { input_tokens: 1, output_tokens: 0, total_tokens: 1 },
+            },
+          }) +
+          '\n\n',
+      )
+    } else
+      response.end(
+        'data: ' +
+          JSON.stringify({
+            id: 'local-completion',
+            object: 'chat.completion.chunk',
+            created: 0,
+            model: payload.model,
+            choices: [{ index: 0, delta: { content: 'local reply' }, finish_reason: 'stop' }],
+          }) +
+          '\n\ndata: [DONE]\n\n',
+      )
   })
 })
 server.on('upgrade', (_request, socket) => {
@@ -56,14 +98,21 @@ server.on('upgrade', (_request, socket) => {
   socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')
 })
 before(async () => {
-  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
-  endpoint = 'http://127.0.0.1:' + (server.address() as AddressInfo).port
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  endpoint = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
 })
-after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())))
+after(
+  () =>
+    new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    ),
+)
 
 /** Installed fixtures exercise real metadata without making any provider request. */
 function sourceModel(source = 'openai'): Model<Api> {
-  return builtinProviders().find(provider => provider.id === source)!.getModels()[0]!
+  return builtinProviders()
+    .find((provider) => provider.id === source)!
+    .getModels()[0]!
 }
 
 /** Declared routes keep membership and credential mode required, so specs read them without re-checking. */
@@ -72,14 +121,21 @@ type DeclaredRoute = CatalogProvider & { auth: CatalogAuth; models: CatalogModel
 function provider(source = 'openai', models?: CatalogModel[]): DeclaredRoute {
   const model = sourceModel(source)
   return {
-    id: ROUTE, name: 'Managed provider', source,
-    auth: source === 'openai-codex' ? { credentialProvider: source } : { apiKeyRef: 'MANAGED_API_KEY' },
+    id: ROUTE,
+    name: 'Managed provider',
+    source,
+    auth:
+      source === 'openai-codex' ? { credentialProvider: source } : { apiKeyRef: 'MANAGED_API_KEY' },
     models: models ?? [{ id: model.id, name: NAME }],
   }
 }
 
 function config(route: DeclaredRoute = provider()): CatalogConfig {
-  return { version: 1, providers: [route], default: route.models.length ? { provider: route.id, model: route.models[0]!.id } : null }
+  return {
+    version: 1,
+    providers: [route],
+    default: route.models.length ? { provider: route.id, model: route.models[0]!.id } : null,
+  }
 }
 
 function served(input: CatalogConfig): readonly Model<Api>[] {
@@ -106,7 +162,16 @@ describe('managed catalog compilation', () => {
   })
 
   it('detaches all selected facts and protects retained profile generations', () => {
-    const input = config(provider('openai', [{ id: sourceModel().id, name: NAME, aliases: ['friendly'], metadata: { cost: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 } } }]))
+    const input = config(
+      provider('openai', [
+        {
+          id: sourceModel().id,
+          name: NAME,
+          aliases: ['friendly'],
+          metadata: { cost: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 } },
+        },
+      ]),
+    )
     input.providers[0]!.headers = { 'x-generation': FIRST_GENERATION }
     const snapshot = compileCatalog(input)!
     const profile = snapshot.profiles.get(ROUTE)!
@@ -117,27 +182,65 @@ describe('managed catalog compilation', () => {
     assert.equal(model.cost.input, 1)
     assert.equal(profile.headers!['x-generation'], FIRST_GENERATION)
     assert.throws(() => snapshot.resolveSelection({ provider: ROUTE, model: 'later-alias' }))
-    for (const value of [snapshot, snapshot.config, snapshot.config.providers, snapshot.providers.get(ROUTE)!, profile, profile.piProvider!, profile.piProvider!.getModels(), model, model.cost, profile.piProvider!.auth]) {
+    for (const value of [
+      snapshot,
+      snapshot.config,
+      snapshot.config.providers,
+      snapshot.providers.get(ROUTE)!,
+      profile,
+      profile.piProvider!,
+      profile.piProvider!.getModels(),
+      model,
+      model.cost,
+      profile.piProvider!.auth,
+    ]) {
       assert.equal(Object.isFrozen(value), true)
     }
-    assert.throws(() => { model.cost.input = 8 })
-    assert.throws(() => { (snapshot.profiles as Map<string, unknown>).clear() })
-    snapshot.profiles.forEach((_value, _key, map) => assert.equal(map, snapshot.profiles))
-    assert.equal(compileCatalog(input)!.profiles.get(ROUTE)!.piProvider!.getModels()[0]!.cost.input, 9)
+    assert.throws(() => {
+      model.cost.input = 8
+    })
+    assert.throws(() => {
+      ;(snapshot.profiles as Map<string, unknown>).clear()
+    })
+    snapshot.profiles.forEach((_value, _key, map) => {
+      assert.equal(map, snapshot.profiles)
+    })
+    assert.equal(
+      compileCatalog(input)!.profiles.get(ROUTE)!.piProvider!.getModels()[0]!.cost.input,
+      9,
+    )
   })
 
   for (const method of ['stream', 'streamSimple'] as const) {
-    it('injects live and fallback Go routing on ' + method, async () => {
-      const route = provider('opencode-go', [{ id: GO_MODEL, name: NAME, metadata: { headers: { [SESSION_HEADER.toUpperCase()]: 'stale-model' } } }])
+    it(`injects live and fallback Go routing on ${method}`, async () => {
+      const route = provider('opencode-go', [
+        {
+          id: GO_MODEL,
+          name: NAME,
+          metadata: { headers: { [SESSION_HEADER.toUpperCase()]: 'stale-model' } },
+        },
+      ])
       route.baseURL = endpoint
       route.fallbackSessionId = FALLBACK_SESSION
       route.headers = { [SESSION_HEADER.toUpperCase()]: 'stale-static', 'x-static': 'configured' }
       const profile = buildCatalogProfile(route)
       const pi = profile.piProvider!
       for (const sessionId of [LIVE_SESSION, undefined]) {
-        const options = { apiKey: TEST_KEY, sessionId, headers: { [SESSION_HEADER.toUpperCase()]: 'stale-request', 'x-request': 'preserved' } }
-        const response = await pi[method](pi.getModels()[0]!, normalizeContext({ messages: [] }), options).result()
-        assert.notEqual(response.stopReason, 'error', response.errorMessage ?? 'stopReason was error')
+        const options = {
+          apiKey: TEST_KEY,
+          sessionId,
+          headers: { [SESSION_HEADER.toUpperCase()]: 'stale-request', 'x-request': 'preserved' },
+        }
+        const response = await pi[method](
+          pi.getModels()[0]!,
+          normalizeContext({ messages: [] }),
+          options,
+        ).result()
+        assert.notEqual(
+          response.stopReason,
+          'error',
+          response.errorMessage ?? 'stopReason was error',
+        )
         const request = captured.at(-1)!
         assert.equal(request.headers.get(SESSION_HEADER), sessionId ?? FALLBACK_SESSION)
         assert.equal(request.headers.get('x-static'), 'configured')
@@ -146,7 +249,7 @@ describe('managed catalog compilation', () => {
       }
     })
 
-    it('pins Codex transport and preserves OAuth on ' + method, async () => {
+    it(`pins Codex transport and preserves OAuth on ${method}`, async () => {
       const route = { ...provider('openai-codex'), baseURL: endpoint, transport: 'sse' as const }
       const profile = buildCatalogProfile(route)
       assert.equal(profile.apiKeyEnv, undefined)
@@ -154,7 +257,11 @@ describe('managed catalog compilation', () => {
       const before = upgrades
       const pi = profile.piProvider!
       const response = await pi[method](pi.getModels()[0]!, normalizeContext({ messages: [] }), {
-        apiKey: CODEX_TOKEN, transport: 'websocket', maxRetries: 0, websocketConnectTimeoutMs: 100, timeoutMs: 1000,
+        apiKey: CODEX_TOKEN,
+        transport: 'websocket',
+        maxRetries: 0,
+        websocketConnectTimeoutMs: 100,
+        timeoutMs: 1000,
       }).result()
       assert.notEqual(response.stopReason, 'error', response.errorMessage ?? 'stopReason was error')
       assert.equal(upgrades, before, 'pinned SSE must not attempt a WebSocket upgrade')
@@ -163,9 +270,14 @@ describe('managed catalog compilation', () => {
   }
 
   it('does not invent Go routing identity when session and fallback are absent', async () => {
-    const profile = buildCatalogProfile({ ...provider('opencode-go', [{ id: GO_MODEL, name: NAME }]), baseURL: endpoint })
+    const profile = buildCatalogProfile({
+      ...provider('opencode-go', [{ id: GO_MODEL, name: NAME }]),
+      baseURL: endpoint,
+    })
     const pi = profile.piProvider!
-    const response = await pi.streamSimple(pi.getModels()[0]!, normalizeContext({ messages: [] }), { apiKey: TEST_KEY }).result()
+    const response = await pi
+      .streamSimple(pi.getModels()[0]!, normalizeContext({ messages: [] }), { apiKey: TEST_KEY })
+      .result()
     assert.notEqual(response.stopReason, 'error', response.errorMessage ?? 'stopReason was error')
     assert.equal(captured.at(-1)!.headers.get(SESSION_HEADER), null)
   })
@@ -176,40 +288,64 @@ describe('managed catalog compilation', () => {
     const input = config(route)
     const snapshot = compileCatalog(input)!
     assert.throws(() => snapshot.resolveSelection({ ...input.default, reasoningEffort: 'high' }))
-    assert.equal(snapshot.resolveSelection({ ...input.default, reasoningEffort: 'low' }).reasoningEffort, 'low')
+    assert.equal(
+      snapshot.resolveSelection({ ...input.default, reasoningEffort: 'low' }).reasoningEffort,
+      'low',
+    )
     assert.equal(snapshot.profiles.get(ROUTE)!.configuredMaxTokens.size, 0)
   })
 
   it('retains prepared adapter dispatch facts across catalog replacement', async () => {
-    const route = { ...provider('opencode-go', [{ id: GO_MODEL, name: NAME }]), baseURL: endpoint,
-      headers: { 'x-generation': FIRST_GENERATION }, fallbackSessionId: FALLBACK_SESSION }
+    const route = {
+      ...provider('opencode-go', [{ id: GO_MODEL, name: NAME }]),
+      baseURL: endpoint,
+      headers: { 'x-generation': FIRST_GENERATION },
+      fallbackSessionId: FALLBACK_SESSION,
+    }
     let snapshot = compileCatalog(config(route))!
-    const adapter = new PiAiAdapter({ profiles: () => snapshot.profiles, resolveApiKey: async () => TEST_KEY,
-      auth: { credentials: new InMemoryCredentialStore(), authContext: defaultProviderAuthContext() } })
+    const adapter = new PiAiAdapter({
+      profiles: () => snapshot.profiles,
+      resolveApiKey: async () => TEST_KEY,
+      auth: {
+        credentials: new InMemoryCredentialStore(),
+        authContext: defaultProviderAuthContext(),
+      },
+    })
     const prepared = await adapter.prepareCall(ROUTE, GO_MODEL)
     route.headers['x-generation'] = NEXT_GENERATION
     route.models[0]!.name = NEXT_GENERATION
     snapshot = compileCatalog(config(route))!
     const request: GenerateOptions = { provider: ROUTE, model: GO_MODEL, messages: [] }
-    for await (const _chunk of prepared.stream(request)) { /* Draining proves the retained delegate reaches the loopback gateway. */ }
+    for await (const _chunk of prepared.stream(request)) {
+      /* Draining proves the retained delegate reaches the loopback gateway. */
+    }
     assert.equal(captured.at(-1)!.headers.get('x-generation'), FIRST_GENERATION)
     assert.equal(captured.at(-1)!.headers.get(SESSION_HEADER), FALLBACK_SESSION)
     const replacement = await adapter.prepareCall(ROUTE, GO_MODEL)
-    for await (const _chunk of replacement.stream(request)) { /* Both generations must remain serviceable independently. */ }
+    for await (const _chunk of replacement.stream(request)) {
+      /* Both generations must remain serviceable independently. */
+    }
     assert.equal(captured.at(-1)!.headers.get('x-generation'), NEXT_GENERATION)
   })
 
   it('lets a declared endpoint outrank the installed one', () => {
     for (const source of SOURCES) {
-      assert.equal(served(config({ ...provider(source), baseURL: endpoint }))[0]!.baseUrl, endpoint, source)
+      assert.equal(
+        served(config({ ...provider(source), baseURL: endpoint }))[0]!.baseUrl,
+        endpoint,
+        source,
+      )
     }
   })
 
   for (const source of SOURCES) {
-    it('serves exactly the selected canonical model for ' + source, () => {
+    it(`serves exactly the selected canonical model for ${source}`, () => {
       const input = config(provider(source))
       const snapshot = compileCatalog(input)!
-      assert.deepEqual(served(input).map(model => model.id), [input.default!.model])
+      assert.deepEqual(
+        served(input).map((model) => model.id),
+        [input.default!.model],
+      )
       assert.equal(served(input)[0]!.name, NAME)
       assert.equal(served(input)[0]!.provider, ROUTE)
       assert.deepEqual(snapshot.selection, input.default)
@@ -224,9 +360,18 @@ describe('managed catalog compilation', () => {
   })
 
   it('requires Codex OAuth and rejects transport pins other sources ignore', () => {
-    assert.throws(() => compileCatalog(config({ ...provider('openai-codex'), auth: { apiKeyRef: 'OPENAI_API_KEY' } })), /auth/)
-    for (const source of SOURCES.filter(source => source !== 'openai-codex')) {
-      assert.throws(() => compileCatalog(config({ ...provider(source), transport: 'sse' })), /transport/)
+    assert.throws(
+      () =>
+        compileCatalog(
+          config({ ...provider('openai-codex'), auth: { apiKeyRef: 'OPENAI_API_KEY' } }),
+        ),
+      /auth/,
+    )
+    for (const source of SOURCES.filter((source) => source !== 'openai-codex')) {
+      assert.throws(
+        () => compileCatalog(config({ ...provider(source), transport: 'sse' })),
+        /transport/,
+      )
     }
   })
 
@@ -234,43 +379,68 @@ describe('managed catalog compilation', () => {
     const input = config(provider('openai', []))
     assert.deepEqual(served(input), [])
     assert.equal(compileCatalog(input)!.selection, null)
-    assert.throws(() => compileCatalog({ ...input, default: { provider: ROUTE, model: sourceModel().id } }))
+    assert.throws(() =>
+      compileCatalog({ ...input, default: { provider: ROUTE, model: sourceModel().id } }),
+    )
     assert.throws(() => compileCatalog({ ...config(), default: null }))
   })
 
   it('canonicalizes aliases without advertising extra wire models', () => {
-    const input = config(provider('openai', [{ id: sourceModel().id, name: NAME, aliases: ['friendly'] }]))
+    const input = config(
+      provider('openai', [{ id: sourceModel().id, name: NAME, aliases: ['friendly'] }]),
+    )
     input.default!.model = 'friendly'
     const snapshot = compileCatalog(input)!
     assert.equal(snapshot.selection!.model, sourceModel().id)
     assert.equal(snapshot.config.default!.model, sourceModel().id)
-    assert.equal(snapshot.resolveSelection({ provider: ROUTE, model: 'friendly' }).model, sourceModel().id)
-    assert.deepEqual(served(input).map(model => model.id), [sourceModel().id])
+    assert.equal(
+      snapshot.resolveSelection({ provider: ROUTE, model: 'friendly' }).model,
+      sourceModel().id,
+    )
+    assert.deepEqual(
+      served(input).map((model) => model.id),
+      [sourceModel().id],
+    )
     assert.throws(() => snapshot.resolveSelection({ provider: ROUTE, model: UNKNOWN }))
     assert.throws(() => snapshot.resolveSelection({ provider: UNKNOWN, model: sourceModel().id }))
   })
 
   it('requires an explicit catalog sibling and preserves the declared wire identity', () => {
     const sibling = sourceModel('opencode-go')
-    const input = config(provider('opencode-go', [{ id: WIRE_ID, name: NAME, template: sibling.id }]))
+    const input = config(
+      provider('opencode-go', [{ id: WIRE_ID, name: NAME, template: sibling.id }]),
+    )
     const model = served(input)[0]!
     assert.equal(model.id, WIRE_ID)
     assert.equal(model.name, NAME)
     assert.equal(model.api, sibling.api)
     assert.equal(model.contextWindow, sibling.contextWindow)
-    assert.throws(() => compileCatalog(config(provider('opencode-go', [{ id: WIRE_ID, name: NAME }]))))
-    assert.throws(() => compileCatalog(config(provider('opencode-go', [{ id: WIRE_ID, name: NAME, template: UNKNOWN }]))))
+    assert.throws(() =>
+      compileCatalog(config(provider('opencode-go', [{ id: WIRE_ID, name: NAME }]))),
+    )
+    assert.throws(() =>
+      compileCatalog(
+        config(provider('opencode-go', [{ id: WIRE_ID, name: NAME, template: UNKNOWN }])),
+      ),
+    )
   })
 
   it('names the route and the model a refused declaration belongs to', () => {
     // A catalog that runs to dozens of entries cannot be repaired from an index:
     // a profile whose declaration a newer line's vendor dropped must read the
     // route and the model id out of the message itself.
-    const route = provider('openai', [{ id: UNKNOWN, name: NAME, metadata: { api: sourceModel().api } }])
+    const route = provider('openai', [
+      { id: UNKNOWN, name: NAME, metadata: { api: sourceModel().api } },
+    ])
     route.id = 'zai-route'
     assert.throws(
       () => compileCatalog(config(route)),
-      new RegExp('catalog provider "zai-route"\\.models\\[0\\] "' + UNKNOWN + '": unknown model requires complete metadata: missing reasoning', 'u'),
+      new RegExp(
+        'catalog provider "zai-route"\\.models\\[0\\] "' +
+          UNKNOWN +
+          '": unknown model requires complete metadata: missing reasoning',
+        'u',
+      ),
     )
   })
 
@@ -279,18 +449,29 @@ describe('managed catalog compilation', () => {
     assert.equal(sibling.api, 'anthropic-messages')
     const metadata = { api: 'openai-completions' }
     for (const id of [sibling.id, WIRE_ID]) {
-      const model = { id, name: NAME, metadata, ...(id === sibling.id ? {} : { template: sibling.id }) }
+      const model = {
+        id,
+        name: NAME,
+        metadata,
+        ...(id === sibling.id ? {} : { template: sibling.id }),
+      }
       assert.throws(() => compileCatalog(config(provider('opencode-go', [model]))), /api/)
     }
   })
 
   it('honors metadata overrides for installed IDs and complete metadata for new IDs', () => {
     const metadata = {
-      api: sourceModel().api, reasoning: false, input: ['text'] as ('text' | 'image')[],
-      cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 }, contextWindow: 8192, maxTokens: 1024,
+      api: sourceModel().api,
+      reasoning: false,
+      input: ['text'] as ('text' | 'image')[],
+      cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 8192,
+      maxTokens: 1024,
     }
     for (const id of [sourceModel().id, WIRE_ID]) {
-      const model = served(config({ ...provider('openai', [{ id, name: NAME, metadata }]), baseURL: ENDPOINT }))[0]!
+      const model = served(
+        config({ ...provider('openai', [{ id, name: NAME, metadata }]), baseURL: ENDPOINT }),
+      )[0]!
       assert.equal(model.id, id)
       assert.equal(model.name, NAME)
       assert.equal(model.baseUrl, ENDPOINT)
@@ -301,7 +482,13 @@ describe('managed catalog compilation', () => {
     for (const key of Object.keys(metadata)) {
       const incomplete = { ...metadata } as Record<string, unknown>
       delete incomplete[key]
-      assert.throws(() => compileCatalog(config(provider('openai', [{ id: WIRE_ID, name: NAME, metadata: incomplete }]))), key)
+      assert.throws(
+        () =>
+          compileCatalog(
+            config(provider('openai', [{ id: WIRE_ID, name: NAME, metadata: incomplete }])),
+          ),
+        key,
+      )
     }
   })
 
@@ -310,11 +497,16 @@ describe('managed catalog compilation', () => {
     const supported = getSupportedThinkingLevels(sourceModel())
     const snapshot = compileCatalog(input)!
     for (const reasoningEffort of supported) {
-      assert.equal(snapshot.resolveSelection({ ...input.default, reasoningEffort }).reasoningEffort, reasoningEffort)
+      assert.equal(
+        snapshot.resolveSelection({ ...input.default, reasoningEffort }).reasoningEffort,
+        reasoningEffort,
+      )
     }
     for (const reasoningEffort of ['invalid', 42, null]) {
       assert.throws(() => snapshot.resolveSelection({ ...input.default, reasoningEffort }))
-      assert.throws(() => compileCatalog({ ...input, default: { ...input.default, reasoningEffort } }))
+      assert.throws(() =>
+        compileCatalog({ ...input, default: { ...input.default, reasoningEffort } }),
+      )
     }
     assert.throws(() => snapshot.resolveSelection({ ...input.default, reasoningEffort: 'high' }))
   })
@@ -324,35 +516,79 @@ describe('managed catalog compilation', () => {
     const route = provider()
     const model = route.models[0]!
     const invalid: unknown[] = [
-      null, {}, [], { ...valid, version: 2 }, { ...valid, surprise: true }, { ...valid, default: undefined },
-      { ...valid, providers: {} }, { ...valid, providers: [route, route] },
-      config({ ...route, id: '' }), config({ ...route, name: '' }), { ...valid, providers: [{ ...route, models: undefined }] },
-      config({ ...route, auth: {} } as never), config({ ...route, auth: { apiKeyRef: 'BAD-REF' } }),
+      null,
+      {},
+      [],
+      { ...valid, version: 2 },
+      { ...valid, surprise: true },
+      { ...valid, default: undefined },
+      { ...valid, providers: {} },
+      { ...valid, providers: [route, route] },
+      config({ ...route, id: '' }),
+      config({ ...route, name: '' }),
+      { ...valid, providers: [{ ...route, models: undefined }] },
+      config({ ...route, auth: {} } as never),
+      config({ ...route, auth: { apiKeyRef: 'BAD-REF' } }),
       config({ ...route, auth: { credentialProvider: 'openai-codex' } }),
       config({ ...route, auth: { apiKeyRef: 'KEY', credentialProvider: 'openai' } }),
-      config({ ...route, transport: 'invalid' } as never), config({ ...route, baseURL: 'not a URL' }),
+      config({ ...route, transport: 'invalid' } as never),
+      config({ ...route, baseURL: 'not a URL' }),
       config({ ...route, headers: { bad: 'line\nbreak' } }),
       config({ ...route, models: [model, model] }),
       config({ ...route, models: [{ ...model, name: undefined }] } as never),
       config({ ...route, models: [{ ...model, aliases: [model.id] }] }),
       config({ ...route, models: [{ ...model, aliases: ['alias', 'alias'] }] }),
-      config({ ...route, models: [{ ...model, aliases: [WIRE_ID] }, { id: WIRE_ID, name: NAME, template: model.id }] }),
+      config({
+        ...route,
+        models: [
+          { ...model, aliases: [WIRE_ID] },
+          { id: WIRE_ID, name: NAME, template: model.id },
+        ],
+      }),
     ]
-    for (const candidate of invalid) assert.throws(() => compileCatalog(candidate), JSON.stringify(candidate))
+    for (const candidate of invalid)
+      assert.throws(() => compileCatalog(candidate), JSON.stringify(candidate))
   })
 
   it('rejects malformed metadata rather than exposing a partly valid catalog', () => {
     const invalid = [
-      { id: WIRE_ID }, { name: NAME }, { provider: ROUTE }, { baseUrl: ENDPOINT }, { typo: true },
-      { api: UNKNOWN }, { reasoning: 'yes' }, { input: [] }, { input: ['audio'] }, { input: ['text', 'text'] },
-      { contextWindow: 0 }, { contextWindow: 1.5 }, { maxTokens: -1 }, { maxTokens: Infinity },
-      { cost: { input: 0 } }, { cost: { input: -1, output: 0, cacheRead: 0, cacheWrite: 0 } },
-      { thinkingLevelMap: { invalid: 'high' } }, { thinkingLevelMap: { high: false } },
-      { headers: { invalid: 1 } }, { compat: { supportsStore: 'yes' } }, { compat: { unknown: true } },
-      { samplingParams: {} }, { compat: { openRouterRouting: {} } }, { compat: { vercelGatewayRouting: {} } },
+      { id: WIRE_ID },
+      { name: NAME },
+      { provider: ROUTE },
+      { baseUrl: ENDPOINT },
+      { typo: true },
+      { api: UNKNOWN },
+      { reasoning: 'yes' },
+      { input: [] },
+      { input: ['audio'] },
+      { input: ['text', 'text'] },
+      { contextWindow: 0 },
+      { contextWindow: 1.5 },
+      { maxTokens: -1 },
+      { maxTokens: Infinity },
+      { cost: { input: 0 } },
+      { cost: { input: -1, output: 0, cacheRead: 0, cacheWrite: 0 } },
+      { thinkingLevelMap: { invalid: 'high' } },
+      { thinkingLevelMap: { high: false } },
+      { headers: { invalid: 1 } },
+      { compat: { supportsStore: 'yes' } },
+      { compat: { unknown: true } },
+      { samplingParams: {} },
+      { compat: { openRouterRouting: {} } },
+      { compat: { vercelGatewayRouting: {} } },
     ]
     for (const metadata of invalid) {
-      assert.throws(() => compileCatalog(config(provider('openai', [{ id: sourceModel().id, name: NAME, metadata: metadata as never }]))), JSON.stringify(metadata))
+      assert.throws(
+        () =>
+          compileCatalog(
+            config(
+              provider('openai', [
+                { id: sourceModel().id, name: NAME, metadata: metadata as never },
+              ]),
+            ),
+          ),
+        JSON.stringify(metadata),
+      )
     }
   })
   it('distinguishes absent catalog from an explicitly empty catalog', () => {
@@ -373,12 +609,24 @@ describe('declared endpoints without an installed source', () => {
   /** A source-less route states its own protocol, endpoint, and every model fact. */
   function custom(overrides: Partial<CatalogProvider> = {}): DeclaredRoute {
     return {
-      id: ROUTE, name: 'Local gateway', api: 'openai-completions', baseURL: endpoint,
+      id: ROUTE,
+      name: 'Local gateway',
+      api: 'openai-completions',
+      baseURL: endpoint,
       auth: { apiKeyRef: 'MANAGED_API_KEY' },
-      models: [{ id: CUSTOM_MODEL, name: NAME, metadata: {
-        reasoning: false, input: ['text'], contextWindow: 8192, maxTokens: 4096,
-        cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 },
-      } }],
+      models: [
+        {
+          id: CUSTOM_MODEL,
+          name: NAME,
+          metadata: {
+            reasoning: false,
+            input: ['text'],
+            contextWindow: 8192,
+            maxTokens: 4096,
+            cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 },
+          },
+        },
+      ],
       ...overrides,
     } as DeclaredRoute
   }
@@ -393,20 +641,29 @@ describe('declared endpoints without an installed source', () => {
     assert.equal(model.api, 'openai-completions')
     assert.equal(model.baseUrl, endpoint)
     assert.equal(model.provider, ROUTE)
-    const adapter = new PiAiAdapter({ profiles: () => snapshot.profiles, resolveApiKey: async () => CUSTOM_KEY,
-      auth: { credentials: new InMemoryCredentialStore(), authContext: defaultProviderAuthContext() } })
+    const adapter = new PiAiAdapter({
+      profiles: () => snapshot.profiles,
+      resolveApiKey: async () => CUSTOM_KEY,
+      auth: {
+        credentials: new InMemoryCredentialStore(),
+        authContext: defaultProviderAuthContext(),
+      },
+    })
     const prepared = await adapter.prepareCall(ROUTE, CUSTOM_MODEL)
     const request: GenerateOptions = { provider: ROUTE, model: CUSTOM_MODEL, messages: [] }
     let chunks = 0
     for await (const _chunk of prepared.stream(request)) chunks++
     const received = captured.at(-1)!
     assert.equal(received.body.model, CUSTOM_MODEL)
-    assert.equal(received.headers.get('authorization'), 'Bearer ' + CUSTOM_KEY)
+    assert.equal(received.headers.get('authorization'), `Bearer ${CUSTOM_KEY}`)
     assert.ok(chunks > 0)
   })
 
   it('refuses a protocol this build cannot implement', () => {
-    assert.throws(() => compileCatalog(config(custom({ api: 'not-a-protocol' }))), /unsupported protocol/)
+    assert.throws(
+      () => compileCatalog(config(custom({ api: 'not-a-protocol' }))),
+      /unsupported protocol/,
+    )
   })
 
   it('refuses to inherit the protocol or the endpoint it has no source for', () => {
@@ -416,7 +673,10 @@ describe('declared endpoints without an installed source', () => {
     const noEndpoint = custom()
     delete noEndpoint.baseURL
     assert.throws(() => compileCatalog(config(noEndpoint)), /must declare its endpoint/)
-    assert.throws(() => compileCatalog(config(custom({ source: UNKNOWN }))), /unknown installed provider/)
+    assert.throws(
+      () => compileCatalog(config(custom({ source: UNKNOWN }))),
+      /unknown installed provider/,
+    )
   })
 
   it('refuses to move a declared model off its declared protocol', () => {
@@ -426,39 +686,63 @@ describe('declared endpoints without an installed source', () => {
   })
 
   it('refuses a credential provider that no installed source owns', () => {
-    assert.throws(() => compileCatalog(config(custom({ auth: { credentialProvider: 'local-gateway' } }))), /needs an installed source/)
+    assert.throws(
+      () => compileCatalog(config(custom({ auth: { credentialProvider: 'local-gateway' } }))),
+      /needs an installed source/,
+    )
   })
 })
 
 describe('filtered membership', () => {
   const SOURCE = 'openai'
-  const INSTALLED = builtinProviders().find(provider => provider.id === SOURCE)!.getModels()
-  const IDS = INSTALLED.map(model => model.id)
+  const INSTALLED = builtinProviders()
+    .find((provider) => provider.id === SOURCE)!
+    .getModels()
+  const IDS = INSTALLED.map((model) => model.id)
   /** One family prefix keeps the expectation readable while still exercising real patterns. */
   const PREFIX = IDS[0]!.split('-')[0]!
-  const MATCHED = IDS.filter(id => id.startsWith(PREFIX))
+  const MATCHED = IDS.filter((id) => id.startsWith(PREFIX))
 
   function config(filter: CatalogFilter, served: readonly string[]): CatalogConfig {
-    return { version: 1, providers: [{ id: ROUTE, name: 'Curated catalog', source: SOURCE, auth: { apiKeyRef: 'MANAGED_API_KEY' }, filter }],
-      default: served.length === 0 ? null : { provider: ROUTE, model: served[0]! } }
+    return {
+      version: 1,
+      providers: [
+        {
+          id: ROUTE,
+          name: 'Curated catalog',
+          source: SOURCE,
+          auth: { apiKeyRef: 'MANAGED_API_KEY' },
+          filter,
+        },
+      ],
+      default: served.length === 0 ? null : { provider: ROUTE, model: served[0]! },
+    }
   }
 
   const servedIds = (input: CatalogConfig): string[] =>
-    compileCatalog(input)!.profiles.get(ROUTE)!.piProvider!.getModels().map(model => model.id)
+    compileCatalog(input)!
+      .profiles.get(ROUTE)!
+      .piProvider!.getModels()
+      .map((model) => model.id)
 
   it('serves only the installed models its include patterns match', () => {
     assert.ok(MATCHED.length > 0)
-    assert.deepEqual(servedIds(config({ include: [PREFIX + '*'] }, MATCHED)), MATCHED)
+    assert.deepEqual(servedIds(config({ include: [`${PREFIX}*`] }, MATCHED)), MATCHED)
   })
 
   it('subtracts excluded ids without restating the ones it keeps', () => {
-    const kept = MATCHED.filter(id => id !== MATCHED[0])
-    assert.deepEqual(servedIds(config({ include: [PREFIX + '*'], exclude: [MATCHED[0]!] }, kept)), kept)
+    const kept = MATCHED.filter((id) => id !== MATCHED[0])
+    assert.deepEqual(
+      servedIds(config({ include: [`${PREFIX}*`], exclude: [MATCHED[0]!] }, kept)),
+      kept,
+    )
   })
 
   it('keeps every installed fact on an expanded entry', () => {
-    const source = INSTALLED.find(model => model.id === MATCHED[0])!
-    const model = compileCatalog(config({ include: [MATCHED[0]!] }, MATCHED))!.profiles.get(ROUTE)!.piProvider!.getModels()[0]!
+    const source = INSTALLED.find((model) => model.id === MATCHED[0])!
+    const model = compileCatalog(config({ include: [MATCHED[0]!] }, MATCHED))!
+      .profiles.get(ROUTE)!
+      .piProvider!.getModels()[0]!
     assert.equal(model.id, source.id)
     assert.equal(model.name, source.name)
     assert.equal(model.api, source.api)
@@ -470,26 +754,64 @@ describe('filtered membership', () => {
   })
 
   it('resolves a filtered id for selection and refuses everything else', () => {
-    const snapshot = compileCatalog(config({ include: [PREFIX + '*'] }, MATCHED))!
-    assert.equal(snapshot.resolveSelection({ provider: ROUTE, model: MATCHED.at(-1)! }).model, MATCHED.at(-1))
+    const snapshot = compileCatalog(config({ include: [`${PREFIX}*`] }, MATCHED))!
+    assert.equal(
+      snapshot.resolveSelection({ provider: ROUTE, model: MATCHED.at(-1)! }).model,
+      MATCHED.at(-1),
+    )
     assert.equal(snapshot.selection!.model, MATCHED[0])
-    const outside = IDS.find(id => !MATCHED.includes(id))
-    if (outside !== undefined) assert.throws(() => snapshot.resolveSelection({ provider: ROUTE, model: outside }), /outside the managed selection/)
+    const outside = IDS.find((id) => !MATCHED.includes(id))
+    if (outside !== undefined)
+      assert.throws(
+        () => snapshot.resolveSelection({ provider: ROUTE, model: outside }),
+        /outside the managed selection/,
+      )
   })
 
   it('refuses declarations that mix, omit, or empty the membership', () => {
-    const declared: CatalogProvider = { id: ROUTE, name: 'Curated catalog', source: SOURCE, auth: { apiKeyRef: 'MANAGED_API_KEY' } }
-    assert.throws(() => compileCatalog({ version: 1, providers: [declared], default: null }), /declare exactly one of models or filter/)
+    const declared: CatalogProvider = {
+      id: ROUTE,
+      name: 'Curated catalog',
+      source: SOURCE,
+      auth: { apiKeyRef: 'MANAGED_API_KEY' },
+    }
+    assert.throws(
+      () => compileCatalog({ version: 1, providers: [declared], default: null }),
+      /declare exactly one of models or filter/,
+    )
     assert.throws(() => compileCatalog(config({}, [])), /declare include, exclude, or both/)
-    assert.throws(() => compileCatalog(config({ include: [] }, [])), /expected at least one pattern/)
-    assert.throws(() => compileCatalog({
-      version: 1, default: null,
-      providers: [{ ...declared, models: [{ id: IDS[0]!, name: NAME }], filter: { include: [PREFIX + '*'] } }],
-    }), /declare exactly one of models or filter/)
+    assert.throws(
+      () => compileCatalog(config({ include: [] }, [])),
+      /expected at least one pattern/,
+    )
+    assert.throws(
+      () =>
+        compileCatalog({
+          version: 1,
+          default: null,
+          providers: [
+            {
+              ...declared,
+              models: [{ id: IDS[0]!, name: NAME }],
+              filter: { include: [`${PREFIX}*`] },
+            },
+          ],
+        }),
+      /declare exactly one of models or filter/,
+    )
   })
 
   it('refuses to filter a route that installs no catalog', () => {
-    const route: CatalogProvider = { id: ROUTE, name: 'Local gateway', api: 'openai-completions', baseURL: endpoint, filter: { include: ['*'] } }
-    assert.throws(() => compileCatalog({ version: 1, providers: [route], default: null }), /filter expands the catalog of an installed source/)
+    const route: CatalogProvider = {
+      id: ROUTE,
+      name: 'Local gateway',
+      api: 'openai-completions',
+      baseURL: endpoint,
+      filter: { include: ['*'] },
+    }
+    assert.throws(
+      () => compileCatalog({ version: 1, providers: [route], default: null }),
+      /filter expands the catalog of an installed source/,
+    )
   })
 })

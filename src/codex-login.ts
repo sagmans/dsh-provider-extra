@@ -39,15 +39,15 @@ export function renderEvent(event: AuthEvent): string[] {
   switch (event.type) {
     case 'info': {
       const link = event.links?.[0]
-      return [event.message + (link === undefined ? '' : ' ' + link.url)]
+      return [event.message + (link === undefined ? '' : ` ${link.url}`)]
     }
     case 'auth_url':
-      return [(event.instructions ?? 'Open this page to continue signing in:'), event.url]
+      return [event.instructions ?? 'Open this page to continue signing in:', event.url]
     case 'device_code':
       return [
         'Enter this code on the verification page to finish signing in:',
-        '  URL:  ' + event.verificationUri,
-        '  Code: ' + event.userCode,
+        `  URL:  ${event.verificationUri}`,
+        `  Code: ${event.userCode}`,
       ]
     case 'progress':
       return [event.message]
@@ -55,17 +55,25 @@ export function renderEvent(event: AuthEvent): string[] {
 }
 
 /** Render one pi-ai prompt as the terminal question to ask. */
-export function renderPrompt(prompt: AuthPrompt): { question: string; options?: readonly { id: string; label: string }[] } {
+export function renderPrompt(prompt: AuthPrompt): {
+  question: string
+  options?: readonly { id: string; label: string }[]
+} {
   switch (prompt.type) {
     case 'select': {
-      const choices = prompt.options.map((option, index) => `${index + 1}) ${option.label}`).join(' | ')
-      return { question: `${prompt.message} ${choices} — answer 1-${prompt.options.length} or id: `, options: prompt.options }
+      const choices = prompt.options
+        .map((option, index) => `${index + 1}) ${option.label}`)
+        .join(' | ')
+      return {
+        question: `${prompt.message} ${choices} — answer 1-${prompt.options.length} or id: `,
+        options: prompt.options,
+      }
     }
     case 'secret':
     case 'text':
     case 'manual_code': {
-      const hint = prompt.placeholder === undefined ? '' : ' (' + prompt.placeholder + ')'
-      return { question: prompt.message + hint + ' ' }
+      const hint = prompt.placeholder === undefined ? '' : ` (${prompt.placeholder})`
+      return { question: `${prompt.message + hint} ` }
     }
   }
 }
@@ -85,9 +93,13 @@ export async function answerPrompt(terminal: LoginTerminal, prompt: AuthPrompt):
       const option = options[picked - 1]
       if (option !== undefined) return option.id
     }
-    const byId = options.find(option => option.id === raw.trim())
+    const byId = options.find((option) => option.id === raw.trim())
     if (byId !== undefined) return byId.id
-    throw new Error('dsh-provider-extra: answer the prompt with a number 1-' + String(options.length) + ' or an option id')
+    throw new Error(
+      'dsh-provider-extra: answer the prompt with a number 1-' +
+        String(options.length) +
+        ' or an option id',
+    )
   }
   return terminal.question(rendered.question)
 }
@@ -121,7 +133,11 @@ export function terminalInteraction(terminal: LoginTerminal): AuthInteraction {
  * @param provider - the catalog Codex provider object to sign in with.
  * @param interaction - pi-ai callbacks for this attempt.
  */
-export async function startCodexLogin(models: LoginModels, provider: unknown, interaction: AuthInteraction): Promise<void> {
+export async function startCodexLogin(
+  models: LoginModels,
+  provider: unknown,
+  interaction: AuthInteraction,
+): Promise<void> {
   models.setProvider(provider)
   await models.login(CODEX_CATALOG_ID, OAUTH_TYPE, interaction)
 }
@@ -135,16 +151,24 @@ export async function startCodexLogin(models: LoginModels, provider: unknown, in
  * @param provider - the catalog Codex provider object to sign in with.
  * @param terminal - line I/O for the human attending the sign-in.
  */
-export async function runCodexLogin(models: LoginModels, provider: unknown, terminal: LoginTerminal): Promise<void> {
+export async function runCodexLogin(
+  models: LoginModels,
+  provider: unknown,
+  terminal: LoginTerminal,
+): Promise<void> {
   await startCodexLogin(models, provider, terminalInteraction(terminal))
-  terminal.print('Signed in to OpenAI Codex. The subscription grant is stored; the route serves it with no restart.')
+  terminal.print(
+    'Signed in to OpenAI Codex. The subscription grant is stored; the route serves it with no restart.',
+  )
 }
 
 /** A readline-backed terminal over stdin/stdout. */
 export function readlineTerminal(rl: Interface, signal: AbortSignal): LoginTerminal {
   return {
     question: (prompt) => rl.question(prompt),
-    print: (line) => { console.log(line) },
+    print: (line) => {
+      console.log(line)
+    },
     signal,
   }
 }

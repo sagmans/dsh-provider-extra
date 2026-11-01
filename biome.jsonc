@@ -1,0 +1,45 @@
+// Biome is the one linter and formatter for this repository. The pre-commit hook
+// checks the staged files and `pnpm run lint` (part of `pnpm run check`, run by
+// pre-push on every pushed commit) checks the whole tree, so a style or lint
+// regression cannot reach `main`.
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  // Ignored paths (dist, node_modules) come from .gitignore, so the build
+  // output is never checked and the two lists cannot drift apart.
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    // Code and JSON only: Markdown and YAML have their own conventions
+    // (changelog prose, workflow files) that Biome must not rewrite.
+    "includes": [
+      "**/*.ts",
+      "**/*.mts",
+      "**/*.cts",
+      "**/*.js",
+      "**/*.mjs",
+      "**/*.cjs",
+      "**/*.json",
+      "**/*.jsonc"
+    ]
+  },
+  // Matches the style the code was written in, so adoption reformats layout
+  // only and keeps quotes, semicolons, and indentation as they were.
+  "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
+  "javascript": {
+    "formatter": { "quoteStyle": "single", "semicolons": "asNeeded", "trailingCommas": "all" }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "style": {
+        // Info, not an error: the existing code uses `!` to state invariants the
+        // type checker cannot prove (a Map read after has(), a host API the
+        // harness always supplies, an index read already proven in range).
+        // Rewriting every site as a runtime guard changes shipped code paths
+        // and is not part of adopting the linter; the findings stay visible.
+        "noNonNullAssertion": "info"
+      }
+    }
+  },
+  "assist": { "enabled": true }
+}

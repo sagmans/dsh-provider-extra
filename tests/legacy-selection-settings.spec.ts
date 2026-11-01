@@ -3,12 +3,16 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { Context, Service } from '@deepseek-ai/cordis'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
+import { DEFAULT_CODEX_ROUTE_ID } from '../src/codex.ts'
+import type { ExtraModelSpec } from '../src/extra-models.ts'
 import type { SectionHooks } from '../src/index.ts'
 import * as plugin from '../src/index.ts'
-import type { ExtraModelSpec } from '../src/extra-models.ts'
-import { DEFAULT_EXTRA_MODEL_TEMPLATE, DEFAULT_OPENCODE_API_KEY_ENV, OPENCODE_GO_PROVIDER_ID } from '../src/opencode-go.ts'
+import {
+  DEFAULT_EXTRA_MODEL_TEMPLATE,
+  DEFAULT_OPENCODE_API_KEY_ENV,
+  OPENCODE_GO_PROVIDER_ID,
+} from '../src/opencode-go.ts'
 import { MemoryCredentials } from './login-host-fixture.ts'
-import { DEFAULT_CODEX_ROUTE_ID } from '../src/codex.ts'
 
 const SETTINGS_SERVICE = 'settings'
 const CODEX_TEMPLATE = 'gpt-5.6-luna'
@@ -31,12 +35,24 @@ const UNKNOWN_MODEL = 'UNKNOWN_MODEL'
 const GO_TEST_KEY = 'local-test-key'
 const DYNAMIC_ROUTES = [
   {
-    name: 'Go', route: OPENCODE_GO_PROVIDER_ID, entry: ENTRY_GO, updated: UPDATED_GO, added: ADDED_GO,
-    otherRoute: DEFAULT_CODEX_ROUTE_ID, otherEntry: ENTRY_CODEX, selection: { codexModels: [ENTRY_CODEX.id] },
+    name: 'Go',
+    route: OPENCODE_GO_PROVIDER_ID,
+    entry: ENTRY_GO,
+    updated: UPDATED_GO,
+    added: ADDED_GO,
+    otherRoute: DEFAULT_CODEX_ROUTE_ID,
+    otherEntry: ENTRY_CODEX,
+    selection: { codexModels: [ENTRY_CODEX.id] },
   },
   {
-    name: 'Codex', route: DEFAULT_CODEX_ROUTE_ID, entry: ENTRY_CODEX, updated: UPDATED_CODEX, added: ADDED_CODEX,
-    otherRoute: OPENCODE_GO_PROVIDER_ID, otherEntry: ENTRY_GO, selection: { models: [ENTRY_GO.id] },
+    name: 'Codex',
+    route: DEFAULT_CODEX_ROUTE_ID,
+    entry: ENTRY_CODEX,
+    updated: UPDATED_CODEX,
+    added: ADDED_CODEX,
+    otherRoute: OPENCODE_GO_PROVIDER_ID,
+    otherEntry: ENTRY_GO,
+    selection: { models: [ENTRY_GO.id] },
   },
 ]
 
@@ -54,7 +70,13 @@ class PublishingSettings extends Service {
     super(ctx, SETTINGS_SERVICE)
   }
 
-  installSection(_owner: Context, _namespace: string, _schema: unknown, entry: Section, hooks: SectionHooks<Section>): void {
+  installSection(
+    _owner: Context,
+    _namespace: string,
+    _schema: unknown,
+    entry: Section,
+    hooks: SectionHooks<Section>,
+  ): void {
     this.current = entry
     this.hooks = hooks
     hooks.setSource(() => this.current)
@@ -76,12 +98,16 @@ async function withProvider(
   const ctx = new Context()
   const runtime = await ctx.plugin(LlmRuntime)
   let settings!: PublishingSettings
-  const settingsMount = await ctx.plugin((owner: Context) => { settings = new PublishingSettings(owner) })
+  const settingsMount = await ctx.plugin((owner: Context) => {
+    settings = new PublishingSettings(owner)
+  })
   // The 0.2.1 adapter lists the Go route's models only once its key resolves,
   // so the listing assertions run against an in-memory key, never the shell's.
   const store = new MemoryCredentials()
   store.values.set(DEFAULT_OPENCODE_API_KEY_ENV, GO_TEST_KEY)
-  const credentials = await ctx.plugin((owner: Context) => owner.provide('credentials', store as never))
+  const credentials = await ctx.plugin((owner: Context) =>
+    owner.provide('credentials', store as never),
+  )
   try {
     const mounted = await ctx.plugin(plugin, {
       extraModels: [ENTRY_GO],
@@ -103,53 +129,80 @@ async function withProvider(
 
 for (const dynamic of DYNAMIC_ROUTES) {
   for (const selectOther of [false, true]) {
-    test('unselected ' + dynamic.name + ' follows settings extras with other route selected: ' + selectOther, async () => {
-      await withProvider(selectOther ? dynamic.selection : {}, async (ctx, settings) => {
-        assert.ok((await ctx.llm.listModels(dynamic.route)).some(model => model.id === dynamic.entry.id))
-        assert.equal((await ctx.llm.resolveModelInfo(dynamic.route, dynamic.entry.id)).name, dynamic.entry.name)
-
-        settings.publish(CHANGED_SECTION)
-        const changed = await ctx.llm.listModels(dynamic.route)
-        for (const expected of [dynamic.updated, dynamic.added]) {
-          assert.equal(changed.find(model => model.id === expected.id)?.name, expected.name)
-          assert.equal((await ctx.llm.resolveModelInfo(dynamic.route, expected.id)).name, expected.name)
-        }
-
-        settings.publish(EMPTY_SECTION)
-        const empty = await ctx.llm.listModels(dynamic.route)
-        for (const removed of [dynamic.entry, dynamic.added]) {
-          assert.ok(!empty.some(model => model.id === removed.id))
-          await assert.rejects(ctx.llm.resolveModelInfo(dynamic.route, removed.id), { code: UNKNOWN_MODEL })
-        }
-        if (selectOther) {
-          assert.deepEqual(
-            (await ctx.llm.listModels(dynamic.otherRoute)).map(model => [model.id, model.name]),
-            [[dynamic.otherEntry.id, dynamic.otherEntry.name]],
+    test(
+      'unselected ' +
+        dynamic.name +
+        ' follows settings extras with other route selected: ' +
+        selectOther,
+      async () => {
+        await withProvider(selectOther ? dynamic.selection : {}, async (ctx, settings) => {
+          assert.ok(
+            (await ctx.llm.listModels(dynamic.route)).some(
+              (model) => model.id === dynamic.entry.id,
+            ),
           )
-          assert.equal((await ctx.llm.resolveModelInfo(dynamic.otherRoute, dynamic.otherEntry.id)).name, dynamic.otherEntry.name)
-        }
-      })
-    })
+          assert.equal(
+            (await ctx.llm.resolveModelInfo(dynamic.route, dynamic.entry.id)).name,
+            dynamic.entry.name,
+          )
+
+          settings.publish(CHANGED_SECTION)
+          const changed = await ctx.llm.listModels(dynamic.route)
+          for (const expected of [dynamic.updated, dynamic.added]) {
+            assert.equal(changed.find((model) => model.id === expected.id)?.name, expected.name)
+            assert.equal(
+              (await ctx.llm.resolveModelInfo(dynamic.route, expected.id)).name,
+              expected.name,
+            )
+          }
+
+          settings.publish(EMPTY_SECTION)
+          const empty = await ctx.llm.listModels(dynamic.route)
+          for (const removed of [dynamic.entry, dynamic.added]) {
+            assert.ok(!empty.some((model) => model.id === removed.id))
+            await assert.rejects(ctx.llm.resolveModelInfo(dynamic.route, removed.id), {
+              code: UNKNOWN_MODEL,
+            })
+          }
+          if (selectOther) {
+            assert.deepEqual(
+              (await ctx.llm.listModels(dynamic.otherRoute)).map((model) => [model.id, model.name]),
+              [[dynamic.otherEntry.id, dynamic.otherEntry.name]],
+            )
+            assert.equal(
+              (await ctx.llm.resolveModelInfo(dynamic.otherRoute, dynamic.otherEntry.id)).name,
+              dynamic.otherEntry.name,
+            )
+          }
+        })
+      },
+    )
   }
 }
 
 for (const published of PUBLISHES) {
-  test('declared Go and Codex selections retain entry extras after publishing ' + published.name, async () => {
-    await withProvider({ models: [ENTRY_GO.id], codexModels: [ENTRY_CODEX.id] }, async (ctx, settings) => {
-      const assertSelections = async () => {
-        for (const [route, model] of [
-          [OPENCODE_GO_PROVIDER_ID, ENTRY_GO],
-          [DEFAULT_CODEX_ROUTE_ID, ENTRY_CODEX],
-        ] as const) {
-          assert.deepEqual((await ctx.llm.listModels(route)).map(info => [info.id, info.name]), [[model.id, model.name]])
-          const resolved = await ctx.llm.resolveModelInfo(route, model.id)
-          assert.equal(resolved.id, model.id)
-          assert.equal(resolved.name, model.name)
+  test(`declared Go and Codex selections retain entry extras after publishing ${published.name}`, async () => {
+    await withProvider(
+      { models: [ENTRY_GO.id], codexModels: [ENTRY_CODEX.id] },
+      async (ctx, settings) => {
+        const assertSelections = async () => {
+          for (const [route, model] of [
+            [OPENCODE_GO_PROVIDER_ID, ENTRY_GO],
+            [DEFAULT_CODEX_ROUTE_ID, ENTRY_CODEX],
+          ] as const) {
+            assert.deepEqual(
+              (await ctx.llm.listModels(route)).map((info) => [info.id, info.name]),
+              [[model.id, model.name]],
+            )
+            const resolved = await ctx.llm.resolveModelInfo(route, model.id)
+            assert.equal(resolved.id, model.id)
+            assert.equal(resolved.name, model.name)
+          }
         }
-      }
-      await assertSelections()
-      settings.publish(published.section)
-      await assertSelections()
-    })
+        await assertSelections()
+        settings.publish(published.section)
+        await assertSelections()
+      },
+    )
   })
 }

@@ -8,9 +8,9 @@
  * @module dsh-provider-extra/login-contract
  */
 
-import type { AuthInteraction } from '@earendil-works/pi-ai'
 import type { CommandInvocation } from '@deepseek-ai/dsh-commands'
 import type { AskUserQuestionAnswer, AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions'
+import type { AuthInteraction } from '@earendil-works/pi-ai'
 import type { RouteDeclaration } from './login-route.ts'
 
 /** Post-commit facts must remain visible even when cancellation or a deadline also wins. */

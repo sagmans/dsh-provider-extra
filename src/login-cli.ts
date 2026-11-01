@@ -22,8 +22,8 @@ import { createInterface } from 'node:readline/promises'
 import { Context } from '@deepseek-ai/cordis'
 import LocalCredentialProvider, { resolveSpec } from '@deepseek-ai/dsh-credentials-local'
 import { createModels } from '@earendil-works/pi-ai'
-import { catalogCodex, codexAuth } from './codex.ts'
 import type { CodexCredentialService } from './codex.ts'
+import { catalogCodex, codexAuth } from './codex.ts'
 import { readlineTerminal, runCodexLogin } from './codex-login.ts'
 
 /** Flag naming an explicit credentials document. */
@@ -34,7 +34,7 @@ function credentialsPath(argv: readonly string[]): string | undefined {
   const at = argv.indexOf(PATH_FLAG)
   const value = at === -1 ? undefined : argv[at + 1]
   if (at !== -1 && (value === undefined || value.startsWith('--'))) {
-    throw new Error('dsh-provider-extra: ' + PATH_FLAG + ' needs a file path')
+    throw new Error(`dsh-provider-extra: ${PATH_FLAG} needs a file path`)
   }
   return value
 }
@@ -46,12 +46,16 @@ async function main(argv: readonly string[]): Promise<void> {
     ...(path === undefined ? {} : { path }),
     watch: false,
   })
-  console.log('Credentials: ' + resolveSpec(path === undefined ? {} : { path }).filename)
+  console.log(`Credentials: ${resolveSpec(path === undefined ? {} : { path }).filename}`)
   const controller = new AbortController()
-  process.on('SIGINT', () => { controller.abort() })
+  process.on('SIGINT', () => {
+    controller.abort()
+  })
   const rl = createInterface({ input, output })
   try {
-    const models = createModels(codexAuth(() => ctx.get('credentials') as CodexCredentialService | undefined))
+    const models = createModels(
+      codexAuth(() => ctx.get('credentials') as CodexCredentialService | undefined),
+    )
     await runCodexLogin(models, catalogCodex(), readlineTerminal(rl, controller.signal))
   } finally {
     rl.close()

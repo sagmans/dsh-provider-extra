@@ -23,6 +23,7 @@ carry a breaking change, and a patch carries only fixes.
 
 ### Changed
 
+- Development checks lint and format the code with Biome `2.6.3`: the pre-commit hook checks the staged files, and `pnpm run check` checks the whole tree on every push. The code was reformatted once to the existing style. The published modules behave the same.
 - Every release now waits out the one-week release-age window. The temporary exemptions for the 0.2.1-rc.2 harness set, its framework releases, pi-ai `1.3.0`, and `fast-uri` `3.1.9` are removed, because each entry has aged past the window. The published package is unchanged.
 - Development tooling moves to `@types/node` 26.6.5 and `tsx` 4.23.15. The published package is unchanged.
 - Development builds use TypeScript 7.0.2. The published modules behave the same; the compiler now writes rewritten relative import paths with single quotes.

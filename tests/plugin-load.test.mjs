@@ -20,9 +20,11 @@ const GO_TEST_KEY = 'local-test-key'
  * dependence on whatever the developer's shell exports.
  */
 function withGoKey(ctx) {
-  return ctx.plugin((owner) => owner.provide('credentials', {
-    resolve: async (ref) => ref === GO_KEY_REF ? { value: GO_TEST_KEY } : undefined,
-  }))
+  return ctx.plugin((owner) =>
+    owner.provide('credentials', {
+      resolve: async (ref) => (ref === GO_KEY_REF ? { value: GO_TEST_KEY } : undefined),
+    }),
+  )
 }
 
 /**
@@ -84,13 +86,24 @@ test('entry-declared extras reach both routes with no settings document at all',
   try {
     mounted = await ctx.plugin(plugin, {
       extraModels: [{ id: ENTRY_EXTRA_MODEL, template: CATALOG_MODEL }],
-      codexExtraModels: [{ id: CODEX_EXTRA_MODEL, name: 'GPT-6 Luna', template: CODEX_EXTRA_TEMPLATE }],
+      codexExtraModels: [
+        { id: CODEX_EXTRA_MODEL, name: 'GPT-6 Luna', template: CODEX_EXTRA_TEMPLATE },
+      ],
     })
     const go = await ctx.llm.listModels(GO_ROUTE)
     const codex = await ctx.llm.listModels(CODEX_ROUTE)
-    assert.ok(go.some((model) => model.id === ENTRY_EXTRA_MODEL), 'entry extras reach the Go route')
-    assert.ok(go.some((model) => model.id === EXTRA_MODEL), 'shipped extras stay served')
-    assert.ok(codex.some((model) => model.id === CODEX_EXTRA_MODEL), 'entry extras reach the Codex route')
+    assert.ok(
+      go.some((model) => model.id === ENTRY_EXTRA_MODEL),
+      'entry extras reach the Go route',
+    )
+    assert.ok(
+      go.some((model) => model.id === EXTRA_MODEL),
+      'shipped extras stay served',
+    )
+    assert.ok(
+      codex.some((model) => model.id === CODEX_EXTRA_MODEL),
+      'entry extras reach the Codex route',
+    )
   } finally {
     await mounted?.dispose()
     await credentials.dispose()
@@ -108,11 +121,19 @@ test('entry-declared selections narrow each route to exactly those models, in or
     mounted = await ctx.plugin(plugin, {
       extraModels: [{ id: ENTRY_EXTRA_MODEL, template: CATALOG_MODEL }],
       models: [ENTRY_EXTRA_MODEL, CATALOG_MODEL],
-      codexExtraModels: [{ id: CODEX_EXTRA_MODEL, name: 'GPT-6 Luna', template: CODEX_EXTRA_TEMPLATE }],
+      codexExtraModels: [
+        { id: CODEX_EXTRA_MODEL, name: 'GPT-6 Luna', template: CODEX_EXTRA_TEMPLATE },
+      ],
       codexModels: [CODEX_EXTRA_MODEL, CODEX_EXTRA_TEMPLATE],
     })
-    assert.deepEqual((await ctx.llm.listModels(GO_ROUTE)).map((model) => model.id), [ENTRY_EXTRA_MODEL, CATALOG_MODEL])
-    assert.deepEqual((await ctx.llm.listModels(CODEX_ROUTE)).map((model) => model.id), [CODEX_EXTRA_MODEL, CODEX_EXTRA_TEMPLATE])
+    assert.deepEqual(
+      (await ctx.llm.listModels(GO_ROUTE)).map((model) => model.id),
+      [ENTRY_EXTRA_MODEL, CATALOG_MODEL],
+    )
+    assert.deepEqual(
+      (await ctx.llm.listModels(CODEX_ROUTE)).map((model) => model.id),
+      [CODEX_EXTRA_MODEL, CODEX_EXTRA_TEMPLATE],
+    )
   } finally {
     await mounted?.dispose()
     await credentials.dispose()
@@ -127,10 +148,13 @@ test('a selection that names nothing fails the composition, naming the route and
   const credentials = await withGoKey(ctx)
   try {
     await assert.rejects(
-      async () => { await ctx.plugin(plugin, { models: ['no-such-model'] }) },
-      (error) => error?.code === 'UNKNOWN_MODEL'
-        && error.message.includes(GO_ROUTE)
-        && error.message.includes('no-such-model'),
+      async () => {
+        await ctx.plugin(plugin, { models: ['no-such-model'] })
+      },
+      (error) =>
+        error?.code === 'UNKNOWN_MODEL' &&
+        error.message.includes(GO_ROUTE) &&
+        error.message.includes('no-such-model'),
     )
   } finally {
     await credentials.dispose()
@@ -138,7 +162,7 @@ test('a selection that names nothing fails the composition, naming the route and
   }
 })
 
-test('settings-declared extras override the entry\'s own, per key', async () => {
+test("settings-declared extras override the entry's own, per key", async () => {
   const plugin = await import(PACKAGE_NAME)
   const ctx = new Context()
   const runtime = await ctx.plugin(LlmRuntime)
@@ -148,7 +172,9 @@ test('settings-declared extras override the entry\'s own, per key', async () => 
   try {
     mounted = await ctx.plugin(plugin, {
       extraModels: [{ id: ENTRY_EXTRA_MODEL, template: CATALOG_MODEL }],
-      codexExtraModels: [{ id: CODEX_EXTRA_MODEL, name: 'GPT-6 Luna', template: CODEX_EXTRA_TEMPLATE }],
+      codexExtraModels: [
+        { id: CODEX_EXTRA_MODEL, name: 'GPT-6 Luna', template: CODEX_EXTRA_TEMPLATE },
+      ],
     })
     assert.ok((await ctx.llm.listModels(GO_ROUTE)).some((model) => model.id === ENTRY_EXTRA_MODEL))
 
@@ -159,10 +185,20 @@ test('settings-declared extras override the entry\'s own, per key', async () => 
 
     const go = await ctx.llm.listModels(GO_ROUTE)
     const codex = await ctx.llm.listModels(CODEX_ROUTE)
-    assert.ok(go.some((model) => model.id === 'section-flash'), 'the section is what the route serves')
-    assert.equal(go.some((model) => model.id === ENTRY_EXTRA_MODEL), false, 'the entry declaration is overridden, not merged')
+    assert.ok(
+      go.some((model) => model.id === 'section-flash'),
+      'the section is what the route serves',
+    )
+    assert.equal(
+      go.some((model) => model.id === ENTRY_EXTRA_MODEL),
+      false,
+      'the entry declaration is overridden, not merged',
+    )
     assert.ok(codex.some((model) => model.id === 'section-luna'))
-    assert.equal(codex.some((model) => model.id === CODEX_EXTRA_MODEL), false)
+    assert.equal(
+      codex.some((model) => model.id === CODEX_EXTRA_MODEL),
+      false,
+    )
   } finally {
     await mounted?.dispose()
     await settings.dispose()
@@ -181,18 +217,26 @@ test('settings-declared codex extras reach the route without a restart', async (
   try {
     mounted = await ctx.plugin(plugin, {})
     const before = await ctx.llm.listModels(CODEX_ROUTE)
-    assert.equal(before.some((model) => model.id === CODEX_EXTRA_MODEL), false)
+    assert.equal(
+      before.some((model) => model.id === CODEX_EXTRA_MODEL),
+      false,
+    )
 
     ctx.settings.publish({
       extraModels: [],
-      codexExtraModels: [{ id: CODEX_EXTRA_MODEL, name: 'GPT-6 Luna', template: CODEX_EXTRA_TEMPLATE }],
+      codexExtraModels: [
+        { id: CODEX_EXTRA_MODEL, name: 'GPT-6 Luna', template: CODEX_EXTRA_TEMPLATE },
+      ],
     })
 
     const after = await ctx.llm.listModels(CODEX_ROUTE)
     const extra = after.find((model) => model.id === CODEX_EXTRA_MODEL)
     assert.ok(extra, 'the committed declaration is served')
     assert.equal(extra.name, 'GPT-6 Luna')
-    assert.ok(after.some((model) => model.id === CODEX_EXTRA_TEMPLATE), 'the template stays served')
+    assert.ok(
+      after.some((model) => model.id === CODEX_EXTRA_TEMPLATE),
+      'the template stays served',
+    )
   } finally {
     await mounted?.dispose()
     await settings.dispose()

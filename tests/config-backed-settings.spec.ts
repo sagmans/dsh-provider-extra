@@ -18,7 +18,11 @@ import { DEFAULT_EXTRA_MODEL_TEMPLATE, OPENCODE_GO_PROVIDER_ID } from '../src/op
 
 const SETTINGS_SERVICE = 'settings'
 const ENTRY_GO = { id: 'entry-go-model', name: 'Entry Go', template: DEFAULT_EXTRA_MODEL_TEMPLATE }
-const COMMITTED_GO = { id: 'committed-go-model', name: 'Committed Go', template: DEFAULT_EXTRA_MODEL_TEMPLATE }
+const COMMITTED_GO = {
+  id: 'committed-go-model',
+  name: 'Committed Go',
+  template: DEFAULT_EXTRA_MODEL_TEMPLATE,
+}
 
 /**
  * The 0.1.7 shape: forms derived from Config, and no reader, writer, or section
@@ -33,22 +37,32 @@ class ConfigBackedSettings extends Service {
 test('extras mount and commit on a line whose settings service publishes no section', async () => {
   const ctx = new Context()
   const runtime = await ctx.plugin(LlmRuntime)
-  const settingsMount = await ctx.plugin((owner: Context) => { void new ConfigBackedSettings(owner) })
+  const settingsMount = await ctx.plugin((owner: Context) => {
+    void new ConfigBackedSettings(owner)
+  })
   try {
     const mounted = await ctx.plugin(plugin, {
       extraModels: [ENTRY_GO],
       loginCommandEnabled: false,
     } as never)
     try {
-      assert.equal((await ctx.llm.resolveModelInfo(OPENCODE_GO_PROVIDER_ID, ENTRY_GO.id)).name, ENTRY_GO.name)
+      assert.equal(
+        (await ctx.llm.resolveModelInfo(OPENCODE_GO_PROVIDER_ID, ENTRY_GO.id)).name,
+        ENTRY_GO.name,
+      )
 
       // What a committed form edit does to this entry: the profile patch carries
       // the new value, and the Loader re-applies the plugin with it.
       // Cordis 4.0.3+ update() only schedules the restart; await() settles the new generation.
       mounted.update({ extraModels: [COMMITTED_GO], loginCommandEnabled: false })
       await mounted.await()
-      assert.equal((await ctx.llm.resolveModelInfo(OPENCODE_GO_PROVIDER_ID, COMMITTED_GO.id)).name, COMMITTED_GO.name)
-      await assert.rejects(ctx.llm.resolveModelInfo(OPENCODE_GO_PROVIDER_ID, ENTRY_GO.id), { code: 'UNKNOWN_MODEL' })
+      assert.equal(
+        (await ctx.llm.resolveModelInfo(OPENCODE_GO_PROVIDER_ID, COMMITTED_GO.id)).name,
+        COMMITTED_GO.name,
+      )
+      await assert.rejects(ctx.llm.resolveModelInfo(OPENCODE_GO_PROVIDER_ID, ENTRY_GO.id), {
+        code: 'UNKNOWN_MODEL',
+      })
     } finally {
       await mounted.dispose()
     }

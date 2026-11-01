@@ -11,13 +11,12 @@
  * still break the install users get.
  */
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { createRequire } from 'node:module'
 import { checkSelections } from './catalog-artifact-policy.mjs'
-import { writeFileSync } from 'node:fs'
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 
@@ -66,76 +65,110 @@ const problems = []
 const out = mkdtempSync(join(tmpdir(), 'dsh-provider-extra-pack-'))
 try {
   execFileSync('pnpm', ['pack', '--pack-destination', out], { cwd: ROOT, stdio: 'inherit' })
-  const tarball = readdirSync(out).find(name => name.endsWith('.tgz'))
+  const tarball = readdirSync(out).find((name) => name.endsWith('.tgz'))
   if (tarball === undefined) throw new Error('pnpm pack produced no tarball')
   const archive = join(out, tarball)
-  const entries = execFileSync('tar', ['-tzf', archive], { encoding: 'utf8' }).split('\n').filter(entry => entry !== '')
+  const entries = execFileSync('tar', ['-tzf', archive], { encoding: 'utf8' })
+    .split('\n')
+    .filter((entry) => entry !== '')
   const read = (entry) => execFileSync('tar', ['-xOzf', archive, entry], { encoding: 'utf8' })
 
   for (const entry of REQUIRED) {
-    if (!entries.includes(entry)) problems.push('missing from the tarball: ' + entry)
+    if (!entries.includes(entry)) problems.push(`missing from the tarball: ${entry}`)
   }
   for (const entry of entries) {
-    if (FORBIDDEN.some(pattern => pattern.test(entry))) problems.push('should not ship: ' + entry)
+    if (FORBIDDEN.some((pattern) => pattern.test(entry))) problems.push(`should not ship: ${entry}`)
   }
 
   const packed = JSON.parse(read('package/package.json'))
-  if (packed.private === true) problems.push('the packed manifest is private, so npm would refuse it')
-  const shipped = (target) => typeof target === 'string' && entries.includes('package/' + target.replace(/^\.\//u, ''))
+  if (packed.private === true)
+    problems.push('the packed manifest is private, so npm would refuse it')
+  const shipped = (target) =>
+    typeof target === 'string' && entries.includes(`package/${target.replace(/^\.\//u, '')}`)
   const declared = packed.dsh?.bundle?.patch
   if (!shipped(declared)) problems.push('the manifest does not point at a bundle patch that ships')
   const declaredTargets = [
     ['main', packed.main],
-    ...Object.entries(packed.exports ?? {}).map(([key, value]) => ['exports["' + key + '"]', value]),
+    ...Object.entries(packed.exports ?? {}).map(([key, value]) => [`exports["${key}"]`, value]),
   ]
   for (const [label, target] of declaredTargets) {
-    if (!shipped(target)) problems.push(label + ' points at ' + String(target) + ', which is not in the tarball')
+    if (!shipped(target))
+      problems.push(`${label} points at ${String(target)}, which is not in the tarball`)
   }
 
   const binTarget = packed.bin?.[BIN_NAME]
-  if (!shipped(binTarget)) problems.push('bin.' + BIN_NAME + ' points at ' + String(binTarget) + ', which is not in the tarball')
-  else if (!read('package/' + binTarget.replace(/^\.\//u, '')).startsWith('#!')) {
-    problems.push('bin.' + BIN_NAME + ' has no shebang, so an install cannot execute it')
+  if (!shipped(binTarget))
+    problems.push(`bin.${BIN_NAME} points at ${String(binTarget)}, which is not in the tarball`)
+  else if (!read(`package/${binTarget.replace(/^\.\//u, '')}`).startsWith('#!')) {
+    problems.push(`bin.${BIN_NAME} has no shebang, so an install cannot execute it`)
   }
 
-  for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
+  for (const field of [
+    'dependencies',
+    'devDependencies',
+    'peerDependencies',
+    'optionalDependencies',
+  ]) {
     for (const [name, spec] of Object.entries(packed[field] ?? {})) {
-      if (typeof spec === 'string' && LOCAL_PROTOCOLS.some(protocol => spec.startsWith(protocol))) {
-        problems.push(field + '.' + name + ' uses ' + spec.split(':')[0] + ':, which a registry install cannot resolve')
+      if (
+        typeof spec === 'string' &&
+        LOCAL_PROTOCOLS.some((protocol) => spec.startsWith(protocol))
+      ) {
+        problems.push(
+          field +
+            '.' +
+            name +
+            ' uses ' +
+            spec.split(':')[0] +
+            ':, which a registry install cannot resolve',
+        )
       }
     }
   }
 
   const patch = read('package/cordis.patch.yml')
-  if (!patch.includes(PATCH_ROW)) problems.push('the bundle patch no longer names ' + PATCH_ROW)
+  if (!patch.includes(PATCH_ROW)) problems.push(`the bundle patch no longer names ${PATCH_ROW}`)
   const local = createRequire(import.meta.url)
   const host = createRequire(local.resolve('@deepseek-ai/dsh/package.json'))
-  const { loadOverlayPatches } = await import(pathToFileURL(host.resolve('@deepseek-ai/dsh-app-boot')).href)
-  const parsedPatch = text => {
+  const { loadOverlayPatches } = await import(
+    pathToFileURL(host.resolve('@deepseek-ai/dsh-app-boot')).href
+  )
+  const parsedPatch = (text) => {
     const file = join(out, 'example.patch.yml')
     writeFileSync(file, text)
     return loadOverlayPatches('pack-smoke', file)
   }
   const defaults = parsedPatch(patch)
-  if (defaults.some(row => row.config?.catalog || row.insert?.some(child => child.config?.catalog))) problems.push('bundle patch must not activate a catalog')
+  if (
+    defaults.some(
+      (row) => row.config?.catalog || row.insert?.some((child) => child.config?.catalog),
+    )
+  )
+    problems.push('bundle patch must not activate a catalog')
   for (const entry of entries) {
     if (entry.endsWith('.json') && entry !== 'package/package.json') {
-      if (entry !== SHAPE_EXAMPLE) problems.push('unexpected packaged catalog/data file: ' + entry)
+      if (entry !== SHAPE_EXAMPLE) problems.push(`unexpected packaged catalog/data file: ${entry}`)
       checkSelections(JSON.parse(read(entry)), entry, problems)
     }
-    if (entry.endsWith('.yml') || entry.endsWith('.yaml')) checkSelections(parsedPatch(read(entry)), entry, problems)
+    if (entry.endsWith('.yml') || entry.endsWith('.yaml'))
+      checkSelections(parsedPatch(read(entry)), entry, problems)
     if (entry.endsWith('.md')) {
       for (const match of read(entry).matchAll(/```(yaml|yml|json)\n([\s\S]*?)```/gu)) {
-        checkSelections(match[1] === 'json' ? JSON.parse(match[2]) : parsedPatch(match[2]), entry, problems)
+        checkSelections(
+          match[1] === 'json' ? JSON.parse(match[2]) : parsedPatch(match[2]),
+          entry,
+          problems,
+        )
       }
     }
   }
 
-  const modules = walk(join(ROOT, 'dist')).filter(file => file.endsWith('.js'))
-  for (const module of modules) execFileSync(process.execPath, ['--check', module], { stdio: 'inherit' })
+  const modules = walk(join(ROOT, 'dist')).filter((file) => file.endsWith('.js'))
+  for (const module of modules)
+    execFileSync(process.execPath, ['--check', module], { stdio: 'inherit' })
 
-  console.log('\npacked ' + entries.length + ' entries, ' + modules.length + ' modules parse')
-  console.log('tarball: ' + archive)
+  console.log(`\npacked ${entries.length} entries, ${modules.length} modules parse`)
+  console.log(`tarball: ${archive}`)
 } catch (error) {
   problems.push(error instanceof Error ? error.message : String(error))
 } finally {
@@ -144,7 +177,7 @@ try {
 
 if (problems.length > 0) {
   console.error('\npack-smoke: the artefact is not shippable')
-  for (const problem of problems) console.error('  - ' + problem)
+  for (const problem of problems) console.error(`  - ${problem}`)
   process.exit(1)
 }
 console.log('pack-smoke: ok')

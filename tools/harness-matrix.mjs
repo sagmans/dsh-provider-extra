@@ -47,7 +47,7 @@ const LOWEST_PRERELEASE = '0'
 
 /** Whether a dependency name is a harness package this matrix has to place. */
 function isHarnessPackage(name) {
-  return name === HARNESS_PACKAGE_PREFIX || name.startsWith(HARNESS_PACKAGE_PREFIX + '-')
+  return name === HARNESS_PACKAGE_PREFIX || name.startsWith(`${HARNESS_PACKAGE_PREFIX}-`)
 }
 
 /**
@@ -56,10 +56,13 @@ function isHarnessPackage(name) {
  */
 function parseVersion(value) {
   const match = VERSION_PATTERN.exec(value ?? '')
-  if (match === null) throw new Error('unsupported version: ' + String(value))
+  if (match === null) throw new Error(`unsupported version: ${String(value)}`)
   return {
     numbers: [Number(match[1]), Number(match[2]), Number(match[3])],
-    prerelease: match[4] === undefined ? [] : match[4].split('.').map(part => /^\d+$/u.test(part) ? Number(part) : part),
+    prerelease:
+      match[4] === undefined
+        ? []
+        : match[4].split('.').map((part) => (/^\d+$/u.test(part) ? Number(part) : part)),
   }
 }
 
@@ -101,7 +104,10 @@ export function compareVersions(left, right) {
 function caretComparators(version) {
   const [major, minor, patch] = version.numbers
   const upper = major > 0 ? [major + 1, 0, 0] : minor > 0 ? [0, minor + 1, 0] : [0, 0, patch + 1]
-  return [{ operator: '>=', version }, { operator: '<', version: { numbers: upper, prerelease: [LOWEST_PRERELEASE] } }]
+  return [
+    { operator: '>=', version },
+    { operator: '<', version: { numbers: upper, prerelease: [LOWEST_PRERELEASE] } },
+  ]
 }
 
 /**
@@ -143,18 +149,25 @@ export function parseRange(declared) {
 function comparatorAdmits(comparator, version) {
   const order = compareParsed(version, comparator.version)
   switch (comparator.operator) {
-    case '>=': return order >= 0
-    case '>': return order > 0
-    case '<=': return order <= 0
-    case '<': return order < 0
-    default: return order === 0
+    case '>=':
+      return order >= 0
+    case '>':
+      return order > 0
+    case '<=':
+      return order <= 0
+    case '<':
+      return order < 0
+    default:
+      return order === 0
   }
 }
 
 /** Whether a comparator names a prerelease of the version's own X.Y.Z tuple. */
 function namesPrereleaseOf(comparator, version) {
-  return comparator.version.prerelease.length > 0
-    && comparator.version.numbers.every((number, index) => number === version.numbers[index])
+  return (
+    comparator.version.prerelease.length > 0 &&
+    comparator.version.numbers.every((number, index) => number === version.numbers[index])
+  )
 }
 
 /**
@@ -172,9 +185,13 @@ export function satisfiesRange(declared, version, { includePrerelease = false } 
   const sets = parseRange(declared)
   if (sets === undefined) return false
   const parsed = parseVersion(version)
-  return sets.some(set => set.every(comparator => comparatorAdmits(comparator, parsed))
-    && (parsed.prerelease.length === 0 || includePrerelease
-      || set.some(comparator => namesPrereleaseOf(comparator, parsed))))
+  return sets.some(
+    (set) =>
+      set.every((comparator) => comparatorAdmits(comparator, parsed)) &&
+      (parsed.prerelease.length === 0 ||
+        includePrerelease ||
+        set.some((comparator) => namesPrereleaseOf(comparator, parsed))),
+  )
 }
 
 /** The releases the gates actually ran against, as declared by the manifest. */
@@ -208,8 +225,13 @@ const LINE_VENDOR_PINS = {
  * templates from (1.3.0 dropped `deepseek-v4-flash`).
  */
 function isBoundedAlternative(set) {
-  return set.length === 0 || set.some(comparator => comparator.operator === '<' || comparator.operator === '<='
-    || comparator.operator === '=')
+  return (
+    set.length === 0 ||
+    set.some(
+      (comparator) =>
+        comparator.operator === '<' || comparator.operator === '<=' || comparator.operator === '=',
+    )
+  )
 }
 
 /** Whether every alternative of a declared vendor range is a shape this guard verifies. */
@@ -238,19 +260,35 @@ export function admitsVersion(declared, version) {
 function checkRangeShape(compatibility) {
   // The spelled form is required, not just its meaning: a caret or tilde reads
   // the same to semver but hides where a line ends from the reader.
-  const spelled = String(compatibility ?? '').split('||').every(part => RANGE_ALTERNATIVE_PATTERN.test(part.trim()))
+  const spelled = String(compatibility ?? '')
+    .split('||')
+    .every((part) => RANGE_ALTERNATIVE_PATTERN.test(part.trim()))
   const sets = spelled ? parseRange(compatibility) : undefined
-  const bounded = sets !== undefined && sets.length > 0 && sets.every(set => set.length === 2
-    && set[0].operator === '>=' && set[1].operator === '<')
+  const bounded =
+    sets !== undefined &&
+    sets.length > 0 &&
+    sets.every((set) => set.length === 2 && set[0].operator === '>=' && set[1].operator === '<')
   if (!bounded) {
-    return ['dsh.compatibility.dsh must declare ">=lower <upper" alternatives joined by "||", found ' + String(compatibility)]
+    return [
+      'dsh.compatibility.dsh must declare ">=lower <upper" alternatives joined by "||", found ' +
+        String(compatibility),
+    ]
   }
-  const open = sets.map(set => set[1].version)
-    .filter(upper => upper.prerelease.length !== 1 || upper.prerelease[0] !== Number(LOWEST_PRERELEASE))
-  return open.map(upper => 'dsh.compatibility.dsh bounds a line at <' + upper.numbers.join('.')
-    + (upper.prerelease.length === 0 ? '' : '-' + upper.prerelease.join('.'))
-    + ', which the dsh plugin gate reads as admitting that line\'s prereleases; bound it at <'
-    + upper.numbers.join('.') + '-' + LOWEST_PRERELEASE)
+  const open = sets
+    .map((set) => set[1].version)
+    .filter(
+      (upper) => upper.prerelease.length !== 1 || upper.prerelease[0] !== Number(LOWEST_PRERELEASE),
+    )
+  return open.map(
+    (upper) =>
+      'dsh.compatibility.dsh bounds a line at <' +
+      upper.numbers.join('.') +
+      (upper.prerelease.length === 0 ? '' : `-${upper.prerelease.join('.')}`) +
+      ", which the dsh plugin gate reads as admitting that line's prereleases; bound it at <" +
+      upper.numbers.join('.') +
+      '-' +
+      LOWEST_PRERELEASE,
+  )
 }
 
 /**
@@ -278,12 +316,22 @@ export function checkMatrix(manifest) {
   if (rangeProblems.length === 0) {
     for (const release of releases) {
       if (!satisfiesRange(compatibility, release, { includePrerelease: true })) {
-        problems.push('verified release ' + release + ' lies outside the compatible range ' + String(compatibility))
+        problems.push(
+          'verified release ' +
+            release +
+            ' lies outside the compatible range ' +
+            String(compatibility),
+        )
       } else if (!satisfiesRange(compatibility, release)) {
         // npm reads the same range for the peers and would refuse the host's
         // own release, resolving a second framework copy beside it.
-        problems.push('verified release ' + release + ' is a prerelease npm peer resolution refuses under '
-          + String(compatibility) + '; give its X.Y.Z tuple an alternative of its own')
+        problems.push(
+          'verified release ' +
+            release +
+            ' is a prerelease npm peer resolution refuses under ' +
+            String(compatibility) +
+            '; give its X.Y.Z tuple an alternative of its own',
+        )
       }
     }
   }
@@ -291,9 +339,17 @@ export function checkMatrix(manifest) {
   /** One declared placing, checked wherever a harness package may be named. */
   const checkPlacing = (name, declared, location) => {
     if (declared === compatibility || releases.includes(declared)) return
-    problems.push(location + ' ' + name + ' declares ' + String(declared)
-      + ', which is neither the compatible range ' + String(compatibility)
-      + ' nor one of the verified releases ' + releases.join(', '))
+    problems.push(
+      location +
+        ' ' +
+        name +
+        ' declares ' +
+        String(declared) +
+        ', which is neither the compatible range ' +
+        String(compatibility) +
+        ' nor one of the verified releases ' +
+        releases.join(', '),
+    )
   }
   for (const [name, declared] of Object.entries(manifest.dependencies ?? {})) {
     if (isHarnessPackage(name)) checkPlacing(name, declared, 'mounted package')
@@ -301,7 +357,13 @@ export function checkMatrix(manifest) {
     if (!String(declared).startsWith('npm:')) continue
     const aliased = /^npm:(.+)@([^@]+)$/u.exec(String(declared))
     if (aliased === null || !releases.includes(aliased[2])) {
-      problems.push('aliased dependency ' + name + ' declares ' + String(declared) + ', whose version is not a verified release')
+      problems.push(
+        'aliased dependency ' +
+          name +
+          ' declares ' +
+          String(declared) +
+          ', whose version is not a verified release',
+      )
     }
   }
   // A peer carries the range, never `*`: the dsh plugin gate reads harness
@@ -318,31 +380,68 @@ export function checkMatrix(manifest) {
   for (const release of releases) {
     const pins = LINE_VENDOR_PINS[release]
     if (pins === undefined) {
-      problems.push('verified release ' + release + ' has no recorded vendor pin; read its @deepseek-ai/dsh-llm-pi-ai dependencies and record them')
+      problems.push(
+        'verified release ' +
+          release +
+          ' has no recorded vendor pin; read its @deepseek-ai/dsh-llm-pi-ai dependencies and record them',
+      )
       continue
     }
     for (const [name, version] of Object.entries(pins)) {
       const declared = manifest.peerDependencies?.[name]
       if (declared === undefined) {
-        problems.push('peer dependency ' + name + ' is missing, so the ' + version + ' that line ' + release + ' ships resolves a second copy beside the host\'s')
+        problems.push(
+          'peer dependency ' +
+            name +
+            ' is missing, so the ' +
+            version +
+            ' that line ' +
+            release +
+            " ships resolves a second copy beside the host's",
+        )
       } else if (!isVerifiableRange(declared)) {
-        problems.push('peer dependency ' + name + ' declares ' + String(declared) + ', which this guard cannot verify against the ' + version + ' line ' + release + ' ships')
+        problems.push(
+          'peer dependency ' +
+            name +
+            ' declares ' +
+            String(declared) +
+            ', which this guard cannot verify against the ' +
+            version +
+            ' line ' +
+            release +
+            ' ships',
+        )
       } else if (!admitsVersion(declared, version)) {
-        problems.push('peer dependency ' + name + ' declares ' + String(declared) + ', which does not admit ' + version + ', the vendor line ' + release + ' ships')
+        problems.push(
+          'peer dependency ' +
+            name +
+            ' declares ' +
+            String(declared) +
+            ', which does not admit ' +
+            version +
+            ', the vendor line ' +
+            release +
+            ' ships',
+        )
       }
     }
   }
 
-  const compiled = Object.entries(manifest.devDependencies ?? {})
-    .filter(([name]) => isHarnessPackage(name))
+  const compiled = Object.entries(manifest.devDependencies ?? {}).filter(([name]) =>
+    isHarnessPackage(name),
+  )
   if (compiled.length === 0) problems.push('the manifest compiles against no harness package')
   const compiledVersions = new Set(compiled.map(([, declared]) => declared))
   if (compiledVersions.size !== 1) {
-    problems.push('the harness devDependencies name ' + compiledVersions.size + ' versions, not one')
+    problems.push(`the harness devDependencies name ${compiledVersions.size} versions, not one`)
   }
   for (const version of compiledVersions) {
     if (!releases.includes(version)) {
-      problems.push('the harness devDependencies compile against ' + version + ', which is not a verified release')
+      problems.push(
+        'the harness devDependencies compile against ' +
+          version +
+          ', which is not a verified release',
+      )
     }
   }
   return problems
@@ -352,7 +451,7 @@ export function checkMatrix(manifest) {
 async function checkRegistry(releases, problems) {
   const response = await fetch('https://registry.npmjs.org/@deepseek-ai%2Fdsh')
   if (!response.ok) {
-    problems.push('the registry read failed with HTTP ' + response.status)
+    problems.push(`the registry read failed with HTTP ${response.status}`)
     return
   }
   const metadata = await response.json()
@@ -360,27 +459,37 @@ async function checkRegistry(releases, problems) {
   if (typeof latest !== 'string') {
     problems.push('the registry answered no latest dist-tag')
   } else if (!releases.includes(latest)) {
-    problems.push('the harness publishes ' + latest + ' as latest, which is not a verified release')
-    console.error('harness-matrix: add it to dsh.compatibility.dshReleases, raise the harness devDependencies and every mounted harness package, then dogfood; RELEASE.md owns the bump')
+    problems.push(`the harness publishes ${latest} as latest, which is not a verified release`)
+    console.error(
+      'harness-matrix: add it to dsh.compatibility.dshReleases, raise the harness devDependencies and every mounted harness package, then dogfood; RELEASE.md owns the bump',
+    )
   } else {
-    console.log('harness-matrix: registry latest ' + latest + ' is verified')
+    console.log(`harness-matrix: registry latest ${latest} is verified`)
   }
 }
 
 async function main() {
   const manifest = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
   const problems = checkMatrix(manifest)
-  if (process.argv.includes('--check-registry')) await checkRegistry(verifiedReleases(manifest), problems)
+  if (process.argv.includes('--check-registry'))
+    await checkRegistry(verifiedReleases(manifest), problems)
   if (problems.length > 0) {
     console.error('harness-matrix: the matrix is inconsistent')
-    for (const problem of problems) console.error('  - ' + problem)
+    for (const problem of problems) console.error(`  - ${problem}`)
     process.exit(1)
   }
   const compiled = Object.entries(manifest.devDependencies ?? {})
     .filter(([name]) => isHarnessPackage(name))
     .map(([, declared]) => declared)
-  console.log('harness-matrix: ok (' + verifiedReleases(manifest).length + ' verified, compiled '
-    + [...new Set(compiled)].join(', ') + ', range ' + String(manifest.dsh?.compatibility?.dsh) + ')')
+  console.log(
+    'harness-matrix: ok (' +
+      verifiedReleases(manifest).length +
+      ' verified, compiled ' +
+      [...new Set(compiled)].join(', ') +
+      ', range ' +
+      String(manifest.dsh?.compatibility?.dsh) +
+      ')',
+  )
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) await main()

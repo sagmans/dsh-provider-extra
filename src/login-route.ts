@@ -52,8 +52,10 @@ export interface SettingsLike {
  */
 export function legacySettings(service: unknown): SettingsLike | undefined {
   const settings = service as Partial<SettingsLike> | undefined
-  return settings !== undefined && typeof settings.get === 'function' && typeof settings.update === 'function'
-    ? settings as SettingsLike
+  return settings !== undefined &&
+    typeof settings.get === 'function' &&
+    typeof settings.update === 'function'
+    ? (settings as SettingsLike)
     : undefined
 }
 
@@ -61,7 +63,9 @@ export function legacySettings(service: unknown): SettingsLike | undefined {
 function configuredProviders(value: unknown): Record<string, unknown> | undefined {
   if (typeof value !== 'object' || value === null) return undefined
   const providers = (value as Record<string, unknown>)[PROVIDERS_FIELD]
-  return typeof providers === 'object' && providers !== null ? providers as Record<string, unknown> : undefined
+  return typeof providers === 'object' && providers !== null
+    ? (providers as Record<string, unknown>)
+    : undefined
 }
 
 /**
@@ -75,7 +79,10 @@ function configuredProviders(value: unknown): Record<string, unknown> | undefine
  * @param providerId - the pi-ai catalog provider whose route entry to read.
  * @returns the reference name, or nothing when the route names none.
  */
-export function declaredCredentialRef(settings: SettingsLike | undefined, providerId: string): string | undefined {
+export function declaredCredentialRef(
+  settings: SettingsLike | undefined,
+  providerId: string,
+): string | undefined {
   if (settings === undefined) return undefined
   const entry = configuredProviders(settings.get(PI_AI_SETTINGS_NAMESPACE))?.[providerId]
   if (typeof entry !== 'object' || entry === null) return undefined
@@ -94,11 +101,16 @@ export function declaredCredentialRef(settings: SettingsLike | undefined, provid
  * @param providerId - the pi-ai catalog provider that was just signed in.
  * @returns whether the route was added, already configured, or cannot exist here.
  */
-export async function declareProviderRoute(settings: SettingsLike | undefined, providerId: string): Promise<RouteDeclaration> {
+export async function declareProviderRoute(
+  settings: SettingsLike | undefined,
+  providerId: string,
+): Promise<RouteDeclaration> {
   if (settings === undefined) return 'unavailable'
   const providers = configuredProviders(settings.get(PI_AI_SETTINGS_NAMESPACE))
   if (providers === undefined) return 'unavailable'
   if (providers[providerId] !== undefined) return 'present'
-  await settings.update(PI_AI_SETTINGS_NAMESPACE, { [PROVIDERS_FIELD]: { [providerId]: CATALOG_ROUTE_OVERRIDES } })
+  await settings.update(PI_AI_SETTINGS_NAMESPACE, {
+    [PROVIDERS_FIELD]: { [providerId]: CATALOG_ROUTE_OVERRIDES },
+  })
   return 'declared'
 }

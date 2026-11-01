@@ -1,8 +1,24 @@
 /** Managed configuration owns route identity and selection, never provider discovery. */
-import type { Api, Model, ModelThinkingLevel, Transport, OpenAICompletionsCompat, OpenAIResponsesCompat, AnthropicMessagesCompat } from '@earendil-works/pi-ai'
+
 import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
+import type {
+  AnthropicMessagesCompat,
+  Api,
+  Model,
+  ModelThinkingLevel,
+  OpenAICompletionsCompat,
+  OpenAIResponsesCompat,
+  Transport,
+} from '@earendil-works/pi-ai'
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai'
-import { buildCatalogProfile, catalogError, catalogMap, catalogRecord, catalogString, freezeCatalogValue } from './catalog-routes.ts'
+import {
+  buildCatalogProfile,
+  catalogError,
+  catalogMap,
+  catalogRecord,
+  catalogString,
+  freezeCatalogValue,
+} from './catalog-routes.ts'
 
 const CONFIG_VERSION = 1
 const CONFIG_FIELDS = ['version', 'providers', 'default']
@@ -12,13 +28,30 @@ const SELECTION_FIELDS = ['provider', 'model', 'reasoningEffort']
 export type CatalogAuth = { apiKeyRef: string } | { credentialProvider: string }
 /** Managed sources expose protocol flags, not unrelated gateway routing or template-language configuration. */
 export type CatalogModelCompat =
-  | Omit<OpenAICompletionsCompat, 'chatTemplateKwargs' | 'chatTemplateArgs' | 'openRouterRouting' | 'vercelGatewayRouting' | 'vllmPriority'>
+  | Omit<
+      OpenAICompletionsCompat,
+      | 'chatTemplateKwargs'
+      | 'chatTemplateArgs'
+      | 'openRouterRouting'
+      | 'vercelGatewayRouting'
+      | 'vllmPriority'
+    >
   | OpenAIResponsesCompat
   | Omit<AnthropicMessagesCompat, 'allowedFallbackModels'>
 /** Wire identity and arbitrary sampling payloads cannot be overwritten through metadata. */
-export type CatalogModelMetadata = Partial<Pick<Model<Api>,
-  'api' | 'reasoning' | 'input' | 'cost' | 'contextWindow' | 'maxTokens' | 'thinkingLevelMap' | 'headers'
->> & { compat?: CatalogModelCompat }
+export type CatalogModelMetadata = Partial<
+  Pick<
+    Model<Api>,
+    | 'api'
+    | 'reasoning'
+    | 'input'
+    | 'cost'
+    | 'contextWindow'
+    | 'maxTokens'
+    | 'thinkingLevelMap'
+    | 'headers'
+  >
+> & { compat?: CatalogModelCompat }
 /** Aliases are selector inputs, never additional wire models. */
 export interface CatalogModel {
   id: string
@@ -84,11 +117,14 @@ export function compileCatalog(config: unknown): CatalogSnapshot | undefined {
   const profiles = new Map<string, ResolvedPiAiProviderProfile>()
   for (const declaration of raw.providers) {
     const profile = buildCatalogProfile(declaration)
-    if (profiles.has(profile.provider)) catalogError('providers', 'duplicate provider ' + profile.provider)
+    if (profiles.has(profile.provider))
+      catalogError('providers', `duplicate provider ${profile.provider}`)
     profiles.set(profile.provider, profile)
   }
   const normalized = structuredClone(raw) as unknown as CatalogConfig
-  const providers = catalogMap(normalized.providers.map(provider => [provider.id, provider] as const))
+  const providers = catalogMap(
+    normalized.providers.map((provider) => [provider.id, provider] as const),
+  )
   const aliases = new Map<string, Map<string, string>>()
   let count = 0
   for (const provider of normalized.providers) {
@@ -108,21 +144,34 @@ export function compileCatalog(config: unknown): CatalogSnapshot | undefined {
     catalogString(candidate.provider, 'selection.provider')
     catalogString(candidate.model, 'selection.model')
     const modelId = aliases.get(candidate.provider)?.get(candidate.model)
-    if (modelId === undefined) catalogError('selection', 'provider/model is outside the managed selection')
-    const model = profiles.get(candidate.provider)!.piProvider!.getModels().find(model => model.id === modelId)!
-    if ('reasoningEffort' in candidate && !getSupportedThinkingLevels(model).includes(candidate.reasoningEffort as ModelThinkingLevel)) {
+    if (modelId === undefined)
+      catalogError('selection', 'provider/model is outside the managed selection')
+    const model = profiles
+      .get(candidate.provider)!
+      .piProvider!.getModels()
+      .find((model) => model.id === modelId)!
+    if (
+      'reasoningEffort' in candidate &&
+      !getSupportedThinkingLevels(model).includes(candidate.reasoningEffort as ModelThinkingLevel)
+    ) {
       catalogError('selection.reasoningEffort', 'effort is not supported by the selected model')
     }
     return freezeCatalogValue({
-      provider: candidate.provider, model: modelId,
-      ...('reasoningEffort' in candidate ? { reasoningEffort: candidate.reasoningEffort as ModelThinkingLevel } : {}),
+      provider: candidate.provider,
+      model: modelId,
+      ...('reasoningEffort' in candidate
+        ? { reasoningEffort: candidate.reasoningEffort as ModelThinkingLevel }
+        : {}),
     })
   }
   if (count === 0) {
     if (normalized.default !== null) catalogError('default', 'empty catalog requires null')
   } else normalized.default = resolveSelection(normalized.default)
   return freezeCatalogValue({
-    config: normalized, profiles: catalogMap(profiles), providers,
-    selection: normalized.default, resolveSelection,
+    config: normalized,
+    profiles: catalogMap(profiles),
+    providers,
+    selection: normalized.default,
+    resolveSelection,
   })
 }

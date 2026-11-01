@@ -15,28 +15,28 @@
 
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import type { CredentialKey, CredentialRecord } from '@deepseek-ai/dsh-credentials'
+import { credentialKey } from '@deepseek-ai/dsh-credentials'
+import { LlmError } from '@deepseek-ai/dsh-llm'
+import type { Credential } from '@earendil-works/pi-ai'
 import { createModels } from '@earendil-works/pi-ai'
 import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
-import type { Credential } from '@earendil-works/pi-ai'
-import { credentialKey } from '@deepseek-ai/dsh-credentials'
-import type { CredentialKey, CredentialRecord } from '@deepseek-ai/dsh-credentials'
-import { LlmError } from '@deepseek-ai/dsh-llm'
+import type { CodexCredentialService } from '../src/codex.ts'
 import {
+  buildCodexProfile,
   CODEX_CATALOG_ID,
+  codexApiKey,
+  codexAuth,
   DEFAULT_CODEX_DISPLAY_NAME,
   DEFAULT_CODEX_ROUTE_ID,
   HarnessCredentialStore,
-  buildCodexProfile,
-  codexApiKey,
-  codexAuth,
   recordKeyFor,
   withTransport,
 } from '../src/codex.ts'
-import type { CodexCredentialService } from '../src/codex.ts'
-import { answerPrompt, renderEvent, renderPrompt, runCodexLogin } from '../src/codex-login.ts'
 import type { LoginModels, LoginTerminal } from '../src/codex-login.ts'
-import { Config } from '../src/index.ts'
+import { answerPrompt, renderEvent, renderPrompt, runCodexLogin } from '../src/codex-login.ts'
 import type { Config as ConfigShape } from '../src/index.ts'
+import { Config } from '../src/index.ts'
 
 /**
  * Resolve one raw entry document the way the loader hands it to the schema: a
@@ -54,28 +54,50 @@ const route = { provider: DEFAULT_CODEX_ROUTE_ID, displayName: DEFAULT_CODEX_DIS
 const CATALOG_MODEL_ID = 'gpt-5.6-luna'
 
 /** A declared extra cloning the catalog sibling above, as a subscription-only id would. */
-const DECLARED_EXTRA = { id: 'declared-extra-fixture', name: 'Declared extra fixture', template: CATALOG_MODEL_ID }
+const DECLARED_EXTRA = {
+  id: 'declared-extra-fixture',
+  name: 'Declared extra fixture',
+  template: CATALOG_MODEL_ID,
+}
 
 /** The served ids of one route configuration, in the order it advertises them. */
-function servedIds(config: { models?: readonly string[]; extraModels?: { id: string; name?: string; template?: string }[] } = {}): string[] {
-  return buildCodexProfile({ ...route, ...config }).piProvider!.getModels().map(model => model.id)
+function servedIds(
+  config: {
+    models?: readonly string[]
+    extraModels?: { id: string; name?: string; template?: string }[]
+  } = {},
+): string[] {
+  return buildCodexProfile({ ...route, ...config })
+    .piProvider!.getModels()
+    .map((model) => model.id)
 }
 
 /** One fresh OAuth grant, as pi-ai's login would produce it. */
 function grant(): Credential {
-  return { type: 'oauth', access: 'access-token', refresh: 'refresh-token', expires: Date.now() + 3600_000, accountId: 'account-1' }
+  return {
+    type: 'oauth',
+    access: 'access-token',
+    refresh: 'refresh-token',
+    expires: Date.now() + 3600_000,
+    accountId: 'account-1',
+  }
 }
 
 /** An in-memory credentials service standing in for the document. */
-function memoryService(seed: ReadonlyMap<string, CredentialRecord> = new Map()): CodexCredentialService & { records: Map<string, CredentialRecord> } {
+function memoryService(
+  seed: ReadonlyMap<string, CredentialRecord> = new Map(),
+): CodexCredentialService & { records: Map<string, CredentialRecord> } {
   const records = new Map(seed)
   return {
     records,
     readRecord: (key) => Promise.resolve(records.get(String(key))),
-    listRecords: () => Promise.resolve([...records].map(([key, record]) => ({
-      key: key as unknown as CredentialKey,
-      kind: record.kind,
-    }))),
+    listRecords: () =>
+      Promise.resolve(
+        [...records].map(([key, record]) => ({
+          key: key as unknown as CredentialKey,
+          kind: record.kind,
+        })),
+      ),
     modifyRecord: async (key, mutate) => {
       const next = await mutate(records.get(String(key)))
       if (next !== undefined) records.set(String(key), next)
@@ -89,7 +111,9 @@ function memoryService(seed: ReadonlyMap<string, CredentialRecord> = new Map()):
 }
 
 /** A scripted terminal answering every question from a queue. */
-function scriptedTerminal(answers: string[]): LoginTerminal & { printed: string[]; asked: string[] } {
+function scriptedTerminal(
+  answers: string[],
+): LoginTerminal & { printed: string[]; asked: string[] } {
   const printed: string[] = []
   const asked: string[] = []
   const queue = [...answers]
@@ -99,17 +123,22 @@ function scriptedTerminal(answers: string[]): LoginTerminal & { printed: string[
     question: (prompt) => {
       asked.push(prompt)
       const answer = queue.shift()
-      assert.notEqual(answer, undefined, 'terminal ran out of scripted answers for: ' + prompt)
+      assert.notEqual(answer, undefined, `terminal ran out of scripted answers for: ${prompt}`)
       return Promise.resolve(answer as string)
     },
-    print: (line) => { printed.push(line) },
+    print: (line) => {
+      printed.push(line)
+    },
     signal: new AbortController().signal,
   }
 }
 
 describe('codex record address', () => {
   it('shares core’s grant address instead of forking a second sign-in', () => {
-    assert.equal(String(recordKeyFor(CODEX_CATALOG_ID)), String(credentialKey('llm-pi-ai', CODEX_CATALOG_ID)))
+    assert.equal(
+      String(recordKeyFor(CODEX_CATALOG_ID)),
+      String(credentialKey('llm-pi-ai', CODEX_CATALOG_ID)),
+    )
   })
 })
 
@@ -134,10 +163,15 @@ describe('codex profile', () => {
   })
 
   it('pins the configured transport on a request and leaves other options alone', () => {
-    const pinned = withTransport({ transport: 'auto', temperature: 0.2 }, { ...route, transport: 'sse' })
+    const pinned = withTransport(
+      { transport: 'auto', temperature: 0.2 },
+      { ...route, transport: 'sse' },
+    )
     assert.deepEqual(pinned, { transport: 'sse', temperature: 0.2 })
     // A route that pins none is not a route that overrides: pi-ai keeps choosing.
-    assert.deepEqual(withTransport({ transport: 'websocket-cached' }, route), { transport: 'websocket-cached' })
+    assert.deepEqual(withTransport({ transport: 'websocket-cached' }, route), {
+      transport: 'websocket-cached',
+    })
     assert.equal(withTransport(undefined, { ...route, transport: 'sse' }), undefined)
   })
 
@@ -151,11 +185,13 @@ describe('codex settings-declared extra models', () => {
   it('serves a declared model cloned from its template', () => {
     const profile = buildCodexProfile({
       ...route,
-      extraModels: [{ id: 'declared-extra-fixture', name: 'Declared extra fixture', template: 'gpt-5.6-luna' }],
+      extraModels: [
+        { id: 'declared-extra-fixture', name: 'Declared extra fixture', template: 'gpt-5.6-luna' },
+      ],
     })
     const models = profile.piProvider!.getModels()
-    const extra = models.find(model => model.id === 'declared-extra-fixture')
-    const template = models.find(model => model.id === 'gpt-5.6-luna')!
+    const extra = models.find((model) => model.id === 'declared-extra-fixture')
+    const template = models.find((model) => model.id === 'gpt-5.6-luna')!
     assert.notEqual(extra, undefined, 'route serves the declared model')
     assert.equal(extra!.name, 'Declared extra fixture')
     assert.equal(extra!.api, template.api)
@@ -166,30 +202,53 @@ describe('codex settings-declared extra models', () => {
   })
 
   it('records an unknown template beside serviceable models', () => {
-    const profile = buildCodexProfile({ ...route, extraModels: [{ id: 'declared-extra-fixture', template: 'no-such-model' }] })
+    const profile = buildCodexProfile({
+      ...route,
+      extraModels: [{ id: 'declared-extra-fixture', template: 'no-such-model' }],
+    })
     assert.ok(profile.modelErrors.has('declared-extra-fixture'), 'failure is diagnosable')
-    assert.equal(profile.piProvider!.getModels().find(model => model.id === 'declared-extra-fixture'), undefined)
+    assert.equal(
+      profile.piProvider!.getModels().find((model) => model.id === 'declared-extra-fixture'),
+      undefined,
+    )
     // One mistyped declaration must not silence the subscription route.
     assert.ok(profile.piProvider!.getModels().length > 0)
   })
 
   it('records a declaration that names no template and clones nothing', () => {
     const profile = buildCodexProfile({ ...route, extraModels: [{ id: 'declared-extra-fixture' }] })
-    assert.ok(profile.modelErrors.has('declared-extra-fixture'), 'a route with no shipped default must say so')
-    assert.equal(profile.piProvider!.getModels().find(model => model.id === 'declared-extra-fixture'), undefined)
+    assert.ok(
+      profile.modelErrors.has('declared-extra-fixture'),
+      'a route with no shipped default must say so',
+    )
+    assert.equal(
+      profile.piProvider!.getModels().find((model) => model.id === 'declared-extra-fixture'),
+      undefined,
+    )
   })
 
   it('leaves a catalog-shipped id to the catalog', () => {
     // The installed line names its own catalog, so the shipped id and the name it keeps come from there.
-    const shipped = builtinProviders().find(provider => provider.id === CODEX_CATALOG_ID)!.getModels()[0]!
-    const profile = buildCodexProfile({ ...route, extraModels: [{ id: shipped.id, name: 'Renamed' }] })
-    assert.equal(profile.piProvider!.getModels().find(model => model.id === shipped.id)!.name, shipped.name)
+    const shipped = builtinProviders()
+      .find((provider) => provider.id === CODEX_CATALOG_ID)!
+      .getModels()[0]!
+    const profile = buildCodexProfile({
+      ...route,
+      extraModels: [{ id: shipped.id, name: 'Renamed' }],
+    })
+    assert.equal(
+      profile.piProvider!.getModels().find((model) => model.id === shipped.id)!.name,
+      shipped.name,
+    )
   })
 })
 
 describe('codex exact model selection', () => {
   it('distills the composition entry into the models the entry itself carries', () => {
-    const resolved = resolveConfig({ codexExtraModels: [DECLARED_EXTRA], codexModels: [DECLARED_EXTRA.id] })
+    const resolved = resolveConfig({
+      codexExtraModels: [DECLARED_EXTRA],
+      codexModels: [DECLARED_EXTRA.id],
+    })
     assert.deepEqual(resolved.codexModels, [DECLARED_EXTRA.id])
     assert.deepEqual(resolved.codexExtraModels?.[0]?.template, CATALOG_MODEL_ID)
   })
@@ -203,11 +262,16 @@ describe('codex exact model selection', () => {
 
   it('serves only the declared ids, in the declared order', () => {
     // Catalog last: the declaration, not the catalog, decides the order.
-    assert.deepEqual(servedIds({ models: [DECLARED_EXTRA.id, CATALOG_MODEL_ID], extraModels: [DECLARED_EXTRA] }), [DECLARED_EXTRA.id, CATALOG_MODEL_ID])
+    assert.deepEqual(
+      servedIds({ models: [DECLARED_EXTRA.id, CATALOG_MODEL_ID], extraModels: [DECLARED_EXTRA] }),
+      [DECLARED_EXTRA.id, CATALOG_MODEL_ID],
+    )
   })
 
   it('keeps a repeated id as one model at its first position', () => {
-    assert.deepEqual(servedIds({ models: [CATALOG_MODEL_ID, CATALOG_MODEL_ID] }), [CATALOG_MODEL_ID])
+    assert.deepEqual(servedIds({ models: [CATALOG_MODEL_ID, CATALOG_MODEL_ID] }), [
+      CATALOG_MODEL_ID,
+    ])
   })
 
   it('serves nothing when the selection is declared empty', () => {
@@ -220,16 +284,22 @@ describe('codex exact model selection', () => {
   it('refuses a selected id nothing resolves, naming the route and the id', () => {
     assert.throws(
       () => buildCodexProfile({ ...route, models: [CATALOG_MODEL_ID, 'no-such-model'] }),
-      (error: unknown) => error instanceof LlmError
-        && /UNKNOWN_MODEL/.test(error.code)
-        && error.message.includes(route.provider)
-        && error.message.includes('no-such-model'),
+      (error: unknown) =>
+        error instanceof LlmError &&
+        /UNKNOWN_MODEL/.test(error.code) &&
+        error.message.includes(route.provider) &&
+        error.message.includes('no-such-model'),
     )
   })
 
   it('refuses a selected extra whose template does not resolve', () => {
     assert.throws(
-      () => buildCodexProfile({ ...route, models: [DECLARED_EXTRA.id], extraModels: [{ id: DECLARED_EXTRA.id, template: 'no-such-model' }] }),
+      () =>
+        buildCodexProfile({
+          ...route,
+          models: [DECLARED_EXTRA.id],
+          extraModels: [{ id: DECLARED_EXTRA.id, template: 'no-such-model' }],
+        }),
       (error: unknown) => error instanceof LlmError && error.message.includes(DECLARED_EXTRA.id),
     )
   })
@@ -265,19 +335,23 @@ describe('harness credential store', () => {
     await store.modify(CODEX_CATALOG_ID, async () => shaped)
     const record = service.records.get(String(recordKeyFor(CODEX_CATALOG_ID)))
     assert.equal(record?.kind, 'grant')
-    assert.ok(!('extra' in ((record as { payload: Record<string, unknown> }).payload)))
+    assert.ok(!('extra' in (record as { payload: Record<string, unknown> }).payload))
   })
 
   it('hands the current grant to a refresh and reports foreign scopes as others’', async () => {
     const foreign = credentialKey('other-plugin', 'other-id')
-    const service = memoryService(new Map([
-      [String(foreign), { kind: 'api-key', key: 'k' }],
-    ]))
+    const service = memoryService(new Map([[String(foreign), { kind: 'api-key', key: 'k' }]]))
     const store = new HarnessCredentialStore(() => service)
     const original = grant()
     await store.modify(CODEX_CATALOG_ID, async () => original)
     let seen: Credential | undefined = { type: 'api_key' }
-    const rotated: Credential = { type: 'oauth', access: 'new-access', refresh: 'new-refresh', expires: Date.now() + 3600_000, accountId: 'account-1' }
+    const rotated: Credential = {
+      type: 'oauth',
+      access: 'new-access',
+      refresh: 'new-refresh',
+      expires: Date.now() + 3600_000,
+      accountId: 'account-1',
+    }
     await store.modify(CODEX_CATALOG_ID, async (current) => {
       seen = current
       return rotated
@@ -289,7 +363,10 @@ describe('harness credential store', () => {
 
   it('refuses writes with nowhere to store and ids with nowhere to address', async () => {
     const bare = new HarnessCredentialStore(() => undefined)
-    await assert.rejects(() => bare.modify(CODEX_CATALOG_ID, async () => grant()), /nowhere to store/)
+    await assert.rejects(
+      () => bare.modify(CODEX_CATALOG_ID, async () => grant()),
+      /nowhere to store/,
+    )
     const keyed = new HarnessCredentialStore(() => memoryService())
     await assert.rejects(() => keyed.modify('UPPER.DOTTED', async () => grant()), /cannot address/)
     await keyed.delete('UPPER.DOTTED')
@@ -317,19 +394,32 @@ describe('harness credential store', () => {
 
 describe('terminal login', () => {
   it('renders every pi-ai event with its URL and code, never a secret', () => {
-    assert.deepEqual(renderEvent({ type: 'progress', message: 'Exchanging the code' }), ['Exchanging the code'])
+    assert.deepEqual(renderEvent({ type: 'progress', message: 'Exchanging the code' }), [
+      'Exchanging the code',
+    ])
     assert.deepEqual(
-      renderEvent({ type: 'auth_url', url: 'https://auth.example/start', instructions: 'Approve in the tab' }),
+      renderEvent({
+        type: 'auth_url',
+        url: 'https://auth.example/start',
+        instructions: 'Approve in the tab',
+      }),
       ['Approve in the tab', 'https://auth.example/start'],
     )
+    assert.deepEqual(renderEvent({ type: 'auth_url', url: 'https://auth.example/plain' }), [
+      'Open this page to continue signing in:',
+      'https://auth.example/plain',
+    ])
+    const device = renderEvent({
+      type: 'device_code',
+      userCode: 'WXYZ-1234',
+      verificationUri: 'https://device.example',
+    })
+    assert.ok(device.some((line) => line.includes('https://device.example')))
+    assert.ok(device.some((line) => line.includes('WXYZ-1234')))
     assert.deepEqual(
-      renderEvent({ type: 'auth_url', url: 'https://auth.example/plain' }),
-      ['Open this page to continue signing in:', 'https://auth.example/plain'],
+      renderEvent({ type: 'info', message: 'Read this', links: [{ url: 'https://help.example' }] }),
+      ['Read this https://help.example'],
     )
-    const device = renderEvent({ type: 'device_code', userCode: 'WXYZ-1234', verificationUri: 'https://device.example' })
-    assert.ok(device.some(line => line.includes('https://device.example')))
-    assert.ok(device.some(line => line.includes('WXYZ-1234')))
-    assert.deepEqual(renderEvent({ type: 'info', message: 'Read this', links: [{ url: 'https://help.example' }] }), ['Read this https://help.example'])
     assert.deepEqual(renderEvent({ type: 'info', message: 'Plain' }), ['Plain'])
   })
 
@@ -337,32 +427,55 @@ describe('terminal login', () => {
     const prompt = renderPrompt({
       type: 'select',
       message: 'Select method:',
-      options: [{ id: 'browser', label: 'Browser login' }, { id: 'device_code', label: 'Device code' }],
+      options: [
+        { id: 'browser', label: 'Browser login' },
+        { id: 'device_code', label: 'Device code' },
+      ],
     })
     assert.ok(prompt.options !== undefined)
     const byNumber = scriptedTerminal(['2'])
-    await assert.equal(await answerPrompt(byNumber, {
-      type: 'select',
-      message: 'Select method:',
-      options: [{ id: 'browser', label: 'Browser login' }, { id: 'device_code', label: 'Device code' }],
-    }), 'device_code')
+    await assert.equal(
+      await answerPrompt(byNumber, {
+        type: 'select',
+        message: 'Select method:',
+        options: [
+          { id: 'browser', label: 'Browser login' },
+          { id: 'device_code', label: 'Device code' },
+        ],
+      }),
+      'device_code',
+    )
     const byId = scriptedTerminal(['browser'])
-    await assert.equal(await answerPrompt(byId, {
-      type: 'select',
-      message: 'Select method:',
-      options: [{ id: 'browser', label: 'Browser login' }, { id: 'device_code', label: 'Device code' }],
-    }), 'browser')
+    await assert.equal(
+      await answerPrompt(byId, {
+        type: 'select',
+        message: 'Select method:',
+        options: [
+          { id: 'browser', label: 'Browser login' },
+          { id: 'device_code', label: 'Device code' },
+        ],
+      }),
+      'browser',
+    )
     const lost = scriptedTerminal(['7'])
-    await assert.rejects(() => answerPrompt(lost, {
-      type: 'select',
-      message: 'Select method:',
-      options: [{ id: 'browser', label: 'Browser login' }],
-    }), /answer the prompt/)
+    await assert.rejects(
+      () =>
+        answerPrompt(lost, {
+          type: 'select',
+          message: 'Select method:',
+          options: [{ id: 'browser', label: 'Browser login' }],
+        }),
+      /answer the prompt/,
+    )
   })
 
   it('passes text answers through with their placeholder hint', async () => {
     const terminal = scriptedTerminal(['pasted-code'])
-    const answer = await answerPrompt(terminal, { type: 'manual_code', message: 'Paste the code', placeholder: 'http://localhost:1455/auth/callback' })
+    const answer = await answerPrompt(terminal, {
+      type: 'manual_code',
+      message: 'Paste the code',
+      placeholder: 'http://localhost:1455/auth/callback',
+    })
     assert.equal(answer, 'pasted-code')
     assert.ok(terminal.asked[0]!.includes('http://localhost:1455/auth/callback'))
   })
@@ -378,17 +491,24 @@ describe('terminal login', () => {
         const choice = await interaction.prompt({
           type: 'select',
           message: 'Select OpenAI Codex login method:',
-          options: [{ id: 'browser', label: 'Browser' }, { id: 'device_code', label: 'Device' }],
+          options: [
+            { id: 'browser', label: 'Browser' },
+            { id: 'device_code', label: 'Device' },
+          ],
         })
         assert.equal(choice, 'device_code')
-        interaction.notify({ type: 'device_code', userCode: 'WXYZ-1234', verificationUri: 'https://device.example' })
+        interaction.notify({
+          type: 'device_code',
+          userCode: 'WXYZ-1234',
+          verificationUri: 'https://device.example',
+        })
         return grant()
       },
     }
     await runCodexLogin(models, { id: CODEX_CATALOG_ID }, terminal)
     assert.deepEqual(seen, { providerId: CODEX_CATALOG_ID, type: 'oauth' })
-    assert.ok(terminal.printed.some(line => line.includes('WXYZ-1234')))
-    assert.ok(terminal.printed.some(line => line.includes('Signed in')))
+    assert.ok(terminal.printed.some((line) => line.includes('WXYZ-1234')))
+    assert.ok(terminal.printed.some((line) => line.includes('Signed in')))
     for (const line of terminal.printed) {
       assert.ok(!line.includes('access-token'), 'output must never carry the access token')
       assert.ok(!line.includes('refresh-token'), 'output must never carry the refresh token')

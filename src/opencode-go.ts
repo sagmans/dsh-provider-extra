@@ -16,13 +16,22 @@
  * @module dsh-provider-extra/opencode-go
  */
 
-import { defaultProviderAuthContext } from '@earendil-works/pi-ai'
-import type { Api, AuthContext, Credential, CredentialInfo, CredentialStore, Model, Provider, ProviderHeaders } from '@earendil-works/pi-ai'
-import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
 import { resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
-import { resolveExtraModels, selectWhitelistedModels } from './extra-models.ts'
+import type {
+  Api,
+  AuthContext,
+  Credential,
+  CredentialInfo,
+  CredentialStore,
+  Model,
+  Provider,
+  ProviderHeaders,
+} from '@earendil-works/pi-ai'
+import { defaultProviderAuthContext } from '@earendil-works/pi-ai'
+import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
 import type { ExtraModelSpec } from './extra-models.ts'
+import { resolveExtraModels, selectWhitelistedModels } from './extra-models.ts'
 
 /** pi-ai catalog id of the OpenCode Go provider this route mirrors. */
 export const OPENCODE_GO_PROVIDER_ID = 'opencode-go'
@@ -48,7 +57,11 @@ export const DEFAULT_EXTRA_MODEL_TEMPLATE = 'deepseek-v4.1-flash'
 
 /** Shipped extras for ids the installed catalog predates while the gateway already serves them. */
 const DEFAULT_EXTRA_MODELS: readonly ExtraModelSpec[] = [
-  { id: DEEPSEEK_V41_FLASH_ID, name: DEEPSEEK_V41_FLASH_NAME, template: DEFAULT_EXTRA_MODEL_TEMPLATE },
+  {
+    id: DEEPSEEK_V41_FLASH_ID,
+    name: DEEPSEEK_V41_FLASH_NAME,
+    template: DEFAULT_EXTRA_MODEL_TEMPLATE,
+  },
 ]
 
 // The resolved profile defaults below mirror dsh-llm-pi-ai's config resolution,
@@ -97,11 +110,13 @@ interface RoutingStreamOptions {
  * @throws Error when the installed pi-ai catalog no longer ships OpenCode Go.
  */
 function catalogOpenCodeGo(): Provider {
-  const found = builtinProviders().find(provider => provider.id === OPENCODE_GO_PROVIDER_ID)
+  const found = builtinProviders().find((provider) => provider.id === OPENCODE_GO_PROVIDER_ID)
   if (found === undefined) {
     throw new Error(
-      'dsh-provider-extra: the installed pi-ai catalog has no provider "' + OPENCODE_GO_PROVIDER_ID + '";'
-      + ' pin @earendil-works/pi-ai to a catalog that ships it',
+      'dsh-provider-extra: the installed pi-ai catalog has no provider "' +
+        OPENCODE_GO_PROVIDER_ID +
+        '";' +
+        ' pin @earendil-works/pi-ai to a catalog that ships it',
     )
   }
   return found
@@ -118,7 +133,10 @@ function catalogOpenCodeGo(): Provider {
  * @param config - the route configuration.
  * @returns the options with the routing header merged in.
  */
-function withRoutingHeader<T extends RoutingStreamOptions>(options: T | undefined, config: OpenCodeGoRouteConfig): T | undefined {
+function withRoutingHeader<T extends RoutingStreamOptions>(
+  options: T | undefined,
+  config: OpenCodeGoRouteConfig,
+): T | undefined {
   if (options === undefined) return undefined
   const routingId = options.sessionId ?? config.fallbackSessionId
   if (routingId === undefined) return options
@@ -138,20 +156,26 @@ function withRoutingHeader<T extends RoutingStreamOptions>(options: T | undefine
  * @param resolved - catalog and extra models already resolved and selected.
  * @returns the provider to register into the adapter's model collection.
  */
-function routeProvider(config: OpenCodeGoRouteConfig, catalog: Provider, resolved: readonly Model<Api>[]): Provider {
-  const models = resolved.map(model => ({
+function routeProvider(
+  config: OpenCodeGoRouteConfig,
+  catalog: Provider,
+  resolved: readonly Model<Api>[],
+): Provider {
+  const models = resolved.map((model) => ({
     ...model,
-    ...config.baseURL === undefined ? {} : { baseUrl: config.baseURL },
+    ...(config.baseURL === undefined ? {} : { baseUrl: config.baseURL }),
     provider: config.provider,
   }))
   return {
     id: config.provider,
     name: config.displayName,
-    ...config.baseURL === undefined ? {} : { baseUrl: config.baseURL },
+    ...(config.baseURL === undefined ? {} : { baseUrl: config.baseURL }),
     auth: catalog.auth,
     getModels: () => models,
-    stream: (model, context, options) => catalog.stream(model, context, withRoutingHeader(options, config)),
-    streamSimple: (model, context, options) => catalog.streamSimple(model, context, withRoutingHeader(options, config)),
+    stream: (model, context, options) =>
+      catalog.stream(model, context, withRoutingHeader(options, config)),
+    streamSimple: (model, context, options) =>
+      catalog.streamSimple(model, context, withRoutingHeader(options, config)),
   }
 }
 
@@ -171,11 +195,15 @@ export function buildOpenCodeGoProfile(config: OpenCodeGoRouteConfig): ResolvedP
   // Selection runs last so a whitelist may name a shipped or declared extra
   // exactly as it names a catalog model, and so a typo in either is refused
   // here rather than served as a route quietly missing a model.
-  const models = selectWhitelistedModels(config.provider, [...catalog.getModels(), ...extras.models], config.models)
+  const models = selectWhitelistedModels(
+    config.provider,
+    [...catalog.getModels(), ...extras.models],
+    config.models,
+  )
   return {
     provider: config.provider,
     displayName: config.displayName,
-    ...config.headers === undefined ? {} : { headers: { ...config.headers } },
+    ...(config.headers === undefined ? {} : { headers: { ...config.headers } }),
     streamIdleTimeoutMs: STREAM_IDLE_TIMEOUT_MS,
     maxRequestImageBytes: MAX_REQUEST_IMAGE_BYTES,
     requestImagePixelBudget: REQUEST_IMAGE_PIXEL_BUDGET,
@@ -206,7 +234,10 @@ class EmptyCredentialStore implements CredentialStore {
     return Promise.resolve([])
   }
 
-  modify(_providerId: string, fn: (current: Credential | undefined) => Promise<Credential | undefined>): Promise<Credential | undefined> {
+  modify(
+    _providerId: string,
+    fn: (current: Credential | undefined) => Promise<Credential | undefined>,
+  ): Promise<Credential | undefined> {
     return fn(undefined)
   }
 

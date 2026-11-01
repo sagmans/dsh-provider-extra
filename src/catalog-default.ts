@@ -1,19 +1,29 @@
 /** Defaults share the profile Config owner rather than the legacy settings namespace. */
 import type { Context } from '@deepseek-ai/cordis'
 import { LlmError } from '@deepseek-ai/dsh-llm'
-import { compileCatalog } from './catalog.ts'
 import type { CatalogSelection, CatalogSnapshot } from './catalog.ts'
+import { compileCatalog } from './catalog.ts'
 
 const EDITOR_SERVICE = 'configEditor'
 const PERSISTENCE_UNAVAILABLE = 'CONFIG_PERSISTENCE_UNAVAILABLE'
 
 /** Structural capability matches the public source configEditor API without adding a peer. */
 interface ConfigEditor {
-  edit(entry: unknown, change: (current: Record<string, unknown>, inherited: Record<string, unknown>) => Record<string, unknown>): Promise<void>
+  edit(
+    entry: unknown,
+    change: (
+      current: Record<string, unknown>,
+      inherited: Record<string, unknown>,
+    ) => Record<string, unknown>,
+  ): Promise<void>
 }
 
 /** A detached selection prevents callers from mutating the catalog's default. */
-export function catalogDefault(owner: Context, snapshot: CatalogSnapshot, requireOwnership?: () => void): {
+export function catalogDefault(
+  owner: Context,
+  snapshot: CatalogSnapshot,
+  requireOwnership?: () => void,
+): {
   currentSelection(): CatalogSelection
   saveSelection(next: unknown): Promise<void>
 } {
@@ -21,7 +31,10 @@ export function catalogDefault(owner: Context, snapshot: CatalogSnapshot, requir
     currentSelection() {
       requireOwnership?.()
       if (snapshot.selection === null) {
-        throw new LlmError('dsh-provider-extra: the catalog selects no default model', 'NO_DEFAULT_MODEL')
+        throw new LlmError(
+          'dsh-provider-extra: the catalog selects no default model',
+          'NO_DEFAULT_MODEL',
+        )
       }
       return { ...snapshot.selection }
     },
@@ -44,7 +57,10 @@ export function catalogDefault(owner: Context, snapshot: CatalogSnapshot, requir
         // restoring membership removed by another profile edit.
         const latest = compileCatalog(current.catalog)
         if (latest === undefined) {
-          throw new LlmError('dsh-provider-extra: the owning Config no longer contains a catalog', 'CATALOG_OWNER_CHANGED')
+          throw new LlmError(
+            'dsh-provider-extra: the owning Config no longer contains a catalog',
+            'CATALOG_OWNER_CHANGED',
+          )
         }
         const updated = { ...latest.config, default: latest.resolveSelection(selection) }
         compileCatalog(updated)

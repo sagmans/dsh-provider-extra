@@ -7,8 +7,8 @@
 
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { declareProviderRoute, declaredCredentialRef, legacySettings } from '../src/login-route.ts'
 import type { SettingsLike } from '../src/login-route.ts'
+import { declaredCredentialRef, declareProviderRoute, legacySettings } from '../src/login-route.ts'
 
 /** A settings service over one fixed namespace value, recording every write. */
 function settingsOf(value: unknown): { settings: SettingsLike; written: object[] } {
@@ -26,13 +26,17 @@ function settingsOf(value: unknown): { settings: SettingsLike; written: object[]
 
 describe('declaring a provider route', () => {
   it('adds one catalog route beside the routes a profile already configured', async () => {
-    const { settings, written } = settingsOf({ providers: { 'kimi-coding': { apiKeyEnv: 'KIMI_CODING_API_KEY' } } })
+    const { settings, written } = settingsOf({
+      providers: { 'kimi-coding': { apiKeyEnv: 'KIMI_CODING_API_KEY' } },
+    })
     assert.equal(await declareProviderRoute(settings, 'qwen-token-plan-individual'), 'declared')
     assert.deepEqual(written, [{ providers: { 'qwen-token-plan-individual': {} } }])
   })
 
   it('leaves a configured route alone, so its own overrides survive', async () => {
-    const { settings, written } = settingsOf({ providers: { 'qwen-token-plan-individual': { apiKeyEnv: 'QWEN_KEY' } } })
+    const { settings, written } = settingsOf({
+      providers: { 'qwen-token-plan-individual': { apiKeyEnv: 'QWEN_KEY' } },
+    })
     assert.equal(await declareProviderRoute(settings, 'qwen-token-plan-individual'), 'present')
     assert.deepEqual(written, [])
   })
@@ -63,13 +67,18 @@ describe('the settings seam a running line publishes', () => {
 
   it('reports a declaration without a route as unavailable rather than failing', async () => {
     const forms = { describe: () => [], update: async () => {} }
-    assert.equal(await declareProviderRoute(legacySettings(forms), 'qwen-token-plan-individual'), 'unavailable')
+    assert.equal(
+      await declareProviderRoute(legacySettings(forms), 'qwen-token-plan-individual'),
+      'unavailable',
+    )
   })
 })
 
 describe('reading a declared route credential', () => {
   it('names the reference a configured route resolves', () => {
-    const { settings } = settingsOf({ providers: { 'kimi-coding': { apiKeyEnv: 'KIMI_CODING_API_KEY' } } })
+    const { settings } = settingsOf({
+      providers: { 'kimi-coding': { apiKeyEnv: 'KIMI_CODING_API_KEY' } },
+    })
     assert.equal(declaredCredentialRef(settings, 'kimi-coding'), 'KIMI_CODING_API_KEY')
   })
 

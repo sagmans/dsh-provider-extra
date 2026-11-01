@@ -2,10 +2,10 @@
 import assert from 'node:assert/strict'
 import { it } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
+import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { LlmAdapter, markAgentLoopRequest } from '@deepseek-ai/dsh-llm'
 import * as startup from '../src/headless-startup.ts'
 import { currentInvocationTier, mountTierInvocation } from '../src/tier-invocation.ts'
-import LlmRuntime, { LlmAdapter, markAgentLoopRequest } from '@deepseek-ai/dsh-llm'
-import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 
 const INVALID = 'not-a-tier'
 const TASK = 'example task'
@@ -17,38 +17,64 @@ const FAST = 'fast'
 const CLEAR = 'provider-default'
 const PRIORITY = 'priority'
 
-it('rejects invalid tiers before the stock runner can observe headlessStartup', async t => {
+it('rejects invalid tiers before the stock runner can observe headlessStartup', async (t) => {
   const ctx = new Context()
   const exits: number[] = []
   let output = ''
-  t.mock.method(process.stdout, 'write', (text: string) => { output += text; return true })
+  t.mock.method(process.stdout, 'write', (text: string) => {
+    output += text
+    return true
+  })
   ctx.provide('cmdlineArgs', { get: () => ['--json', '--service-tier', INVALID, TASK] })
-  ctx.provide('appExit', (code: number) => { exits.push(code) })
+  ctx.provide('appExit', (code: number) => {
+    exits.push(code)
+  })
   ctx.provide('agents', { roots: () => [] })
   mountTierInvocation(ctx, {
-    choices: () => [], current: () => undefined,
-    resolve: () => { assert.fail('invalid syntax must fail before resolving a route') },
-    select: async () => { assert.fail('startup must not persist') },
+    choices: () => [],
+    current: () => undefined,
+    resolve: () => {
+      assert.fail('invalid syntax must fail before resolving a route')
+    },
+    select: async () => {
+      assert.fail('startup must not persist')
+    },
   })
   try {
     startup.apply(ctx)
     assert.deepEqual(exits, [1])
     assert.equal(ctx.get('headlessStartup'), undefined)
-    assert.deepEqual(JSON.parse(output), { type: 'error', message: 'unsupported --service-tier: not-a-tier' })
-  } finally { await ctx.fiber.dispose() }
+    assert.deepEqual(JSON.parse(output), {
+      type: 'error',
+      message: 'unsupported --service-tier: not-a-tier',
+    })
+  } finally {
+    await ctx.fiber.dispose()
+  }
 })
 
-it('preserves task, stdin, json, resume and separator grammar without activating help', async t => {
+it('preserves task, stdin, json, resume and separator grammar without activating help', async (t) => {
   let output = ''
   let diagnostic = ''
-  t.mock.method(process.stdout, 'write', (text: string) => { output += text; return true })
-  t.mock.method(process.stderr, 'write', (text: string) => { diagnostic += text; return true })
+  t.mock.method(process.stdout, 'write', (text: string) => {
+    output += text
+    return true
+  })
+  t.mock.method(process.stderr, 'write', (text: string) => {
+    diagnostic += text
+    return true
+  })
   const cases = [
     { args: ['example', 'task'], task: TASK, sessionId: undefined, json: false },
     { args: ['--json', '--session-id', SESSION, TASK], task: TASK, sessionId: SESSION, json: true },
     { args: ['--session-id=--json', TASK], task: TASK, sessionId: '--json', json: false },
     { args: ['--session-id', '--json', TASK], task: TASK, sessionId: '--json', json: false },
-    { args: ['--', '--json', '--service-tier', 'invalid'], task: '--json --service-tier invalid', sessionId: undefined, json: false },
+    {
+      args: ['--', '--json', '--service-tier', 'invalid'],
+      task: '--json --service-tier invalid',
+      sessionId: undefined,
+      json: false,
+    },
     { args: ['-'], task: '-', sessionId: undefined, json: false },
     { args: [], task: undefined, sessionId: undefined, json: false },
   ]
@@ -57,38 +83,61 @@ it('preserves task, stdin, json, resume and separator grammar without activating
     const exits: number[] = []
     const activations: unknown[][] = []
     ctx.provide('cmdlineArgs', { get: () => sample.args })
-    ctx.provide('appExit', (code: number) => { exits.push(code) })
+    ctx.provide('appExit', (code: number) => {
+      exits.push(code)
+    })
     const agents = { roots: () => [] }
     ctx.provide('agents', agents)
-    ctx.provide('providerTierInvocation', { activate(...args: unknown[]) { activations.push(args); return () => {} } })
+    ctx.provide('providerTierInvocation', {
+      activate(...args: unknown[]) {
+        activations.push(args)
+        return () => {}
+      },
+    })
     try {
       startup.apply(ctx)
       assert.deepEqual(exits, [], sample.args.join(' '))
-      assert.deepEqual(ctx.get('headlessStartup'), { task: sample.task, sessionId: sample.sessionId, json: sample.json })
+      assert.deepEqual(ctx.get('headlessStartup'), {
+        task: sample.task,
+        sessionId: sample.sessionId,
+        json: sample.json,
+      })
       assert.deepEqual(activations, [[undefined, sample.sessionId, agents]])
       assert.equal(output, '')
       assert.equal(diagnostic, '')
-    } finally { await ctx.fiber.dispose() }
+    } finally {
+      await ctx.fiber.dispose()
+    }
   }
   for (const flag of ['--help', '-h']) {
     const ctx = new Context()
     const exits: number[] = []
     ctx.provide('cmdlineArgs', { get: () => [flag] })
-    ctx.provide('appExit', (code: number) => { exits.push(code) })
+    ctx.provide('appExit', (code: number) => {
+      exits.push(code)
+    })
     try {
       startup.apply(ctx)
       assert.deepEqual(exits, [0])
       assert.equal(ctx.get('headlessStartup'), undefined)
       assert.match(output, /--service-tier/)
-    } finally { await ctx.fiber.dispose() }
+    } finally {
+      await ctx.fiber.dispose()
+    }
   }
 })
 
-it('rejects usage errors with one launcher exit and correctly framed diagnostics', async t => {
+it('rejects usage errors with one launcher exit and correctly framed diagnostics', async (t) => {
   let output = ''
   let diagnostic = ''
-  t.mock.method(process.stdout, 'write', (text: string) => { output += text; return true })
-  t.mock.method(process.stderr, 'write', (text: string) => { diagnostic += text; return true })
+  t.mock.method(process.stdout, 'write', (text: string) => {
+    output += text
+    return true
+  })
+  t.mock.method(process.stderr, 'write', (text: string) => {
+    diagnostic += text
+    return true
+  })
   const cases = [
     { args: ['--json', '--unknown'], json: true },
     { args: ['--service-tier'], json: false },
@@ -105,7 +154,9 @@ it('rejects usage errors with one launcher exit and correctly framed diagnostics
     const ctx = new Context()
     const exits: number[] = []
     ctx.provide('cmdlineArgs', { get: () => sample.args })
-    ctx.provide('appExit', (code: number) => { exits.push(code) })
+    ctx.provide('appExit', (code: number) => {
+      exits.push(code)
+    })
     try {
       startup.apply(ctx)
       assert.deepEqual(exits, [1], sample.args.join(' '))
@@ -119,7 +170,9 @@ it('rejects usage errors with one launcher exit and correctly framed diagnostics
         assert.equal(output, '')
         assert.match(diagnostic, /^error: /)
       }
-    } finally { await ctx.fiber.dispose() }
+    } finally {
+      await ctx.fiber.dispose()
+    }
   }
 })
 
@@ -131,23 +184,33 @@ it('releases startup-owned overrides on disposal without clearing a newer startu
   const seen: Array<string | null | undefined> = []
   const startups: Context[] = []
   mountTierInvocation(provider, {
-    choices: () => [], current: () => undefined,
-    resolve: (_provider, _model, override) => override === CLEAR ? null : PRIORITY,
-    select: async () => { assert.fail('startup lifecycle must not persist') },
+    choices: () => [],
+    current: () => undefined,
+    resolve: (_provider, _model, override) => (override === CLEAR ? null : PRIORITY),
+    select: async () => {
+      assert.fail('startup lifecycle must not persist')
+    },
   })
-  runtime.registerAdapter([PROVIDER], new class extends LlmAdapter {
-    async *stream(): AsyncIterable<StreamChunk> {
-      seen.push(currentInvocationTier())
-      yield { type: 'finish', reason: { kind: 'stop' } }
-    }
-  }())
+  runtime.registerAdapter(
+    [PROVIDER],
+    new (class extends LlmAdapter {
+      async *stream(): AsyncIterable<StreamChunk> {
+        seen.push(currentInvocationTier())
+        yield { type: 'finish', reason: { kind: 'stop' } }
+      }
+    })(),
+  )
 
   /** Startup and provider contexts have independent real Cordis lifetimes. */
   function launch(override?: string): Context {
     const ctx = new Context()
     startups.push(ctx)
-    ctx.provide('cmdlineArgs', { get: () => override === undefined ? [TASK] : ['--service-tier', override, TASK] })
-    ctx.provide('appExit', () => { assert.fail('valid startup must not exit') })
+    ctx.provide('cmdlineArgs', {
+      get: () => (override === undefined ? [TASK] : ['--service-tier', override, TASK]),
+    })
+    ctx.provide('appExit', () => {
+      assert.fail('valid startup must not exit')
+    })
     ctx.provide('agents', agents)
     ctx.provide('providerTierInvocation', provider.providerTierInvocation)
     startup.apply(ctx)
@@ -157,10 +220,17 @@ it('releases startup-owned overrides on disposal without clearing a newer startu
 
   /** The real runtime resolves policy only when its marked invoking root is dispatched. */
   async function dispatch(id: string): Promise<void> {
-    const request = Object.freeze(markAgentLoopRequest({
-      provider: PROVIDER, model: MODEL, messages: [], sessionId: id as GenerateOptions['sessionId'],
-    }))
-    for await (const _chunk of runtime.stream(request)) { /* Drain the provider boundary before checking policy. */ }
+    const request = Object.freeze(
+      markAgentLoopRequest({
+        provider: PROVIDER,
+        model: MODEL,
+        messages: [],
+        sessionId: id as GenerateOptions['sessionId'],
+      }),
+    )
+    for await (const _chunk of runtime.stream(request)) {
+      /* Drain the provider boundary before checking policy. */
+    }
   }
 
   try {
@@ -173,7 +243,11 @@ it('releases startup-owned overrides on disposal without clearing a newer startu
     const noFlag = launch()
     roots.push({ id: REPLACEMENT })
     await dispatch(REPLACEMENT)
-    assert.deepEqual(seen, [undefined, undefined], 'No-flag replacement must not inherit an override')
+    assert.deepEqual(
+      seen,
+      [undefined, undefined],
+      'No-flag replacement must not inherit an override',
+    )
     await noFlag.fiber.dispose()
 
     const older = launch(FAST)
@@ -181,12 +255,20 @@ it('releases startup-owned overrides on disposal without clearing a newer startu
     roots.splice(0, roots.length, { id: SESSION })
     await older.fiber.dispose()
     await dispatch(SESSION)
-    assert.deepEqual(seen, [undefined, undefined, null], 'Old cleanup must not clear newer activation')
+    assert.deepEqual(
+      seen,
+      [undefined, undefined, null],
+      'Old cleanup must not clear newer activation',
+    )
     await newer.fiber.dispose()
     await dispatch(SESSION)
-    assert.deepEqual(seen, [undefined, undefined, null, undefined], 'Disposed bound startup must release policy')
+    assert.deepEqual(
+      seen,
+      [undefined, undefined, null, undefined],
+      'Disposed bound startup must release policy',
+    )
   } finally {
-    await Promise.all(startups.map(ctx => ctx.fiber.dispose()))
+    await Promise.all(startups.map((ctx) => ctx.fiber.dispose()))
     await provider.fiber.dispose()
   }
 })

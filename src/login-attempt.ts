@@ -10,14 +10,14 @@
  * @module dsh-provider-extra/login-attempt
  */
 
-import type { AuthEvent, AuthInteraction, AuthPrompt } from '@earendil-works/pi-ai'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import type { AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions'
+import type { AuthEvent, AuthInteraction, AuthPrompt } from '@earendil-works/pi-ai'
 import { renderEvent } from './codex-login.ts'
-import type { RouteDeclaration } from './login-route.ts'
-import { StoredCredentialError } from './login-contract.ts'
-import type { LoginAuthType, LoginChoice, LoginCommandHost } from './login-contract.ts'
 import { answerLabels, answerText } from './login-choice.ts'
+import type { LoginAuthType, LoginChoice, LoginCommandHost } from './login-contract.ts'
+import { StoredCredentialError } from './login-contract.ts'
+import type { RouteDeclaration } from './login-route.ts'
 
 /** Question ids belong to the caller; the answer echoes them back. */
 const PROMPT_QUESTION_ID = 'prompt'
@@ -44,7 +44,8 @@ const CANCEL_LABEL = 'Cancel'
  * session UI can only show what the human types: saying so is the difference
  * between a choice and a trap.
  */
-const SECRET_DETAIL = 'The value is stored in your credential store and sent only to this provider to be checked.'
+const SECRET_DETAIL =
+  'The value is stored in your credential store and sent only to this provider to be checked.'
 
 /** Guidance added to a page or device-code question, where waiting is the task. */
 const WAIT_DETAIL = 'Finish on that page, then choose Done. The sign-in completes by itself.'
@@ -54,7 +55,8 @@ const WAIT_DETAIL = 'Finish on that page, then choose Done. The sign-in complete
  * entry on the human's behalf, and a configuration change they did not make is
  * one they must hear about.
  */
-const DECLARED_ROUTE_NOTICE = ' The provider was added to the llm-pi-ai settings, so its models work now.'
+const DECLARED_ROUTE_NOTICE =
+  ' The provider was added to the llm-pi-ai settings, so its models work now.'
 
 /** Said when a configured route already carried the sign-in. */
 const PRESENT_ROUTE_NOTICE = ' The credential is stored and the route reads it on its next request.'
@@ -67,7 +69,8 @@ const READBACK_FAILURE_PREFIX = 'The sign-in completed, but credential readback 
  * route is the state that later fails a turn, so the failure belongs to the
  * sign-in that caused it rather than to a model request the human cannot explain.
  */
-const UNAVAILABLE_ROUTE_NOTICE = ' Nothing in this composition serves its models: mount an llm-pi-ai service to use them.'
+const UNAVAILABLE_ROUTE_NOTICE =
+  ' Nothing in this composition serves its models: mount an llm-pi-ai service to use them.'
 
 /** Upper bound on one attended attempt, longer than any device code lives. */
 const ATTEMPT_DEADLINE_MS = 15 * 60_000
@@ -102,28 +105,38 @@ async function closeWait(attempt: Attempt): Promise<void> {
  * human. Answering Done needs no handling — the flow finishes on its own — so
  * only Cancel is read, and the question is withdrawn the moment the flow ends.
  */
-function openWait(host: LoginCommandHost, invocation: CommandInvocation, choice: LoginChoice, attempt: Attempt): void {
+function openWait(
+  host: LoginCommandHost,
+  invocation: CommandInvocation,
+  choice: LoginChoice,
+  attempt: Attempt,
+): void {
   const abort = new AbortController()
   const asked = host.ask({
     agent: invocation.agent,
-    questions: [{
-      id: NOTICE_QUESTION_ID,
-      header: choice.providerName,
-      question: 'Finish signing in',
-      detail: [...attempt.notices, WAIT_DETAIL].join('\n'),
-      options: [{ label: DONE_LABEL }, { label: CANCEL_LABEL }],
-    }],
+    questions: [
+      {
+        id: NOTICE_QUESTION_ID,
+        header: choice.providerName,
+        question: 'Finish signing in',
+        detail: [...attempt.notices, WAIT_DETAIL].join('\n'),
+        options: [{ label: DONE_LABEL }, { label: CANCEL_LABEL }],
+      },
+    ],
     signal: AbortSignal.any([attempt.signal, abort.signal]),
   })
-  const settled = asked.then((answer) => {
-    if (answerLabels(answer, NOTICE_QUESTION_ID).includes(CANCEL_LABEL)) {
-      attempt.declined = true
-      attempt.abort.abort()
-    }
-  }, () => {
-    // A withdrawn question is the normal end of an attempt: the flow settled
-    // first, or the surface cannot ask. Either way the flow's own outcome rules.
-  })
+  const settled = asked.then(
+    (answer) => {
+      if (answerLabels(answer, NOTICE_QUESTION_ID).includes(CANCEL_LABEL)) {
+        attempt.declined = true
+        attempt.abort.abort()
+      }
+    },
+    () => {
+      // A withdrawn question is the normal end of an attempt: the flow settled
+      // first, or the surface cannot ask. Either way the flow's own outcome rules.
+    },
+  )
   attempt.wait = { abort, settled }
 }
 
@@ -136,9 +149,9 @@ function promptQuestion(prompt: AuthPrompt, choice: LoginChoice): AskUserQuestio
         id: PROMPT_QUESTION_ID,
         header,
         question: prompt.message,
-        options: prompt.options.map(option => ({
+        options: prompt.options.map((option) => ({
           label: option.label,
-          ...option.description === undefined ? {} : { description: option.description },
+          ...(option.description === undefined ? {} : { description: option.description }),
         })),
       }
     case 'secret':
@@ -146,22 +159,23 @@ function promptQuestion(prompt: AuthPrompt, choice: LoginChoice): AskUserQuestio
         id: SECRET_PROMPT_QUESTION_ID,
         header,
         question: prompt.message,
-        detail: SECRET_DETAIL + (prompt.placeholder === undefined ? '' : ' ' + prompt.placeholder),
+        detail: SECRET_DETAIL + (prompt.placeholder === undefined ? '' : ` ${prompt.placeholder}`),
       }
     case 'manual_code':
       return {
         id: PROMPT_QUESTION_ID,
         header,
         question: prompt.message,
-        detail: 'Answer here only if the browser did not finish the sign-in.'
-          + (prompt.placeholder === undefined ? '' : ' ' + prompt.placeholder),
+        detail:
+          'Answer here only if the browser did not finish the sign-in.' +
+          (prompt.placeholder === undefined ? '' : ` ${prompt.placeholder}`),
       }
     case 'text':
       return {
         id: PROMPT_QUESTION_ID,
         header,
         question: prompt.message,
-        ...prompt.placeholder === undefined ? {} : { detail: prompt.placeholder },
+        ...(prompt.placeholder === undefined ? {} : { detail: prompt.placeholder }),
       }
   }
 }
@@ -189,15 +203,17 @@ async function askPrompt(
     const options = prompt.options
     const answer = await ask
     for (const label of answerLabels(answer, questionId)) {
-      const hit = options.find(option => option.label === label)
+      const hit = options.find((option) => option.label === label)
       if (hit !== undefined) return hit.id
     }
     // A select answers with an option id, never a position: an answer that
     // names neither is echoed back only when it is an id pi-ai offered.
     const typed = answerText(answer, questionId)
-    const byId = options.find(option => option.id === typed)
+    const byId = options.find((option) => option.id === typed)
     if (byId !== undefined) return byId.id
-    throw new Error('dsh-provider-extra: answer the sign-in question by choosing one of its options')
+    throw new Error(
+      'dsh-provider-extra: answer the sign-in question by choosing one of its options',
+    )
   }
   if (prompt.type === 'manual_code' && prompt.signal !== undefined) {
     // The code is optional by design: pi-ai races this prompt against the
@@ -205,7 +221,9 @@ async function askPrompt(
     // the withdrawal instead of demanding a code keeps the callback able to
     // finish the sign-in on its own.
     const withdrawn = new Promise<never>((_, reject) => {
-      const lose = (): void => { reject(new Error('dsh-provider-extra: the browser completed the sign-in')) }
+      const lose = (): void => {
+        reject(new Error('dsh-provider-extra: the browser completed the sign-in'))
+      }
       if (prompt.signal?.aborted === true) {
         lose()
         return
@@ -219,7 +237,8 @@ async function askPrompt(
   }
   const answer = await ask
   const typed = answerText(answer, questionId)
-  if (typed === undefined) throw new Error('dsh-provider-extra: the sign-in question was left unanswered')
+  if (typed === undefined)
+    throw new Error('dsh-provider-extra: the sign-in question was left unanswered')
   return typed
 }
 
@@ -245,7 +264,7 @@ function attemptInteraction(
 
 /** What one finished sign-in means, said in terms of whether its models can be reached. */
 function successText(choice: LoginChoice, route: RouteDeclaration): string {
-  const signedIn = 'Signed in to ' + choice.providerName + ' (' + choice.methodLabel + ').'
+  const signedIn = `Signed in to ${choice.providerName} (${choice.methodLabel}).`
   if (route === 'declared') return signedIn + DECLARED_ROUTE_NOTICE
   if (route === 'unavailable') return signedIn + UNAVAILABLE_ROUTE_NOTICE
   return signedIn + PRESENT_ROUTE_NOTICE
@@ -254,10 +273,12 @@ function successText(choice: LoginChoice, route: RouteDeclaration): string {
 /** Failed attempts must distinguish cancelled work from credentials already committed. */
 function describeFailure(error: unknown, attempt: Attempt, choice: LoginChoice): string {
   if (error instanceof StoredCredentialError) return error.message
-  if (attempt.declined || (attempt.signal.aborted && !attempt.expired)) return 'The ' + choice.providerName + ' sign-in was cancelled.'
-  if (attempt.expired) return 'The ' + choice.providerName + ' sign-in timed out; start it again to get a fresh code.'
+  if (attempt.declined || (attempt.signal.aborted && !attempt.expired))
+    return `The ${choice.providerName} sign-in was cancelled.`
+  if (attempt.expired)
+    return `The ${choice.providerName} sign-in timed out; start it again to get a fresh code.`
   const message = error instanceof Error ? error.message : String(error)
-  return 'The ' + choice.providerName + ' sign-in failed: ' + message
+  return `The ${choice.providerName} sign-in failed: ${message}`
 }
 
 /** Run one sign-in end to end: the conversation plus the stored-credential check. */
@@ -298,7 +319,10 @@ export async function runChoice(
     if (stored === undefined) {
       return {
         kind: 'error',
-        text: 'The ' + choice.providerName + ' sign-in reported success but stored no credential; nothing changed.',
+        text:
+          'The ' +
+          choice.providerName +
+          ' sign-in reported success but stored no credential; nothing changed.',
       }
     }
     return { kind: 'success', text: successText(choice, route) }

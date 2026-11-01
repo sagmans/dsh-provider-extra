@@ -13,6 +13,7 @@ configuration: [docs/catalog.md](docs/catalog.md). Publication:
 | Task | Command |
 | --- | --- |
 | Install | `pnpm install --frozen-lockfile` |
+| Lint and format check (Biome) | `pnpm run lint` (`pnpm run lint:fix` repairs) |
 | Typecheck | `pnpm run typecheck` |
 | Unit and integration specs | `pnpm test` |
 | Built-output tests | `pnpm run build && pnpm run test:build` |
@@ -120,4 +121,4 @@ with `DRY_RUN=1`.
 
 ## Git hooks
 
-Checks run in `.githooks/`, not in push/PR CI. Run `scripts/setup-hooks` after cloning. All checks must pass before you push. Never use `--no-verify`. `pre-push`: `npm audit signatures`, `pnpm run check`, `pnpm audit --audit-level high`.
+Checks run in `.githooks/`, not in push/PR CI. Run `scripts/setup-hooks` after cloning. All checks must pass before you push. Never use `--no-verify`. `pre-commit`: Biome on the staged files (`pnpm run lint:fix` repairs most findings). `pre-push`: `npm audit signatures`, `pnpm run check`, `pnpm audit --audit-level high`.

@@ -7,8 +7,8 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import type { Api, AssistantMessage, Credential, Model } from '@earendil-works/pi-ai'
-import { PendingCredentialStore, proveApiKey } from '../src/login-verify.ts'
 import type { KeyProbe } from '../src/login-verify.ts'
+import { PendingCredentialStore, proveApiKey } from '../src/login-verify.ts'
 
 const MODEL = { id: 'some-model' } as Model<Api>
 const PROVIDER_ID = 'anthropic'
@@ -19,12 +19,19 @@ const CANCELLED = new Error('caller cancelled verification')
 const TIMED_OUT = new DOMException('probe timed out', 'TimeoutError')
 
 /** The province of an assistant message this decision reads; the rest is noise. */
-function answer(stopReason: AssistantMessage['stopReason'], errorMessage?: string): AssistantMessage {
-  return { stopReason, ...errorMessage === undefined ? {} : { errorMessage } } as AssistantMessage
+function answer(
+  stopReason: AssistantMessage['stopReason'],
+  errorMessage?: string,
+): AssistantMessage {
+  return { stopReason, ...(errorMessage === undefined ? {} : { errorMessage }) } as AssistantMessage
 }
 
 /** A provider that ships the given models and answers every request the same way. */
-function probeOf(models: readonly Model<Api>[], answered: AssistantMessage, asked?: { count: number }): KeyProbe {
+function probeOf(
+  models: readonly Model<Api>[],
+  answered: AssistantMessage,
+  asked?: { count: number },
+): KeyProbe {
   return {
     getModels: () => models,
     completeSimple: async () => {
@@ -47,7 +54,10 @@ describe('proveApiKey', () => {
   })
 
   it('blames a silent provider rather than the key', async () => {
-    await assert.rejects(proveApiKey(probeOf([MODEL], answer('aborted')), 'anthropic'), /did not answer in time/u)
+    await assert.rejects(
+      proveApiKey(probeOf([MODEL], answer('aborted')), 'anthropic'),
+      /did not answer in time/u,
+    )
   })
 
   it('rejects a key that no model can verify without blaming the key', async () => {
@@ -65,7 +75,10 @@ describe('proveApiKey', () => {
     const listed = t.mock.method(models, 'getModels')
     const completed = t.mock.method(models, 'completeSimple')
     controller.abort(CANCELLED)
-    await assert.rejects(proveApiKey(models, PROVIDER_ID, controller.signal), error => error === CANCELLED)
+    await assert.rejects(
+      proveApiKey(models, PROVIDER_ID, controller.signal),
+      (error) => error === CANCELLED,
+    )
     assert.equal(listed.mock.callCount(), 0)
     assert.equal(completed.mock.callCount(), 0)
   })
@@ -74,12 +87,19 @@ describe('proveApiKey', () => {
     const controller = new AbortController()
     const models = probeOf([MODEL], answer('stop'))
     let probeSignal: AbortSignal | undefined
-    t.mock.method(models, 'completeSimple', async (...[_model, _context, options]: Parameters<KeyProbe['completeSimple']>) => {
-      probeSignal = options?.signal
-      controller.abort(CANCELLED)
-      return answer('aborted')
-    })
-    await assert.rejects(proveApiKey(models, PROVIDER_ID, controller.signal), error => error === CANCELLED)
+    t.mock.method(
+      models,
+      'completeSimple',
+      async (...[_model, _context, options]: Parameters<KeyProbe['completeSimple']>) => {
+        probeSignal = options?.signal
+        controller.abort(CANCELLED)
+        return answer('aborted')
+      },
+    )
+    await assert.rejects(
+      proveApiKey(models, PROVIDER_ID, controller.signal),
+      (error) => error === CANCELLED,
+    )
     assert.equal(probeSignal?.aborted, true)
     assert.equal(probeSignal?.reason, CANCELLED)
   })
@@ -91,7 +111,10 @@ describe('proveApiKey', () => {
       controller.abort(CANCELLED)
       return answer('stop')
     })
-    await assert.rejects(proveApiKey(models, PROVIDER_ID, controller.signal), error => error === CANCELLED)
+    await assert.rejects(
+      proveApiKey(models, PROVIDER_ID, controller.signal),
+      (error) => error === CANCELLED,
+    )
   })
 
   it('retains the 20-second deadline when a caller signal is present', async (t) => {
@@ -100,12 +123,19 @@ describe('proveApiKey', () => {
     const timeout = t.mock.method(AbortSignal, 'timeout', () => deadline.signal)
     const models = probeOf([MODEL], answer('stop'))
     let probeSignal: AbortSignal | undefined
-    t.mock.method(models, 'completeSimple', async (...[_model, _context, options]: Parameters<KeyProbe['completeSimple']>) => {
-      probeSignal = options?.signal
-      deadline.abort(TIMED_OUT)
-      return answer('stop')
-    })
-    await assert.rejects(proveApiKey(models, PROVIDER_ID, controller.signal), error => error === TIMED_OUT)
+    t.mock.method(
+      models,
+      'completeSimple',
+      async (...[_model, _context, options]: Parameters<KeyProbe['completeSimple']>) => {
+        probeSignal = options?.signal
+        deadline.abort(TIMED_OUT)
+        return answer('stop')
+      },
+    )
+    await assert.rejects(
+      proveApiKey(models, PROVIDER_ID, controller.signal),
+      (error) => error === TIMED_OUT,
+    )
     assert.equal(timeout.mock.calls[0]?.arguments[0], PROBE_TIMEOUT_MS)
     assert.equal(probeSignal?.aborted, true)
     assert.equal(probeSignal?.reason, TIMED_OUT)
@@ -120,14 +150,14 @@ describe('proveApiKey', () => {
       deadline.abort(TIMED_OUT)
       return answer('stop')
     })
-    await assert.rejects(proveApiKey(models, PROVIDER_ID), error => error === TIMED_OUT)
+    await assert.rejects(proveApiKey(models, PROVIDER_ID), (error) => error === TIMED_OUT)
   })
 })
 
 describe('PendingCredentialStore', () => {
   it('holds a credential as metadata and forgets it on delete', async () => {
     const store = new PendingCredentialStore()
-    await store.modify('anthropic', async () => ({ type: 'api_key', key: 'sk-test' } as Credential))
+    await store.modify('anthropic', async () => ({ type: 'api_key', key: 'sk-test' }) as Credential)
     assert.deepEqual(await store.list(), [{ providerId: 'anthropic', type: 'api_key' }])
     assert.deepEqual(await store.read('anthropic'), { type: 'api_key', key: 'sk-test' })
     await store.delete('anthropic')

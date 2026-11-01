@@ -9,7 +9,8 @@ const TIER_LABEL = 'service tier'
 const PROVIDER_DEFAULT = ''
 /** Ordinary processing stays quiet; only account-auto and expedited choices qualify the route. */
 const FOOTER_TIERS = new Set(['auto', 'priority'])
-const SAVE_FAILURE = 'could not confirm service tier; check writable shared storage, then reopen the picker before retrying'
+const SAVE_FAILURE =
+  'could not confirm service tier; check writable shared storage, then reopen the picker before retrying'
 const DISCOVERY_FAILURE = 'could not read service tiers; check provider configuration and retry'
 const NO_ROUTE = 'no model route is in use; choose a model first'
 const UNSUPPORTED = 'this model route advertises no service tiers'
@@ -17,16 +18,31 @@ const UNSUPPORTED = 'this model route advertises no service tiers'
 /** Structural ports make terminal integration optional without adding a TUI dependency. */
 export interface TierActionPorts {
   route: { provider: string; model: string } | undefined
-  pick(spec: { title: string; rows: readonly { id: string; name: string; description?: string; current?: boolean }[] }): Promise<string | undefined>
+  pick(spec: {
+    title: string
+    rows: readonly { id: string; name: string; description?: string; current?: boolean }[]
+  }): Promise<string | undefined>
   notice(message: string): void
 }
 interface Registry {
-  register(owner: Context, action: { id: string; layer: 'chord'; defaultKeys: readonly string[]; label: string; handler(ports: TierActionPorts): Promise<void>; routeHint?(route: NonNullable<TierActionPorts['route']>): string | undefined }): () => void
+  register(
+    owner: Context,
+    action: {
+      id: string
+      layer: 'chord'
+      defaultKeys: readonly string[]
+      label: string
+      handler(ports: TierActionPorts): Promise<void>
+      routeHint?(route: NonNullable<TierActionPorts['route']>): string | undefined
+    },
+  ): () => void
   afterEffort(owner: Context, handler: (ports: TierActionPorts) => Promise<void>): () => void
 }
 
 /** The captured owner lasts exactly as long as its scoped registration, including Config reconciliation. */
-export function createTierPicker(tiers: TierSelection): (ports: TierActionPorts, quiet?: boolean) => Promise<void> {
+export function createTierPicker(
+  tiers: TierSelection,
+): (ports: TierActionPorts, quiet?: boolean) => Promise<void> {
   let opening = false
   return async (ports, quiet = false) => {
     if (opening) return
@@ -34,37 +50,69 @@ export function createTierPicker(tiers: TierSelection): (ports: TierActionPorts,
     let saving = false
     try {
       const route = ports.route
-      if (route === undefined) { if (!quiet) ports.notice(NO_ROUTE); return }
+      if (route === undefined) {
+        if (!quiet) ports.notice(NO_ROUTE)
+        return
+      }
       const choices = tiers.choices(route.provider, route.model)
-      if (choices.length === 0) { if (!quiet) ports.notice(UNSUPPORTED); return }
+      if (choices.length === 0) {
+        if (!quiet) ports.notice(UNSUPPORTED)
+        return
+      }
       const current = tiers.current(route.provider, route.model)
       const rows = [
-        { id: PROVIDER_DEFAULT, name: 'provider default', description: 'clear the explicit service tier', current: current === undefined },
-        ...choices.map(choice => ({ ...choice, current: choice.id === current })),
+        {
+          id: PROVIDER_DEFAULT,
+          name: 'provider default',
+          description: 'clear the explicit service tier',
+          current: current === undefined,
+        },
+        ...choices.map((choice) => ({ ...choice, current: choice.id === current })),
       ]
-      const picked = await ports.pick({ title: TIER_LABEL + ' · ' + route.provider + '/' + route.model, rows })
+      const picked = await ports.pick({
+        title: `${TIER_LABEL} · ${route.provider}/${route.model}`,
+        rows,
+      })
       if (picked === undefined) return
-      if (!rows.some(row => row.id === picked)) throw new Error(DISCOVERY_FAILURE)
+      if (!rows.some((row) => row.id === picked)) throw new Error(DISCOVERY_FAILURE)
       saving = true
-      await tiers.select(route.provider, route.model, picked === PROVIDER_DEFAULT ? undefined : picked)
-      ports.notice(TIER_LABEL + ' set to ' + (picked === PROVIDER_DEFAULT ? 'provider default' : picked) + ' for the next request')
-    } catch { ports.notice(saving ? SAVE_FAILURE : DISCOVERY_FAILURE) }
-    finally { opening = false }
+      await tiers.select(
+        route.provider,
+        route.model,
+        picked === PROVIDER_DEFAULT ? undefined : picked,
+      )
+      ports.notice(
+        TIER_LABEL +
+          ' set to ' +
+          (picked === PROVIDER_DEFAULT ? 'provider default' : picked) +
+          ' for the next request',
+      )
+    } catch {
+      ports.notice(saving ? SAVE_FAILURE : DISCOVERY_FAILURE)
+    } finally {
+      opening = false
+    }
   }
 }
 
 /** Optional injection leaves console and web profiles independent of the terminal bundle. */
 export function mountTierActions(ctx: Context, tiers: TierSelection): void {
-  ctx.inject([REGISTRY], owner => {
+  ctx.inject([REGISTRY], (owner) => {
     const registry = owner.get(REGISTRY) as Registry
     const choose = createTierPicker(tiers)
-    registry.register(owner, { id: TIER_ACTION_ID, layer: 'chord', defaultKeys: [TIER_KEY], label: TIER_LABEL,
-      handler: ports => choose(ports),
-      routeHint: route => {
+    registry.register(owner, {
+      id: TIER_ACTION_ID,
+      layer: 'chord',
+      defaultKeys: [TIER_KEY],
+      label: TIER_LABEL,
+      handler: (ports) => choose(ports),
+      routeHint: (route) => {
         const tier = tiers.current(route.provider, route.model)
         return FOOTER_TIERS.has(tier ?? PROVIDER_DEFAULT)
-          ? tiers.choices(route.provider, route.model).find(choice => choice.id === tier)?.name : undefined
-      } })
-    registry.afterEffort(owner, ports => choose(ports, true))
+          ? tiers.choices(route.provider, route.model).find((choice) => choice.id === tier)?.name
+          : undefined
+      },
+    })
+    registry.afterEffort(owner, (ports) => choose(ports, true))
   })
 }
