@@ -10,64 +10,136 @@ carry a breaking change, and a patch carries only fixes.
 
 ### Security
 
-- Development installs resolve `@modelcontextprotocol/client` `2.3.1` through the scoped `pnpm-workspace.yaml` override, clearing GHSA-6prh-2h8m-c8cw: the HTTP client transports and OAuth requests of earlier releases followed cross-origin redirects and re-sent custom headers and request bodies. The `@modelcontextprotocol/sdk` floor moves to `1.32.1` for the same advisory. The published package is unchanged.
-- Development installs resolve `fflate` `0.8.3` and `fast-uri` `3.1.8` through scoped `pnpm-workspace.yaml` overrides, clearing GHSA-px8p-9vwx-vf98 (a malformed ZIP64 archive sends `unzipSync` into an infinite loop) and GHSA-hrr3-gc8f-f4qj (a percent-encoded host escapes case normalization). The published package is unchanged.
-- Development installs resolve `zod` `4.6.7`, `undici` `8.12.2`, and `fast-uri` `3.1.9` through scoped `pnpm-workspace.yaml` overrides, clearing GHSA-mrhx-c7xc-m3w5 (oversized constrained collections exhaust memory during validation), GHSA-xjj6-f33q-929c, GHSA-4qv8-2p9j-2685, and GHSA-f72v-6w45-q472 (denial of service through stacked content encodings or an unbounded EventSource buffer, and an integrity-check bypass), and GHSA-333x-w4r6-6crp, GHSA-w74x-v6f9-j3xg, GHSA-wjr9-j795-jxcr, and GHSA-xhq7-xmqj-769h (scheme injection, scheme spoofing, host confusion, and path equivalence in URI handling). The harness pins `zod` `4.4.3` and `undici` `8.11.2` exactly, so the overrides move them up a minor within the same major. `fast-uri` `3.1.9` is exempt from the release-age window until it ages out. The published package is unchanged.
+- Development installs resolve `@modelcontextprotocol/client` `2.3.1` through
+  the scoped `pnpm-workspace.yaml` override, clearing GHSA-6prh-2h8m-c8cw: the
+  HTTP client transports and OAuth requests of earlier releases followed
+  cross-origin redirects and re-sent custom headers and request bodies. The
+  `@modelcontextprotocol/sdk` floor moves to `1.32.1` for the same advisory. The
+  published package is unchanged.
+- Development installs resolve `fflate` `0.8.3` and `fast-uri` `3.1.8` through
+  scoped `pnpm-workspace.yaml` overrides, clearing GHSA-px8p-9vwx-vf98 (a
+  malformed ZIP64 archive sends `unzipSync` into an infinite loop) and
+  GHSA-hrr3-gc8f-f4qj (a percent-encoded host escapes case normalization). The
+  published package is unchanged.
+- Development installs resolve `zod` `4.6.7`, `undici` `8.12.2`, and `fast-uri`
+  `3.1.9` through scoped `pnpm-workspace.yaml` overrides, clearing
+  GHSA-mrhx-c7xc-m3w5 (oversized constrained collections exhaust memory during
+  validation), GHSA-xjj6-f33q-929c, GHSA-4qv8-2p9j-2685, and GHSA-f72v-6w45-q472
+  (denial of service through stacked content encodings or an unbounded
+  EventSource buffer, and an integrity-check bypass), and GHSA-333x-w4r6-6crp,
+  GHSA-w74x-v6f9-j3xg, GHSA-wjr9-j795-jxcr, and GHSA-xhq7-xmqj-769h (scheme
+  injection, scheme spoofing, host confusion, and path equivalence in URI
+  handling). The harness pins `zod` `4.4.3` and `undici` `8.11.2` exactly, so
+  the overrides move them up a minor within the same major. `fast-uri` `3.1.9`
+  is exempt from the release-age window until it ages out. The published package
+  is unchanged.
+- The daily harness-matrix job runs on Node.js `24.22.1` (was `24.20.0`), the
+  24.x security release that fixes CVE-2026-111497 (Brotli decoder out-of-bounds
+  write) and CVE-2026-105483 and CVE-2026-106069 (TLS hostname check bypass).
+  Checks and tests pass on `24.22.1`. The published package is unchanged.
+- Both release jobs also pin Node.js `24.22.1` instead of the runner's floating
+  `24`, so the release can no longer verify or publish on an unpatched cached
+  runtime. The published package contents are unchanged.
 
 ### Compatibility
 
-- DeepSeek Harness `0.2.1-rc.3` with pi-ai `1.4.0` is now a verified release, and development builds compile against it. The supported range does not change. The published package is unchanged.
-- **Breaking:** Support DeepSeek Harness `0.2.1-rc.2` with pi-ai `1.4.0`, and drop hosts before `0.2.1-rc.1`. The supported range is now `>=0.2.1-rc.1 <0.3.0-0`, and the pi-ai peer is `>=1.1.0 <1.5.0-0`. Older hosts ship pi-ai `0.x` and are verified only with `0.8.1`; keep `0.8.1` there.
-- The cordis and schemastery peers stop below their next minor: `>=4.0.5 <4.1.0-0` and `>=3.18.5 <3.19.0-0`. The caret ranges also admitted `4.1` and `3.19`, which no verified harness ships.
-- The harness peers declare that range instead of `*`. The harness now refuses this plugin on a host it cannot serve, instead of failing the first turn. The upper bound `<0.3.0-0` keeps `0.3.0` release candidates out.
+- DeepSeek Harness `0.2.1-rc.3` with pi-ai `1.4.0` is now a verified release,
+  and development builds compile against it. The supported range does not
+  change. The published package is unchanged.
+- **Breaking:** Support DeepSeek Harness `0.2.1-rc.2` with pi-ai `1.4.0`, and
+  drop hosts before `0.2.1-rc.1`. The supported range is now
+  `>=0.2.1-rc.1 <0.3.0-0`, and the pi-ai peer is `>=1.1.0 <1.5.0-0`. Older hosts
+  ship pi-ai `0.x` and are verified only with `0.8.1`; keep `0.8.1` there.
+- The cordis and schemastery peers stop below their next minor:
+  `>=4.0.5 <4.1.0-0` and `>=3.18.5 <3.19.0-0`. The caret ranges also admitted
+  `4.1` and `3.19`, which no verified harness ships.
+- The harness peers declare that range instead of `*`. The harness now refuses
+  this plugin on a host it cannot serve, instead of failing the first turn. The
+  upper bound `<0.3.0-0` keeps `0.3.0` release candidates out.
 
 ### Changed
 
-- Development checks lint and format the code with Biome `2.6.3`: the pre-commit hook checks the staged files, and `pnpm run check` checks the whole tree on every push. The code was reformatted once to the existing style. The published modules behave the same.
-- Every release now waits out the one-week release-age window. The temporary exemptions for the 0.2.1-rc.2 harness set, its framework releases, pi-ai `1.3.0`, and `fast-uri` `3.1.9` are removed, because each entry has aged past the window. The published package is unchanged.
-- Development tooling moves to `@types/node` 26.6.5 and `tsx` 4.23.15. The published package is unchanged.
-- Development builds use TypeScript 7.0.2. The published modules behave the same; the compiler now writes rewritten relative import paths with single quotes.
-- A signed `v*` tag push now publishes automatically through npm OIDC trusted publishing. Only admins can push a `v*` tag, so the tag push is the release approval, and the `npm-release` environment no longer waits for a reviewer. The release helper creates and accepts that reviewer-less environment, and `scripts/npm/target.env` names the tag-ruleset bypass user as `RELEASE_OWNER` instead of `REVIEWER`. The published package is unchanged.
-
-### Security
-
-- The daily harness-matrix job runs on Node.js `24.22.1` (was `24.20.0`), the 24.x security release that fixes CVE-2026-111497 (Brotli decoder out-of-bounds write) and CVE-2026-105483 and CVE-2026-106069 (TLS hostname check bypass). Checks and tests pass on `24.22.1`. The published package is unchanged.
-- Both release jobs also pin Node.js `24.22.1` instead of the runner's floating `24`, so the release can no longer verify or publish on an unpatched cached runtime. The published package contents are unchanged.
+- Development checks lint and format the code with Biome `2.6.3`: the pre-commit
+  hook checks the staged files, and `pnpm run check` checks the whole tree on
+  every push. The code was reformatted once to the existing style. The published
+  modules behave the same.
+- Every release now waits out the one-week release-age window. The temporary
+  exemptions for the 0.2.1-rc.2 harness set, its framework releases, pi-ai
+  `1.3.0`, and `fast-uri` `3.1.9` are removed, because each entry has aged past
+  the window. The published package is unchanged.
+- Development tooling moves to `@types/node` 26.6.5 and `tsx` 4.23.15. The
+  published package is unchanged.
+- Development builds use TypeScript 7.0.2. The published modules behave the
+  same; the compiler now writes rewritten relative import paths with single
+  quotes.
+- A signed `v*` tag push now publishes automatically through npm OIDC trusted
+  publishing. Only admins can push a `v*` tag, so the tag push is the release
+  approval, and the `npm-release` environment no longer waits for a reviewer.
+  The release helper creates and accepts that reviewer-less environment, and
+  `scripts/npm/target.env` names the tag-ruleset bypass user as `RELEASE_OWNER`
+  instead of `REVIEWER`. The published package is unchanged.
 
 ### Fixed
 
-- The shipped OpenCode Go extra `deepseek-flash` clones `deepseek-v4.1-flash`. pi-ai `1.3.0` removed `deepseek-v4-flash`, so the old template failed the route.
-- `catalog-setup` verification lists models again on `0.2.1` hosts, which list a route's models only once its key resolves. It uses a local placeholder key, never a real credential.
-- The source tests no longer hang when a catalog mount fails; they fail in about a second.
-- The browser client build no longer depends on the TypeScript compiler API, which TypeScript 7 removes.
+- The shipped OpenCode Go extra `deepseek-flash` clones `deepseek-v4.1-flash`.
+  pi-ai `1.3.0` removed `deepseek-v4-flash`, so the old template failed the
+  route.
+- `catalog-setup` verification lists models again on `0.2.1` hosts, which list a
+  route's models only once its key resolves. It uses a local placeholder key,
+  never a real credential.
+- The source tests no longer hang when a catalog mount fails; they fail in about
+  a second.
+- The browser client build no longer depends on the TypeScript compiler API,
+  which TypeScript 7 removes.
 
 ## [0.8.1] - 2026-10-14
 
 ### Compatibility
 
-- Support Node.js 22, 24 and 26: `engines.node` is now `>=22.19.0` (was `^24.0.0`, which warned on Node 22 and 26), and typecheck plus tests pass on Node 22.19.0, 24.21.0 and 26.11.1. Development types move to `@types/node` 26.6.4. Two tests adapt to its stricter `assert` message and optional `process.disconnect` typings.
+- Support Node.js 22, 24 and 26: `engines.node` is now `>=22.19.0` (was
+  `^24.0.0`, which warned on Node 22 and 26), and typecheck plus tests pass on
+  Node 22.19.0, 24.21.0 and 26.11.1. Development types move to `@types/node`
+  26.6.4. Two tests adapt to its stricter `assert` message and optional
+  `process.disconnect` typings.
 
 ## [0.8.0] - 2026-10-13
 
 ### Security
 
-- Development installs resolve patched transitive dependencies through scoped `pnpm-workspace.yaml` overrides, clearing GHSA-6qxp-vccf-f47h (`@modelcontextprotocol/client`, `@modelcontextprotocol/sdk`), GHSA-jqcg-44mw-7w3h (`proxy-addr`), GHSA-ch52-4w7c-c8xp (`http-cache-semantics`), and GHSA-wq5f-xc86-pv6w (`sharp`) from the audit gate. The published package is unchanged.
+- Development installs resolve patched transitive dependencies through scoped
+  `pnpm-workspace.yaml` overrides, clearing GHSA-6qxp-vccf-f47h
+  (`@modelcontextprotocol/client`, `@modelcontextprotocol/sdk`),
+  GHSA-jqcg-44mw-7w3h (`proxy-addr`), GHSA-ch52-4w7c-c8xp
+  (`http-cache-semantics`), and GHSA-wq5f-xc86-pv6w (`sharp`) from the audit
+  gate. The published package is unchanged.
 
 ### Fixed
 
-- Codex Auto delegates to provider defaults without sending the rejected `service_tier: "auto"` value. Saved choices and native OpenAI Auto behavior remain unchanged.
+- Codex Auto delegates to provider defaults without sending the rejected
+  `service_tier: "auto"` value. Saved choices and native OpenAI Auto behavior
+  remain unchanged.
 
 ### Added
 
-- Plugin-owned OpenAI routes can select service tiers alongside Codex routes. Source-aware eligibility preserves aliases without applying paid policies to other OpenAI-compatible providers. Both streaming entry points preserve the selected tier on the wire.
+- Plugin-owned OpenAI routes can select service tiers alongside Codex routes.
+  Source-aware eligibility preserves aliases without applying paid policies to
+  other OpenAI-compatible providers. Both streaming entry points preserve the
+  selected tier on the wire.
 
-- Web and Desktop provide `/service-tier` through the stock command popup, leaving the model selector unchanged.
-- A plugin-owned headless startup overlay accepts invocation-only `--service-tier` overrides while retaining the stock runner.
+- Web and Desktop provide `/service-tier` through the stock command popup,
+  leaving the model selector unchanged.
+- A plugin-owned headless startup overlay accepts invocation-only
+  `--service-tier` overrides while retaining the stock runner.
 
 ### Changed
 
-- Dependabot now proposes weekly updates for the SHA-pinned GitHub Actions, so CI pins keep receiving security fixes without manual tracking.
-- Interactive tier choices use shared per-model plugin storage instead of profile-local configuration edits. Configured selections remain defaults until overridden; Provider default suppresses that fallback explicitly. Shared saves require private POSIX permissions and directory synchronization; Windows interactive persistence is unsupported.
+- Dependabot now proposes weekly updates for the SHA-pinned GitHub Actions, so
+  CI pins keep receiving security fixes without manual tracking.
+- Interactive tier choices use shared per-model plugin storage instead of
+  profile-local configuration edits. Configured selections remain defaults until
+  overridden; Provider default suppresses that fallback explicitly. Shared saves
+  require private POSIX permissions and directory synchronization; Windows
+  interactive persistence is unsupported.
 
 ## [0.7.0] - 2026-10-01
 
@@ -79,13 +151,18 @@ carry a breaking change, and a patch carries only fixes.
 
 ### Added
 
-- Explicit Auto and Fast selections appear beside effort on terminals with footer-hint support; Standard and provider default stay hidden.
+- Explicit Auto and Fast selections appear beside effort on terminals with
+  footer-hint support; Standard and provider default stay hidden.
 
-- Codex service tiers can be selected per model route and saved in the owning profile Config. Auto, Standard, and Fast preserve existing authentication and transport. The provider owns its optional terminal shortcut and effort follow-up through the TUI keymap registry.
+- Codex service tiers can be selected per model route and saved in the owning
+  profile Config. Auto, Standard, and Fast preserve existing authentication and
+  transport. The provider owns its optional terminal shortcut and effort
+  follow-up through the TUI keymap registry.
 
 ### Fixed
 
-- Successive managed catalog changes no longer retain a retired ownership veto; active competing owners still prevent replacement.
+- Successive managed catalog changes no longer retain a retired ownership veto;
+  active competing owners still prevent replacement.
 
 ## [0.6.0] - 2026-09-30
 
@@ -134,7 +211,8 @@ carry a breaking change, and a patch carries only fixes.
   `catalog provider "<route>".models[<index>] "<model>": unknown model requires
   complete metadata: missing <field>`. A model id a newer line's vendor dropped
   takes the profile's whole model selection down, and an index into a catalog of
-  dozens of entries names neither the route nor the model a reader has to repair.
+  dozens of entries names neither the route nor the model a reader has to
+  repair.
 
 - The settings seams follow the line they mount on. A line that publishes forms
   over each entry's own Config has no section API, so the plugin installs no
@@ -146,8 +224,8 @@ carry a breaking change, and a patch carries only fixes.
   newer lines take the same branch and no further seam moved.
 
 - The settings-section schemas are left to inference rather than annotated with
-  the interfaces they describe. A schemastery release on a verified line widens a
-  required field's output to `string | Volatile<string>`, because a loader may
+  the interfaces they describe. A schemastery release on a verified line widens
+  a required field's output to `string | Volatile<string>`, because a loader may
   pass that field as a getter, and an annotation in the declaration's own shape
   then fails to compile on that line. The section and the entry still read the
   same declaration form, because both are built from the same schema values.

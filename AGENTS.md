@@ -24,9 +24,10 @@ configuration: [docs/catalog.md](docs/catalog.md). Publication:
 | Adopt the catalog in a clone | `pnpm run catalog:setup` |
 | Sign in to Codex from a checkout | `pnpm run codex:login` |
 
-The tracked `pre-push` hook (`.githooks/`) is the gate; `.github/workflows/harness-matrix.yml`
-reads the registry daily. Neither proves a real account authenticates — dogfood a
-packed candidate in a cloned home (see [README.md](README.md#development-and-verification)).
+The tracked `pre-push` hook (`.githooks/`) is the gate;
+`.github/workflows/harness-matrix.yml` reads the registry daily. Neither proves
+a real account authenticates — dogfood a packed candidate in a cloned home (see
+[README.md](README.md#development-and-verification)).
 
 ## Map
 
@@ -103,8 +104,8 @@ and each remote release action; never publish on your own initiative.
    first-publication bootstrap is a maintainer-only exception, not a retry path.
 4. After publication succeeds, create the GitHub release from the existing tag:
    `gh release create "vX.Y.Z" --verify-tag --title "vX.Y.Z" --notes-file <notes-file>`.
-   Use that version's changelog entry as notes. Set `--latest=false` when filling
-   an older release so it does not replace the current latest release.
+   Use that version's changelog entry as notes. Set `--latest=false` when
+   filling an older release so it does not replace the current latest release.
 5. Read back the npm version, tarball integrity and available provenance, the
    remote tag's verified signature and source commit, and the published GitHub
    release for the same version. A green workflow alone is not completion:
@@ -113,12 +114,16 @@ and each remote release action; never publish on your own initiative.
 Published versions and tags are immutable. Never delete, move, or re-sign an
 existing release tag, and never republish or unpublish an existing npm version.
 For a missing GitHub release, verify the existing signed tag and create only its
-release record with `--verify-tag`; do not push another tag or retry publication.
-If a tag or signature is missing or invalid, stop and ask the maintainer; do not
-invent a source commit from current `main`. Forward-fix broken packages as
-`RELEASE.md` directs. Helper mutations require `CONFIRM=<action>`; preview
-with `DRY_RUN=1`.
+release record with `--verify-tag`; do not push another tag or retry
+publication. If a tag or signature is missing or invalid, stop and ask the
+maintainer; do not invent a source commit from current `main`. Forward-fix
+broken packages as `RELEASE.md` directs. Helper mutations require
+`CONFIRM=<action>`; preview with `DRY_RUN=1`.
 
 ## Git hooks
 
-Checks run in `.githooks/`, not in push/PR CI. Run `scripts/setup-hooks` after cloning. All checks must pass before you push. Never use `--no-verify`. `pre-commit`: Biome on the staged files (`pnpm run lint:fix` repairs most findings). `pre-push`: `npm audit signatures`, `pnpm run check`, `pnpm audit --audit-level high`.
+Checks run in `.githooks/`, not in push/PR CI. Run `scripts/setup-hooks` after
+cloning. All checks must pass before you push. Never use `--no-verify`.
+`pre-commit`: Biome on the staged files (`pnpm run lint:fix` repairs most
+findings). `pre-push`: `npm audit signatures`, `pnpm run check`,
+`pnpm audit --audit-level high`.
