@@ -86,6 +86,9 @@ carry a breaking change, and a patch carries only fixes.
 
 ### Fixed
 
+- The `pre-push` registry check reports a registry answer that is not a JSON
+  object in one error line instead of a stack trace. The push still fails. The
+  published package is unchanged.
 - The shipped OpenCode Go extra `deepseek-flash` clones `deepseek-v4.1-flash`.
   pi-ai `1.3.0` removed `deepseek-v4-flash`, so the old template failed the
   route.

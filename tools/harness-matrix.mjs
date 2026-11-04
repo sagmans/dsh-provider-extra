@@ -504,7 +504,20 @@ async function checkRegistry(releases, problems) {
     problems.push(`the registry read of ${REGISTRY_URL} failed with HTTP ${response.status}`)
     return
   }
-  const metadata = await response.json()
+  // A body that is cut off, times out, or is not a JSON object is reported as
+  // one problem line like a network failure, so the push still fails closed
+  // but the hook output names the cause instead of a stack trace.
+  let metadata
+  try {
+    metadata = await response.json()
+  } catch (error) {
+    problems.push(`the registry answer from ${REGISTRY_URL} is not valid JSON: ${error.message}`)
+    return
+  }
+  if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    problems.push(`the registry answer from ${REGISTRY_URL} is not a JSON object`)
+    return
+  }
   const latest = metadata['dist-tags']?.latest
   if (typeof latest !== 'string') {
     problems.push('the registry answered no latest dist-tag')
