@@ -24,9 +24,10 @@ configuration: [docs/catalog.md](docs/catalog.md). Publication:
 | Adopt the catalog in a clone | `pnpm run catalog:setup` |
 | Sign in to Codex from a checkout | `pnpm run codex:login` |
 
-The tracked `pre-push` hook (`.githooks/`) is the gate;
-`.github/workflows/harness-matrix.yml` reads the registry daily. Neither proves
-a real account authenticates — dogfood a packed candidate in a cloned home (see
+The tracked `pre-push` hook (`.githooks/`) is the only gate; no hosted
+workflow checks the code. It also reads the registry for a newer harness
+release. It does not prove a real account authenticates — dogfood a packed
+candidate in a cloned home (see
 [README.md](README.md#development-and-verification)).
 
 ## Map
@@ -126,7 +127,8 @@ Checks run in `.githooks/`, not in push/PR CI. Run `scripts/setup-hooks` after
 cloning. All checks must pass before you push. Never use `--no-verify`.
 `pre-commit`: Biome on the staged files (`pnpm run lint:fix` repairs most
 findings). `pre-push`: `npm audit signatures`, `pnpm run check`,
-`pnpm audit --audit-level high`.
+`pnpm audit --audit-level high`, and the harness registry check
+(`node tools/harness-matrix.mjs --check-registry`, tip only, needs network).
 
 Commit messages follow `.githooks/GIT_CONVENTION.md`, which `commit-msg` and
 `pre-push` enforce. The generic checks need gitleaks, osv-scanner, semgrep,

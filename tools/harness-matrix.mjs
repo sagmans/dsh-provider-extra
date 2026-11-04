@@ -8,7 +8,11 @@
  * sources never compiled against — is how an install resolves a private second
  * copy of the framework instead of the host's. The default mode checks the
  * matrix offline; --check-registry also reads the registry's latest and fails
- * when the harness has moved past the verified list.
+ * when the harness has moved past the verified list and that release has
+ * already aged past the install's release-age window. The pre-push hook runs
+ * it, so a stale matrix blocks the next push once the bump is possible, and a
+ * release still inside the window only warns, because pnpm refuses to install
+ * it until then.
  *
  * The range is read twice, because two readers apply it: the dsh plugin gate
  * (`evaluatePluginCompatibility` in `@deepseek-ai/dsh-app-boot`) admits
@@ -25,6 +29,20 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
+
+/** The registry document that names the harness release a bare install resolves. */
+const REGISTRY_URL = 'https://registry.npmjs.org/@deepseek-ai%2Fdsh'
+
+/** A dead registry connection must end the push with an error, never hang it. */
+const REGISTRY_TIMEOUT_MS = 30_000
+
+/**
+ * The workspace file and key that set the install's quarantine window. The
+ * guard reads the same value pnpm enforces, so the two cannot drift.
+ */
+const WORKSPACE_FILE = 'pnpm-workspace.yaml'
+const RELEASE_AGE_PATTERN = /^minimumReleaseAge:\s*(\d+)\s*$/mu
+const MS_PER_MINUTE = 60_000
 
 /** The scope and package prefix a harness release ships under, cordis excluded. */
 const HARNESS_PACKAGE_PREFIX = '@deepseek-ai/dsh'
@@ -447,25 +465,68 @@ export function checkMatrix(manifest) {
   return problems
 }
 
+/**
+ * The install's release-age window in milliseconds, read from the workspace
+ * file pnpm enforces it from.
+ * @throws Error when the file sets no window: without one the guard cannot
+ * tell a bump that is blocked from one that is overdue, so it fails closed.
+ */
+export function releaseAgeWindowMs(workspaceText) {
+  const match = RELEASE_AGE_PATTERN.exec(workspaceText)
+  if (match === null) throw new Error(`${WORKSPACE_FILE} sets no minimumReleaseAge`)
+  return Number(match[1]) * MS_PER_MINUTE
+}
+
+/**
+ * Whether an unverified latest release blocks the push. Only a release that
+ * has aged past the window blocks: before that pnpm refuses to install it, so
+ * the bump cannot be made and a block would stop every unrelated push.
+ * A missing or unreadable publish time blocks, so a malformed registry answer
+ * fails closed.
+ */
+export function isOverdueRelease(publishedAt, windowMs, now) {
+  const published = Date.parse(publishedAt ?? '')
+  if (Number.isNaN(published)) return true
+  return now - published >= windowMs
+}
+
 /** The registry's own answer to which release a bare install would resolve. */
 async function checkRegistry(releases, problems) {
-  const response = await fetch('https://registry.npmjs.org/@deepseek-ai%2Fdsh')
+  const windowMs = releaseAgeWindowMs(readFileSync(join(ROOT, WORKSPACE_FILE), 'utf8'))
+  let response
+  try {
+    response = await fetch(REGISTRY_URL, { signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS) })
+  } catch (error) {
+    problems.push(`the registry read of ${REGISTRY_URL} failed: ${error.message}`)
+    return
+  }
   if (!response.ok) {
-    problems.push(`the registry read failed with HTTP ${response.status}`)
+    problems.push(`the registry read of ${REGISTRY_URL} failed with HTTP ${response.status}`)
     return
   }
   const metadata = await response.json()
   const latest = metadata['dist-tags']?.latest
   if (typeof latest !== 'string') {
     problems.push('the registry answered no latest dist-tag')
-  } else if (!releases.includes(latest)) {
-    problems.push(`the harness publishes ${latest} as latest, which is not a verified release`)
-    console.error(
-      'harness-matrix: add it to dsh.compatibility.dshReleases, raise the harness devDependencies and every mounted harness package, then dogfood; RELEASE.md owns the bump',
-    )
-  } else {
-    console.log(`harness-matrix: registry latest ${latest} is verified`)
+    return
   }
+  if (releases.includes(latest)) {
+    console.log(`harness-matrix: registry latest ${latest} is verified`)
+    return
+  }
+  const publishedAt = metadata.time?.[latest]
+  const bump =
+    'add it to dsh.compatibility.dshReleases, raise the harness devDependencies and every mounted harness package, then dogfood; RELEASE.md owns the bump'
+  if (isOverdueRelease(publishedAt, windowMs, Date.now())) {
+    problems.push(
+      `the harness publishes ${latest} as latest (published ${String(publishedAt)}), which is past the release-age window and not a verified release`,
+    )
+    console.error(`harness-matrix: ${bump}`)
+    return
+  }
+  console.error(
+    `harness-matrix: warning: the harness publishes ${latest} as latest (published ${publishedAt}), which is not a verified release; it is still inside the release-age window, so ${bump} once it ages out`,
+  )
 }
 
 async function main() {

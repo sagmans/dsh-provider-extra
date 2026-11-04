@@ -59,6 +59,11 @@ carry a breaking change, and a patch carries only fixes.
 
 ### Changed
 
+- The daily hosted harness-matrix workflow is removed, so every check runs
+  locally with free tools. The `pre-push` hook now reads the registry for a
+  newer harness release on each push. It blocks once an unverified latest
+  release has aged past the release-age window, and only warns before that.
+  The published package is unchanged.
 - Development checks lint and format the code with Biome `2.6.3`: the pre-commit
   hook checks the staged files, and `pnpm run check` checks the whole tree on
   every push. The code was reformatted once to the existing style. The published

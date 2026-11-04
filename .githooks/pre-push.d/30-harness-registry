@@ -1,0 +1,32 @@
+#!/bin/sh
+# Reads the registry's latest harness release against the verified matrix of
+# the pushed tip. This replaces the daily hosted job: every check runs locally,
+# so a harness release that moves past the matrix is found on the next push.
+# Only the tip is judged, because the registry is today's state, not a
+# commit's: an older commit in the same push predates the bump that fixes it.
+# tools/harness-matrix.mjs blocks only once the release has aged past the
+# release-age window, and blocks on a registry or network error (fail closed).
+set -eu
+
+# Helpers (staged_git, pushed_shas, at_sha, darwin_only) from .githooks/lib.
+# shellcheck source=/dev/null
+. "${HOOK_HELPERS:?run from .githooks (scripts/setup-hooks)}"
+
+# The tool reads only package.json and pnpm-workspace.yaml with Node
+# built-ins, so the commit needs no install.
+registry_check() {
+	node tools/harness-matrix.mjs --check-registry || return 1
+}
+
+shas=$(pushed_shas <"$HOOK_STDIN_FILE") || exit 1
+tip=''
+for pp_commit in $shas; do
+	tip=$pp_commit
+done
+[ -n "$tip" ] || exit 0
+
+echo "pre-push: $(basename -- "$0"): checking $tip" >&2
+if ! at_sha "$tip" registry_check; then
+	echo "pre-push: $(basename -- "$0"): harness registry check failed for $tip" >&2
+	exit 1
+fi

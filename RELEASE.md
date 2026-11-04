@@ -74,9 +74,12 @@ verified release lies inside it under both readers, every mounted package
 accepts the range or names a verified release, every harness peer names the
 range or one verified release and is never `*`, every aliased install names one,
 and the harness devDependencies compile against exactly one verified release.
-[`.github/workflows/harness-matrix.yml`](.github/workflows/harness-matrix.yml)
-runs the same tool with `--check-registry` daily and fails when
-`@deepseek-ai/dsh@latest` is not a verified release.
+The `pre-push` hook (`.githooks/pre-push.d/30-harness-registry`) runs the same
+tool with `--check-registry` on the pushed tip. It fails when
+`@deepseek-ai/dsh@latest` is not a verified release and has aged past the
+`minimumReleaseAge` window in `pnpm-workspace.yaml`, or when the registry
+cannot be read. A newer release still inside the window only prints a warning,
+because pnpm cannot install it yet.
 
 That failure is the matrix bump, and it is a release-sized change:
 
@@ -89,13 +92,15 @@ That failure is the matrix bump, and it is a release-sized change:
    when the whole line's gates pass, with a new `>=X.Y.Z-<pre> <X.Y.(Z+1)-0`
    alternative when the release is a prerelease of a new tuple, and a package
    that serves the older line stays behind.
-3. `pnpm install`, then run every gate above. A verified release, and the
-   framework and vendor releases it resolves, are published inside the
-   release-age window, and pnpm checks every lockfile entry against it even on a
-   frozen install. Exempt each entry still inside the window in
-   `pnpm-workspace.yaml` by its exact `name@version`, never a name pattern or a
-   scope, so no later release inherits the exemption. Record when the youngest
-   entry leaves the window, and drop the whole list after that.
+3. `pnpm install`, then run every gate above. The hook blocks only after the
+   release has aged past the release-age window, so the install normally needs
+   no exemption. pnpm checks every lockfile entry against the window even on a
+   frozen install, so a bump that must land earlier exempts each entry still
+   inside the window in `pnpm-workspace.yaml` by its exact `name@version`,
+   never a name pattern or a scope, so no later release inherits the exemption.
+   Such an exemption is a supply-chain waiver and needs owner approval. Record
+   when the youngest entry leaves the window, and drop the whole list after
+   that.
 4. Dogfood a real session against the new release before it ships: install the
    packed candidate into a cloned home's profile and drive a real surface
    through the routes this plugin owns.
