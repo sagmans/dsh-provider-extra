@@ -27,9 +27,12 @@ jobs:
         with:
           # An exact patch, not the runner's cached '24', so the release never
           # verifies or publishes on a Node 24 build that lacks security fixes.
-          # Both jobs move with harness-matrix.yml on each Node 24 security release.
+          # Both jobs move together on each Node 24 security release.
           node-version: '24.22.1'
-          cache: pnpm
+          # No dependency cache: a cache entry written by another workflow run
+          # could poison the artefact this tag publishes, and the release runs
+          # too rarely for a cache to save time.
+          package-manager-cache: false
       - run: pnpm install --frozen-lockfile
       # The released artefact is built from this tree, so its registry signatures
       # are checked before the tag can reach the publish job.
@@ -74,6 +77,9 @@ jobs:
         with:
           node-version: '24.22.1'
           registry-url: 'https://registry.npmjs.org'
+          # setup-node caches by default when package.json names a package
+          # manager; the publish job must build from a clean install only.
+          package-manager-cache: false
       # devDependencies supply tsc for the prepack build that npm publish runs.
       - run: pnpm install --frozen-lockfile
       # --provenance keeps the attestation explicit and fails loudly if the
