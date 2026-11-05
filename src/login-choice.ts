@@ -45,12 +45,13 @@ function optionLabels(choices: readonly LoginChoice[]): string[] {
   for (const choice of choices) {
     perProvider.set(choice.providerId, (perProvider.get(choice.providerId) ?? 0) + 1)
   }
-  const labels = choices.map((choice) =>
-    choiceLabel(choice, (perProvider.get(choice.providerId) ?? 0) > 1),
-  )
-  return labels.map((label, index) =>
-    labels.filter((candidate) => candidate === label).length > 1
-      ? `${label} · ${choices[index]!.providerId} · ${choices[index]!.authType}`
+  const labelled = choices.map((choice) => ({
+    choice,
+    label: choiceLabel(choice, (perProvider.get(choice.providerId) ?? 0) > 1),
+  }))
+  return labelled.map(({ choice, label }) =>
+    labelled.filter((candidate) => candidate.label === label).length > 1
+      ? `${label} · ${choice.providerId} · ${choice.authType}`
       : label,
   )
 }
@@ -100,8 +101,15 @@ export function resolveChoice(
   const input = words(text)
   const named = choiceByWords(choices, input)
   if (named !== undefined) return named
-  // A bare method is useful only when it identifies exactly one credential owner.
-  const method = input.length === 1 ? input[0]!.toLowerCase() : undefined
+  return choiceByBareMethod(choices, input)
+}
+
+/** A bare method is useful only when it identifies exactly one credential owner. */
+function choiceByBareMethod(
+  choices: readonly LoginChoice[],
+  input: readonly string[],
+): LoginChoice | undefined {
+  const method = input.length === 1 ? input[0].toLowerCase() : undefined
   if (method !== KEY_WORD && method !== OAUTH_WORD) return undefined
   const matches = choices.filter(
     (choice) => choice.authType === (method === KEY_WORD ? 'api_key' : 'oauth'),

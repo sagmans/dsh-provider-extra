@@ -23,6 +23,9 @@ import { PendingCredentialStore, proveApiKey } from './login-verify.ts'
 const PLUGIN_NAME = 'dsh-provider-extra'
 const GO_SOURCE = 'opencode-go'
 const CODEX_SOURCE = 'openai-codex'
+const ROUTE_NOT_LOADED = 'The configured sign-in route has no loaded provider'
+const ROUTE_NOT_LOADED_CODE = 'LOGIN_ROUTE_NOT_LOADED'
+const NO_OAUTH_FLOW = 'This route has no sign-in flow'
 const MISSING_STORE =
   'This composition has no writable credentials service; mount dsh-credentials-local before signing in.'
 const READ_ONLY =
@@ -87,12 +90,13 @@ function loginProvider(
 function loginTargets(ctx: Context, config: LoginConfig, routes: LoginRoutes): Target[] {
   const profiles = routes.profiles()
   if (routes.catalog !== undefined) {
-    return [...routes.catalog.providers.values()].map((route) => ({
-      id: route.id,
-      provider: profiles.get(route.id)!.piProvider!,
-      auth: route.auth,
-      served: true,
-    }))
+    return [...routes.catalog.providers.values()].map((route) => {
+      const provider = profiles.get(route.id)?.piProvider
+      // A named refusal beats a TypeError when a catalog route has no loaded provider.
+      if (provider === undefined)
+        throw new LlmError(`${ROUTE_NOT_LOADED}: ${route.id}`, ROUTE_NOT_LOADED_CODE)
+      return { id: route.id, provider, auth: route.auth, served: true }
+    })
   }
   return builtinProviders().map((source) => {
     const profile =
@@ -188,8 +192,12 @@ async function authenticate(
   signal.throwIfAborted()
   guard()
   if (method === 'oauth' && target.auth !== undefined && 'credentialProvider' in target.auth) {
+    const oauth = target.provider.auth.oauth
+    // The picker offers only routes with this flow, but a route can change after that read.
+    if (oauth?.login === undefined)
+      throw new LlmError(`${NO_OAUTH_FLOW}: ${target.id}`, 'UNSUPPORTED_CREDENTIAL')
     // The flow owns cancellation until it returns a grant; then persistence owns completion.
-    const grant = await target.provider.auth.oauth!.login!({ ...interaction, signal })
+    const grant = await oauth.login({ ...interaction, signal })
     await auth.credentials.modify(target.auth.credentialProvider, async () => grant)
     return
   }
@@ -212,8 +220,11 @@ async function authenticate(
     }
     const ref = credentialRef(target.auth.apiKeyRef)
     const key = assertUsableApiKey(credential.key, PLUGIN_NAME, ref)
+    // A store can lose set() after the earlier check; the proven key must not look saved.
+    if (typeof credentials.set !== 'function')
+      throw new LlmError(MISSING_STORE, 'NO_CREDENTIAL_STORE')
     // set() is atomic but not cancellable; once it starts, report the resulting durable state.
-    await credentials.set!(ref, key)
+    await credentials.set(ref, key)
     try {
       if ((await credentials.resolve(ref))?.value !== key) {
         throw new Error(`${ref} does not resolve to the saved key.`)
