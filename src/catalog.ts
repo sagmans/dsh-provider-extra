@@ -8,6 +8,7 @@ import type {
   ModelThinkingLevel,
   OpenAICompletionsCompat,
   OpenAIResponsesCompat,
+  Provider,
   Transport,
 } from '@earendil-works/pi-ai'
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai'
@@ -23,6 +24,7 @@ import {
 const CONFIG_VERSION = 1
 const CONFIG_FIELDS = ['version', 'providers', 'default']
 const SELECTION_FIELDS = ['provider', 'model', 'reasoningEffort']
+const OUTSIDE_SELECTION = 'provider/model is outside the managed selection'
 
 /** Credentials stay symbolic until request time. */
 export type CatalogAuth = { apiKeyRef: string } | { credentialProvider: string }
@@ -108,6 +110,45 @@ export interface CatalogSnapshot {
   resolveSelection(input: unknown): CatalogSelection
 }
 
+/** Every route was just compiled into a profile, so a miss is a broken catalog and must not load. */
+function servedProvider(
+  profiles: ReadonlyMap<string, ResolvedPiAiProviderProfile>,
+  id: string,
+): Provider {
+  const provider = profiles.get(id)?.piProvider
+  if (provider === undefined) catalogError('providers', `no loaded provider for ${id}`)
+  return provider
+}
+
+/** The served model a selection names; a name the route does not serve is outside the catalog. */
+function servedModel(
+  profiles: ReadonlyMap<string, ResolvedPiAiProviderProfile>,
+  provider: string,
+  modelId: string | undefined,
+): ReturnType<Provider['getModels']>[number] {
+  if (modelId === undefined) catalogError('selection', OUTSIDE_SELECTION)
+  const model = servedProvider(profiles, provider)
+    .getModels()
+    .find((candidate) => candidate.id === modelId)
+  if (model === undefined) catalogError('selection', OUTSIDE_SELECTION)
+  return model
+}
+
+/** Every name a route answers to, each mapped to the model id it reaches. */
+function routeAliases(
+  profiles: ReadonlyMap<string, ResolvedPiAiProviderProfile>,
+  provider: CatalogConfig['providers'][number],
+): Map<string, string> {
+  const names = new Map<string, string>()
+  // Served models, not declarations: a filtered route owns ids it never spells out.
+  for (const model of servedProvider(profiles, provider.id).getModels())
+    names.set(model.id, model.id)
+  for (const model of provider.models ?? []) {
+    for (const alias of model.aliases ?? []) names.set(alias, model.id)
+  }
+  return names
+}
+
 /** Absence keeps legacy ownership separate from a managed empty catalog. */
 export function compileCatalog(config: unknown): CatalogSnapshot | undefined {
   if (config === undefined) return undefined
@@ -125,31 +166,21 @@ export function compileCatalog(config: unknown): CatalogSnapshot | undefined {
   const providers = catalogMap(
     normalized.providers.map((provider) => [provider.id, provider] as const),
   )
-  const aliases = new Map<string, Map<string, string>>()
-  let count = 0
-  for (const provider of normalized.providers) {
-    const routeAliases = new Map<string, string>()
-    // Served models, not declarations: a filtered route owns ids it never spells out.
-    for (const model of profiles.get(provider.id)!.piProvider!.getModels()) {
-      routeAliases.set(model.id, model.id)
-      count++
-    }
-    for (const model of provider.models ?? []) {
-      for (const alias of model.aliases ?? []) routeAliases.set(alias, model.id)
-    }
-    aliases.set(provider.id, routeAliases)
-  }
+  const aliases = new Map(
+    normalized.providers.map(
+      (provider) => [provider.id, routeAliases(profiles, provider)] as const,
+    ),
+  )
+  const count = normalized.providers.reduce(
+    (served, provider) => served + servedProvider(profiles, provider.id).getModels().length,
+    0,
+  )
   const resolveSelection = (input: unknown): CatalogSelection => {
     const candidate = catalogRecord(input, SELECTION_FIELDS, 'selection')
     catalogString(candidate.provider, 'selection.provider')
     catalogString(candidate.model, 'selection.model')
     const modelId = aliases.get(candidate.provider)?.get(candidate.model)
-    if (modelId === undefined)
-      catalogError('selection', 'provider/model is outside the managed selection')
-    const model = profiles
-      .get(candidate.provider)!
-      .piProvider!.getModels()
-      .find((model) => model.id === modelId)!
+    const model = servedModel(profiles, candidate.provider, modelId)
     if (
       'reasoningEffort' in candidate &&
       !getSupportedThinkingLevels(model).includes(candidate.reasoningEffort as ModelThinkingLevel)
@@ -158,7 +189,7 @@ export function compileCatalog(config: unknown): CatalogSnapshot | undefined {
     }
     return freezeCatalogValue({
       provider: candidate.provider,
-      model: modelId,
+      model: model.id,
       ...('reasoningEffort' in candidate
         ? { reasoningEffort: candidate.reasoningEffort as ModelThinkingLevel }
         : {}),

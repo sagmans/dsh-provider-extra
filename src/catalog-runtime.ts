@@ -14,6 +14,9 @@ import { mountServiceTiers, withServiceTiers } from './service-tiers.ts'
 const PLUGIN_NAME = 'dsh-provider-extra'
 const OWNER_COLLISION = 'CATALOG_OWNER_COLLISION'
 
+/** The grant store the adapter reads; routed calls keep its exact contract. */
+type StoredGrants = ReturnType<typeof codexAuth>['credentials']
+
 interface Credentials extends CodexCredentialService {
   resolve(ref: string): Promise<{ value: string } | undefined>
 }
@@ -39,6 +42,87 @@ function assertCatalogOwnership(
   }
 }
 
+/** The stored credential behind a route: an alias shares its source provider's grant. */
+function credentialIdOf(snapshot: CatalogSnapshot, route: string): string {
+  const configured = snapshot.providers.get(route)?.auth
+  return configured !== undefined && 'credentialProvider' in configured
+    ? configured.credentialProvider
+    : route
+}
+
+/** Route aliases must share the source provider's existing OAuth grant. */
+function routeCredentials(
+  snapshot: CatalogSnapshot,
+  stored: StoredGrants,
+  requireOwnership: () => void,
+): StoredGrants {
+  const credentialId = (route: string): string => credentialIdOf(snapshot, route)
+  return {
+    read: async (route) => {
+      requireOwnership()
+      try {
+        return await stored.read(credentialId(route))
+      } finally {
+        requireOwnership()
+      }
+    },
+    modify: async (route, change) => {
+      requireOwnership()
+      try {
+        return await stored.modify(credentialId(route), (current) => {
+          // A rotated token must persist; the outer guard still blocks model dispatch.
+          requireOwnership()
+          return change(current)
+        })
+      } finally {
+        requireOwnership()
+      }
+    },
+    delete: (route) => {
+      requireOwnership()
+      return stored.delete(credentialId(route))
+    },
+    list: async () => {
+      // Stored grants are part of the same owned membership: a conflicting
+      // composition must not report routes it can no longer dispatch to.
+      requireOwnership()
+      const records = await stored.list()
+      return [...snapshot.providers.values()].flatMap((provider) => {
+        if (provider.auth === undefined || !('credentialProvider' in provider.auth)) return []
+        const record = records.find((item) => item.providerId === credentialId(provider.id))
+        return record === undefined ? [] : [{ ...record, providerId: provider.id }]
+      })
+    },
+  }
+}
+
+/** The key a route's Config references, resolved at dispatch so a rotated value applies at once. */
+function catalogApiKey(
+  ctx: Context,
+  snapshot: CatalogSnapshot,
+  requireOwnership: () => void,
+): (route: string) => Promise<string | undefined> {
+  return async (route) => {
+    // Prepared calls retain their snapshot and bypass profiles(); this gate
+    // stops a newly conflicting composition before credential-backed dispatch.
+    requireOwnership()
+    const configured = snapshot.providers.get(route)
+    if (configured === undefined)
+      throw new LlmError(`dsh-provider-extra: unknown catalog route "${route}"`, 'UNKNOWN_PROVIDER')
+    if (configured.auth === undefined || !('apiKeyRef' in configured.auth)) return undefined
+    const ref = configured.auth.apiKeyRef
+    const credentials = ctx.get('credentials') as Credentials | undefined
+    const key =
+      credentials === undefined ? process.env[ref] : (await credentials.resolve(ref))?.value
+    requireOwnership()
+    if (key !== undefined && key.length > 0) return assertUsableApiKey(key, PLUGIN_NAME, ref)
+    throw new LlmError(
+      `dsh-provider-extra: no credential for route "${route}"; its Config references ${ref}`,
+      'MISSING_CREDENTIAL',
+    )
+  }
+}
+
 /** Immutable closures also keep prepared and in-flight calls on their original revision. */
 export function mountCatalog(
   ctx: Context,
@@ -51,12 +135,6 @@ export function mountCatalog(
     if (ownershipError !== undefined) throw ownershipError
   }
   const auth = codexAuth(() => ctx.get('credentials') as Credentials | undefined)
-  const credentialId = (route: string): string => {
-    const configured = snapshot.providers.get(route)?.auth
-    return configured !== undefined && 'credentialProvider' in configured
-      ? configured.credentialProvider
-      : route
-  }
   const sourceFor = (route: string): string | undefined => snapshot.providers.get(route)?.source
   const tiers = mountServiceTiers(
     ctx,
@@ -74,67 +152,9 @@ export function mountCatalog(
     },
     auth: {
       ...auth,
-      // Route aliases must share the source provider's existing OAuth grant.
-      credentials: {
-        read: async (route) => {
-          requireOwnership()
-          try {
-            return await auth.credentials.read(credentialId(route))
-          } finally {
-            requireOwnership()
-          }
-        },
-        modify: async (route, change) => {
-          requireOwnership()
-          try {
-            return await auth.credentials.modify(credentialId(route), (current) => {
-              // A rotated token must persist; the outer guard still blocks model dispatch.
-              requireOwnership()
-              return change(current)
-            })
-          } finally {
-            requireOwnership()
-          }
-        },
-        delete: (route) => {
-          requireOwnership()
-          return auth.credentials.delete(credentialId(route))
-        },
-        list: async () => {
-          // Stored grants are part of the same owned membership: a conflicting
-          // composition must not report routes it can no longer dispatch to.
-          requireOwnership()
-          const stored = await auth.credentials.list()
-          return [...snapshot.providers.values()].flatMap((provider) => {
-            if (provider.auth === undefined || !('credentialProvider' in provider.auth)) return []
-            const record = stored.find((item) => item.providerId === credentialId(provider.id))
-            return record === undefined ? [] : [{ ...record, providerId: provider.id }]
-          })
-        },
-      },
+      credentials: routeCredentials(snapshot, auth.credentials, requireOwnership),
     },
-    resolveApiKey: async (route) => {
-      // Prepared calls retain their snapshot and bypass profiles(); this gate
-      // stops a newly conflicting composition before credential-backed dispatch.
-      requireOwnership()
-      const configured = snapshot.providers.get(route)
-      if (configured === undefined)
-        throw new LlmError(
-          `dsh-provider-extra: unknown catalog route "${route}"`,
-          'UNKNOWN_PROVIDER',
-        )
-      if (configured.auth === undefined || !('apiKeyRef' in configured.auth)) return undefined
-      const ref = configured.auth.apiKeyRef
-      const credentials = ctx.get('credentials') as Credentials | undefined
-      const key =
-        credentials === undefined ? process.env[ref] : (await credentials.resolve(ref))?.value
-      requireOwnership()
-      if (key !== undefined && key.length > 0) return assertUsableApiKey(key, PLUGIN_NAME, ref)
-      throw new LlmError(
-        `dsh-provider-extra: no credential for route "${route}"; its Config references ${ref}`,
-        'MISSING_CREDENTIAL',
-      )
-    },
+    resolveApiKey: catalogApiKey(ctx, snapshot, requireOwnership),
     resolveAttachments: () => ctx.get('attachments'),
     resolveImageAccess: (attachments, ref) =>
       resolveImageAttachmentAccess(
@@ -195,7 +215,10 @@ export function mountCatalog(
     const settings = child.get('settings') as {
       configure?: (options: { auto: boolean }, fiber: typeof ctx.fiber) => () => void
     }
-    if (typeof settings.configure === 'function')
-      child.effect(() => settings.configure!({ auto: false }, ctx.fiber))
+    if (typeof settings.configure === 'function') {
+      // The check narrows only this scope; a bound copy carries it into the effect with its receiver.
+      const configure = settings.configure.bind(settings)
+      child.effect(() => configure({ auto: false }, ctx.fiber))
+    }
   })
 }

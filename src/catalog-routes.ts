@@ -88,6 +88,8 @@ const ANTHROPIC_FLAGS = [
   'supportsMidConvoEffort',
   'supportsToolReferences',
 ]
+const FILTER_NEEDS_SOURCE = 'filter expands the catalog of an installed source'
+const PROTOCOL_REQUIRED = 'a route with no installed source must declare its protocol'
 const COMPAT_ENUMS: Record<string, readonly string[]> = {
   maxTokensField: ['max_completion_tokens', 'max_tokens'],
   thinkingFormat: [
@@ -129,8 +131,10 @@ export function catalogRecord(
   for (const key of Reflect.ownKeys(value)) {
     if (typeof key !== 'string' || (fields && !fields.includes(key)))
       catalogError(path, `unknown field ${String(key)}`)
-    const descriptor = Object.getOwnPropertyDescriptor(value, key)!
-    if (!('value' in descriptor)) catalogError(path, 'accessors are not configuration values')
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)
+    // A proxy can list a key it then refuses to describe; that is not a plain value either.
+    if (descriptor === undefined || !('value' in descriptor))
+      catalogError(path, 'accessors are not configuration values')
   }
   return value as Record<string, unknown>
 }
@@ -243,7 +247,7 @@ function compat(value: unknown, api: string, path: string): void {
   for (const [key, member] of Object.entries(data)) {
     if (flags.includes(key)) {
       if (typeof member !== 'boolean') catalogError(path, `${key} must be boolean`)
-    } else if (!COMPAT_ENUMS[key]!.includes(member as string)) catalogError(path, `invalid ${key}`)
+    } else if (!COMPAT_ENUMS[key]?.includes(member as string)) catalogError(path, `invalid ${key}`)
   }
 }
 
@@ -372,8 +376,7 @@ export function buildCatalogProfile(input: CatalogProvider): ResolvedPiAiProvide
   if ('api' in raw) catalogString(raw.api, `${path}.api`)
   const declaredApi = 'api' in raw ? (raw.api as string) : undefined
   if (source === undefined) {
-    if (declaredApi === undefined)
-      catalogError(`${path}.api`, 'a route with no installed source must declare its protocol')
+    if (declaredApi === undefined) catalogError(`${path}.api`, PROTOCOL_REQUIRED)
     if (!(declaredApi in PROTOCOL_STREAMS))
       catalogError(
         `${path}.api`,
@@ -431,14 +434,18 @@ export function buildCatalogProfile(input: CatalogProvider): ResolvedPiAiProvide
   const declarations = 'filter' in raw ? undefined : raw.models
   if (declarations !== undefined && !Array.isArray(declarations))
     catalogError(`${path}.models`, 'expected an explicit array')
-  if ('filter' in raw && source === undefined)
-    catalogError(`${path}.filter`, 'filter expands the catalog of an installed source')
+  if ('filter' in raw && source === undefined) catalogError(`${path}.filter`, FILTER_NEEDS_SOURCE)
   const installed = source?.getModels()
   const names = new Set<string>()
   const configuredMaxTokens = new Map<string, number>()
   const models =
     declarations === undefined
-      ? filteredModels(raw.filter, source!, input, `${path}.filter`)
+      ? filteredModels(
+          raw.filter,
+          source ?? catalogError(`${path}.filter`, FILTER_NEEDS_SOURCE),
+          input,
+          `${path}.filter`,
+        )
       : declarations.map((entry, index): Model<Api> => {
           const declaration = `${path} "${raw.id}".models[${index}]`
           const spec = catalogRecord(entry, MODEL_FIELDS, declaration)
@@ -472,7 +479,10 @@ export function buildCatalogProfile(input: CatalogProvider): ResolvedPiAiProvide
           if ('defaultMaxTokens' in spec) {
             number(spec.defaultMaxTokens, `${location}.defaultMaxTokens`, true)
             const limit = spec.defaultMaxTokens as number
-            if (limit > (overrides?.maxTokens ?? template!.maxTokens)) {
+            const maxTokens = overrides?.maxTokens ?? template?.maxTokens
+            if (maxTokens === undefined)
+              catalogError(location, 'unknown model requires complete metadata: missing maxTokens')
+            if (limit > maxTokens) {
               catalogError(`${location}.defaultMaxTokens`, 'exceeds model maxTokens')
             }
             configuredMaxTokens.set(spec.id, limit)
@@ -515,7 +525,9 @@ export function buildCatalogProfile(input: CatalogProvider): ResolvedPiAiProvide
           headers: config.headers,
           auth: { apiKey: harnessApiKeyAuth(config.name) },
           models: freezeCatalogValue(models),
-          api: PROTOCOL_STREAMS[declaredApi!]!,
+          api:
+            (declaredApi === undefined ? undefined : PROTOCOL_STREAMS[declaredApi]) ??
+            catalogError(`${path}.api`, PROTOCOL_REQUIRED),
         })
       : {
           id: config.id,
