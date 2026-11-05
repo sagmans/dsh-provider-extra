@@ -62,7 +62,7 @@ while [[ $# -gt 0 ]]; do
 done
 mkdir -m 700 "$home"
 cp -R "$source/." "$home/"
-printf 'home=%s\\nsource=%s\\ntarget=%s\\nprofile=%s\\n' "$home" "$source" "$target" "$profile" > "$home/.dsh-dogfood"
+printf 'home=%s\\nsource=%s\\ntarget=%s\\nprofile=%s\\nready=1\\n' "$home" "$source" "$target" "$profile" > "$home/.dsh-dogfood"
 chmod 600 "$home/.dsh-dogfood"
 node --input-type=module - "$home/profiles/$profile" "$target" <<'JS'
 import fs from 'node:fs'

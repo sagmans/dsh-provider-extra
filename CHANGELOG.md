@@ -97,6 +97,11 @@ carry a breaking change, and a patch carries only fixes.
 
 ### Fixed
 
+- `tools/catalog-setup.mjs` accepts a ready clone from the real clone helper. It
+  stopped every real run with "clone marker does not match setup inputs" because
+  it did not expect the helper's `ready=1` value. A half-seeded clone (`ready=0`)
+  or a marker with no `ready` value is still refused. The published package is
+  unchanged.
 - The `pre-push` registry check reports a registry answer that is not a JSON
   object in one error line instead of a stack trace. The push still fails. The
   published package is unchanged.

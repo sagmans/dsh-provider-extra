@@ -21,6 +21,8 @@ const HOST_PACKAGE = '@deepseek-ai/dsh'
 const CORE = '@deepseek-ai/dsh-llm'
 const PATCH = 'cordis.patch.yml'
 const MARKER = '.dsh-dogfood'
+/** The clone helper writes `ready=0` until seeding ends, so only this value proves a complete clone. */
+const MARKER_READY = '1'
 const PRIVATE_FILE_MODE = 0o600
 const PRIVATE_BITS = 0o077
 const REQUIRED = ['--helper', '--source-home', '--home', '--profile', '--catalog']
@@ -127,7 +129,7 @@ function checkClone(home, source, profile) {
   if ((lstatSync(home).mode & PRIVATE_BITS) !== 0) throw new Error('clone home must be private')
   const marker = join(home, MARKER)
   privateFile(marker)
-  const expected = { home, source, target: ROOT, profile }
+  const expected = { home, source, target: ROOT, profile, ready: MARKER_READY }
   const actual = Object.fromEntries(
     readFileSync(marker, 'utf8')
       .trim()
