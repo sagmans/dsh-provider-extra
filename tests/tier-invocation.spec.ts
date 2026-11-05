@@ -7,6 +7,16 @@ import LlmRuntime, { LlmAdapter, markAgentLoopRequest } from '@deepseek-ai/dsh-l
 import type { TierSelection } from '../src/service-tiers.ts'
 import { currentInvocationTier, mountTierInvocation } from '../src/tier-invocation.ts'
 
+// The harness declares an auxiliary purpose in the map of the package that
+// produces it, and a forwarding adapter must pass it through untouched. This
+// tree installs no producer, so the test states the two keys it drives.
+declare module '@deepseek-ai/dsh-llm' {
+  interface LlmRequestPurposeMap {
+    compaction: true
+    'session-title': true
+  }
+}
+
 const PROVIDER = 'example-provider'
 const MODEL = 'example-model'
 const ROOT = 'example-root'

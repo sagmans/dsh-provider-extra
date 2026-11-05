@@ -18,9 +18,10 @@ not.
    tools/harness-matrix.mjs`, `pnpm run build`, `pnpm run test:build`, `pnpm
    test:release`, `npm audit signatures`, `pnpm audit --audit-level high`, and
    `node tools/pack-smoke.mjs`.
-4. Dogfooding: install the packed candidate into a plugin profile whose harness
-   is a verified release (`>=0.2.1-rc.1 <0.3.0-0`) and drive a real session
-   through **both** routes — OpenCode Go with a stored key, OpenAI Codex after
+4. Dogfooding: install the packed candidate into a plugin profile whose
+   harness is a verified release (`>=0.2.1-rc.1 <0.2.2-0 ||
+   >=0.2.2-rc.1 <0.2.3-0`) and drive a real session through **both**
+   routes — OpenCode Go with a stored key, OpenAI Codex after
    `dsh-provider-extra-login`. Unit tests do not prove a real account
    authenticates or a remote gateway accepts the session header.
 5. README accuracy pass: every documented command, profile path, and credential
@@ -58,13 +59,14 @@ The model adapter's vendor peer is bounded by the vendor lines the verified
 releases ship: this plugin builds a provider out of it and hands that object to
 the host's adapter seam, so a peer that excludes the vendor a served line pins
 resolves a private older copy under the plugin and fails the first turn against
-the host's newer request shapes (`0.2.0-rc.2` with `0.85.1`). The `0.2.1` line
-ships pi-ai `1.3.0`, whose catalog dropped `deepseek-v4-flash`, the template the
-`0.8.x` plugin line cloned. The shipped extra now clones `deepseek-v4.1-flash`,
-which pi-ai `0.87.1` and `1.1.0` through `1.3.0` carry and `0.85.1` does not.
-The gates ran only on `0.2.1-rc.2`, so the vendor peer is `>=1.1.0 <1.4.0-0`,
-capped below the next vendor minor because a minor can drop a template id. Hosts
-on pi-ai `0.x` stay on the `0.8.x` plugin line until a gate run verifies them.
+the host's newer request shapes (`0.2.0-rc.2` with `0.85.1`). pi-ai `1.3.0`
+dropped `deepseek-v4-flash`, the template the `0.8.x` plugin line cloned. The
+shipped extra now clones `deepseek-v4.1-flash`, which pi-ai `0.87.1` and
+`1.1.0` through `1.4.0` carry and `0.85.1` does not. The gates ran on
+`0.2.1-rc.2`, `0.2.1-rc.3`, and `0.2.2-rc.1`, which resolve pi-ai `1.3.0`
+and `1.4.0`, so the vendor peer is `>=1.1.0 <1.5.0-0`, capped below the
+next vendor minor because a minor can drop a template id. Hosts on pi-ai
+`0.x` stay on the `0.8.x` plugin line until a gate run verifies them.
 `tools/harness-matrix.mjs` reads the vendor pins from `LINE_VENDOR_PINS` and
 refuses a peer that cannot admit one, or that has no upper bound.
 

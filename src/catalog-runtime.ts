@@ -13,6 +13,8 @@ import { mountServiceTiers, withServiceTiers } from './service-tiers.ts'
 
 const PLUGIN_NAME = 'dsh-provider-extra'
 const OWNER_COLLISION = 'CATALOG_OWNER_COLLISION'
+/** Reported when the harness update waterfall arrives without its continuation. */
+const MISSING_UPDATE_CONTINUATION = 'MISSING_UPDATE_CONTINUATION'
 
 /** The grant store the adapter reads; routed calls keep its exact contract. */
 type StoredGrants = ReturnType<typeof codexAuth>['credentials']
@@ -200,7 +202,18 @@ export function mountCatalog(
   ctx.effect(() => () => {
     activeGeneration = false
   })
-  ctx.on('internal/update', (next, _noSave, proceed) => {
+  // cordis 4.1 reads this waterfall as (config, next); 4.0.5 still passes the
+  // flag it dropped before the continuation. A host on the supported 0.2.1
+  // line must keep reloading, so the continuation is taken from the end
+  // instead of a fixed position.
+  ctx.on('internal/update', (next, ...args: unknown[]) => {
+    const proceed = args.at(-1)
+    if (typeof proceed !== 'function') {
+      throw new LlmError(
+        'dsh-provider-extra: internal/update delivered no continuation',
+        MISSING_UPDATE_CONTINUATION,
+      )
+    }
     // A retired snapshot must not veto replacement of the current catalog owner.
     if (!activeGeneration) return proceed()
     if (next.catalog !== undefined) assertCatalogOwnership(ctx, routes, defaults)

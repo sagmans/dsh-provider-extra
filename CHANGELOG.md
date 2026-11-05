@@ -43,6 +43,16 @@ carry a breaking change, and a patch carries only fixes.
 
 ### Compatibility
 
+- DeepSeek Harness `0.2.2-rc.1` with pi-ai `1.4.0` is now a verified
+  release, and development builds compile against it. The supported
+  range is `>=0.2.1-rc.1 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0`, so each
+  harness tuple has an alternative that names its own prerelease
+  line. The cordis and schemastery peers widen to `>=4.0.5 <4.2.0-0`
+  and `>=3.18.5 <3.20.0-0`, because the `0.2.2` line ships `4.1.0`
+  and `3.19.0`. The released packages were published inside the
+  release-age window, so `pnpm-workspace.yaml` exempts each lockfile
+  entry by exact version until 2026-11-11 09:23 UTC.
+
 - DeepSeek Harness `0.2.1-rc.3` with pi-ai `1.4.0` is now a verified release,
   and development builds compile against it. The supported range does not
   change. The published package is unchanged.

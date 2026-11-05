@@ -43,6 +43,8 @@ const CODEX_SOURCE = 'openai-codex'
 const SESSION_HEADER = 'x-opencode-session'
 const STREAM_IDLE_TIMEOUT_MS = 300_000
 const MAX_REQUEST_IMAGE_BYTES = 20 * 1024 * 1024
+const MAX_REQUEST_IMAGES = 50
+const IMAGE_OFFLOAD_COUNT_QUANTUM = 10
 const REQUEST_IMAGE_PIXEL_BUDGET = 2048 * 2048
 const REQUEST_IMAGE_MAX_BYTES = 1024 * 1024
 const HTTP_PROTOCOLS = ['http:', 'https:']
@@ -551,6 +553,8 @@ export function buildCatalogProfile(input: CatalogProvider): ResolvedPiAiProvide
     ...(config.transport === undefined ? {} : { transport: config.transport }),
     streamIdleTimeoutMs: STREAM_IDLE_TIMEOUT_MS,
     maxRequestImageBytes: MAX_REQUEST_IMAGE_BYTES,
+    maxRequestImages: MAX_REQUEST_IMAGES,
+    imageOffloadCountQuantum: IMAGE_OFFLOAD_COUNT_QUANTUM,
     requestImagePixelBudget: REQUEST_IMAGE_PIXEL_BUDGET,
     requestImageMaxBytes: REQUEST_IMAGE_MAX_BYTES,
     retryPolicy: resolveRetryPolicy(undefined, ERROR_PREFIX + config.id),

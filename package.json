@@ -56,10 +56,11 @@
       "patch": "./cordis.patch.yml"
     },
     "compatibility": {
-      "dsh": ">=0.2.1-rc.1 <0.3.0-0",
+      "dsh": ">=0.2.1-rc.1 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0",
       "dshReleases": {
         "0.2.1-rc.2": "compatible",
-        "0.2.1-rc.3": "compatible"
+        "0.2.1-rc.3": "compatible",
+        "0.2.2-rc.1": "compatible"
       }
     }
   },
@@ -81,15 +82,15 @@
     "prepublishOnly": "pnpm run typecheck && pnpm test && pnpm run test:release"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": ">=4.0.5 <4.1.0-0",
-    "@deepseek-ai/dsh-commands": ">=0.2.1-rc.1 <0.3.0-0",
-    "@deepseek-ai/dsh-credentials": ">=0.2.1-rc.1 <0.3.0-0",
-    "@deepseek-ai/dsh-credentials-local": ">=0.2.1-rc.1 <0.3.0-0",
-    "@deepseek-ai/dsh-llm": ">=0.2.1-rc.1 <0.3.0-0",
-    "@deepseek-ai/dsh-llm-pi-ai": ">=0.2.1-rc.1 <0.3.0-0",
-    "@deepseek-ai/dsh-settings": ">=0.2.1-rc.1 <0.3.0-0",
-    "@deepseek-ai/dsh-user-questions": ">=0.2.1-rc.1 <0.3.0-0",
-    "@deepseek-ai/schemastery": ">=3.18.5 <3.19.0-0",
+    "@deepseek-ai/cordis": ">=4.0.5 <4.2.0-0",
+    "@deepseek-ai/dsh-commands": ">=0.2.1-rc.1 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0",
+    "@deepseek-ai/dsh-credentials": ">=0.2.1-rc.1 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0",
+    "@deepseek-ai/dsh-credentials-local": ">=0.2.1-rc.1 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0",
+    "@deepseek-ai/dsh-llm": ">=0.2.1-rc.1 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0",
+    "@deepseek-ai/dsh-llm-pi-ai": ">=0.2.1-rc.1 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0",
+    "@deepseek-ai/dsh-settings": ">=0.2.1-rc.1 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0",
+    "@deepseek-ai/dsh-user-questions": ">=0.2.1-rc.1 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0",
+    "@deepseek-ai/schemastery": ">=3.18.5 <3.20.0-0",
     "@earendil-works/pi-ai": ">=1.1.0 <1.5.0-0"
   },
   "peerDependenciesMeta": {
@@ -102,16 +103,16 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.3",
-    "@deepseek-ai/cordis": "4.0.5",
-    "@deepseek-ai/dsh": "0.2.1-rc.3",
-    "@deepseek-ai/dsh-commands": "0.2.1-rc.3",
-    "@deepseek-ai/dsh-credentials": "0.2.1-rc.3",
-    "@deepseek-ai/dsh-credentials-local": "0.2.1-rc.3",
-    "@deepseek-ai/dsh-llm": "0.2.1-rc.3",
-    "@deepseek-ai/dsh-llm-pi-ai": "0.2.1-rc.3",
-    "@deepseek-ai/dsh-settings": "0.2.1-rc.3",
-    "@deepseek-ai/dsh-user-questions": "0.2.1-rc.3",
-    "@deepseek-ai/schemastery": "3.18.5",
+    "@deepseek-ai/cordis": "4.1.0",
+    "@deepseek-ai/dsh": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-commands": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-credentials": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-credentials-local": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-llm": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-llm-pi-ai": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-settings": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-user-questions": "0.2.2-rc.1",
+    "@deepseek-ai/schemastery": "3.19.0",
     "@earendil-works/pi-ai": "1.4.0",
     "@types/node": "26.6.5",
     "tsx": "4.23.15",

@@ -74,6 +74,10 @@ const MAX_REQUEST_IMAGE_BYTES = 20 * 1024 * 1024
 const REQUEST_IMAGE_PIXEL_BUDGET = 2048 * 2048
 /** Default raw encoded-byte target before inline base64 expansion. */
 const REQUEST_IMAGE_MAX_BYTES = 1024 * 1024
+/** Default request-level bound on retained image occurrences. */
+const MAX_REQUEST_IMAGES = 50
+/** Default oldest-image offload step when the occurrence bound overflows. */
+const IMAGE_OFFLOAD_COUNT_QUANTUM = 10
 
 /** Configuration for the single OpenCode Go route this plugin owns. */
 export interface OpenCodeGoRouteConfig {
@@ -206,6 +210,8 @@ export function buildOpenCodeGoProfile(config: OpenCodeGoRouteConfig): ResolvedP
     ...(config.headers === undefined ? {} : { headers: { ...config.headers } }),
     streamIdleTimeoutMs: STREAM_IDLE_TIMEOUT_MS,
     maxRequestImageBytes: MAX_REQUEST_IMAGE_BYTES,
+    maxRequestImages: MAX_REQUEST_IMAGES,
+    imageOffloadCountQuantum: IMAGE_OFFLOAD_COUNT_QUANTUM,
     requestImagePixelBudget: REQUEST_IMAGE_PIXEL_BUDGET,
     requestImageMaxBytes: REQUEST_IMAGE_MAX_BYTES,
     retryPolicy: resolveRetryPolicy(undefined, 'dsh-provider-extra: opencode-go'),
