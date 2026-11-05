@@ -260,6 +260,7 @@ test('unsafe existing or overlapping homes fail before helper execution', async 
 })
 
 // An explicit external helper keeps TUI independent while allowing real clone/build dogfood.
+// Pre-push supplies the helper and refuses to run without it; release CI has no helper and skips.
 test('real generic helper builds and relinks only the provider in a credentials-free clone', {
   skip: !process.env.DSH_DOGFOOD_HELPER,
 }, async (t) => {

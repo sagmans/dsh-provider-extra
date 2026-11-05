@@ -127,9 +127,12 @@ broken packages as `RELEASE.md` directs. Helper mutations require
 Checks run in `.githooks/`, not in push/PR CI. Run `scripts/setup-hooks` after
 cloning. All checks must pass before you push. Never use `--no-verify`.
 `pre-commit`: Biome on the staged files (`pnpm run lint:fix` repairs most
-findings). `pre-push`: `npm audit signatures`, `pnpm run check`,
+findings). `pre-push`: `npm audit signatures`, `pnpm run check`, the
+`catalog-setup` tests against the real dogfood helper,
 `pnpm audit --audit-level high`, and the harness registry check
-(`node tools/harness-matrix.mjs --check-registry`, tip only, needs network).
+(`node tools/harness-matrix.mjs --check-registry`, tip only, needs network). The
+helper comes from the installed `dsh-tui-dogfood` skill or an absolute
+`DSH_DOGFOOD_HELPER` path. A missing helper blocks the push.
 
 Commit messages follow `.githooks/GIT_CONVENTION.md`, which `commit-msg` and
 `pre-push` enforce. The generic checks need gitleaks, osv-scanner, semgrep,

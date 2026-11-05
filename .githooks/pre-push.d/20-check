@@ -5,15 +5,40 @@ set -eu
 DSH_TELEMETRY_DISABLED=1
 export DSH_TELEMETRY_DISABLED
 
+# catalog-setup depends on the clone marker that this helper writes, and the
+# helper lives in another repository, so only a run against it can show drift.
+DEFAULT_DOGFOOD_HELPER=$HOME/.agents/skills/dsh-tui-dogfood/scripts/run-plugin-from-worktree.sh
+helper=${DSH_DOGFOOD_HELPER:-$DEFAULT_DOGFOOD_HELPER}
+# An inherited value must not reach the parallel suite in `pnpm run check`.
+unset DSH_DOGFOOD_HELPER
+
 checks() {
 	npm audit signatures || return 1
 	pnpm run check || return 1
+	# Separate from the check suite: the helper rebuilds dist/, which the other
+	# test files read in parallel. This variable is what stops the test's skip.
+	DSH_DOGFOOD_HELPER=$helper node --test tests/catalog-setup.test.mjs || return 1
 	pnpm audit --audit-level high || return 1
 }
 
 # Helpers (staged_git, pushed_shas, at_sha, darwin_only) from .githooks/lib.
 # shellcheck source=/dev/null
 . "${HOOK_HELPERS:?run from .githooks (scripts/setup-hooks)}"
+
+# Fail closed before the long checks: a missing helper would turn the test back
+# into a skip. Absolute because each commit may be checked in a temporary worktree.
+case $helper in
+/*) ;;
+*)
+	echo "pre-push: $(basename -- "$0"): DSH_DOGFOOD_HELPER must be an absolute path: $helper" >&2
+	exit 1
+	;;
+esac
+if [ ! -f "$helper" ]; then
+	echo "pre-push: $(basename -- "$0"): dogfood helper not found: $helper" >&2
+	echo "pre-push: install the dsh-tui-dogfood skill, or set DSH_DOGFOOD_HELPER to run-plugin-from-worktree.sh in a dsh-tui checkout" >&2
+	exit 1
+fi
 
 top=$(git rev-parse --show-toplevel)
 # A temporary worktree has no dependencies: install them from that commit's

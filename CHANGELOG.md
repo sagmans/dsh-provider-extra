@@ -97,6 +97,9 @@ carry a breaking change, and a patch carries only fixes.
 
 ### Fixed
 
+- `pre-push` now runs the `catalog-setup` tests against the real dogfood helper
+  and blocks when the helper is missing. These tests used to skip, so a change
+  to the helper's clone marker reached developers before any check saw it.
 - `tools/catalog-setup.mjs` accepts a ready clone from the real clone helper. It
   stopped every real run with "clone marker does not match setup inputs" because
   it did not expect the helper's `ready=1` value. A half-seeded clone (`ready=0`)

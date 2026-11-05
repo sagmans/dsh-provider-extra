@@ -494,5 +494,7 @@ otherwise in a temporary worktree of that commit.
 This repository's checks:
 
 - `pre-commit`: staged whitespace and conflict-marker check.
-- `pre-push`: `npm audit signatures`, `pnpm run check`,
-  `pnpm audit --audit-level high`.
+- `pre-push`: `npm audit signatures`, `pnpm run check`, the `catalog-setup`
+  tests against the real dogfood helper, `pnpm audit --audit-level high`. The
+  helper comes from the installed `dsh-tui-dogfood` skill or an absolute
+  `DSH_DOGFOOD_HELPER` path. A missing helper blocks the push.
