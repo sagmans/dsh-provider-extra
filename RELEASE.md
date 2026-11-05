@@ -12,8 +12,8 @@ not.
 
 ## Gates — all required before tagging
 
-1. Candidate lands on `main` through a reviewed PR (squash merge).
-2. `verify` CI green on the exact merged SHA.
+1. Candidate lands on `main` as a signed push.
+2. `pre-push` passed on the exact pushed SHA.
 3. Locally on that SHA: `pnpm typecheck`, `pnpm test`, `node
    tools/harness-matrix.mjs`, `pnpm run build`, `pnpm run test:build`, `pnpm
    test:release`, `npm audit signatures`, `pnpm audit --audit-level high`, and
@@ -104,7 +104,7 @@ That failure is the matrix bump, and it is a release-sized change:
 4. Dogfood a real session against the new release before it ships: install the
    packed candidate into a cloned home's profile and drive a real surface
    through the routes this plugin owns.
-5. Land the bump through a reviewed PR and ship it with the next patch release.
+5. Land the bump on `main` and ship it with the next patch release.
 
 ## Release identity and authority
 
@@ -223,7 +223,7 @@ Draft the GitHub release notes against the candidate SHA before tagging. Tag
 creation for `v*` is restricted to repository admins by the ruleset above.
 
 ```sh
-git tag -s -a "v${PKG_VERSION}" -m "v${PKG_VERSION}" <merged-sha>
+git tag -s -a "v${PKG_VERSION}" -m "v${PKG_VERSION}" <candidate-sha>
 git push origin "v${PKG_VERSION}"
 ```
 

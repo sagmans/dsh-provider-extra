@@ -87,6 +87,9 @@ carry a breaking change, and a patch carries only fixes.
   push to `main`, not through a pull request.
 - `README.md` states the trunk-based delivery flow: changes land by a signed
   push to `main`, not through a pull request.
+- `RELEASE.md` states the trunk-based delivery flow: a harness matrix bump lands
+  on `main`, `pre-push` is the gate on the pushed commit, and the release tag
+  goes on the candidate commit.
 
 ### Fixed
 
