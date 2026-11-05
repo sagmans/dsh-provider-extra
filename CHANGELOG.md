@@ -83,6 +83,8 @@ carry a breaking change, and a patch carries only fixes.
   The release helper creates and accepts that reviewer-less environment, and
   `scripts/npm/target.env` names the tag-ruleset bypass user as `RELEASE_OWNER`
   instead of `REVIEWER`. The published package is unchanged.
+- `AGENTS.md` states the trunk-based delivery flow: changes land by a signed
+  push to `main`, not through a pull request.
 
 ### Fixed
 

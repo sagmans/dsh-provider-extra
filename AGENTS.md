@@ -77,8 +77,8 @@ time by design, so a green mount proves nothing about a credential.
   sequence below and the gates in [RELEASE.md](RELEASE.md).
 - **Commits are Conventional Commits with a scope** (`feat(catalog): …`,
   `fix(login): …`, `chore(harness): …`), signed and DCO-signed.
-- **Every PR carries its `CHANGELOG.md` entry** under `## [Unreleased]`, in the
-  section that fits. The entry is part of the change, not a follow-up.
+- **Every change carries its `CHANGELOG.md` entry** under `## [Unreleased]`, in
+  the section that fits. The entry is part of the change, not a follow-up.
 - **Dependency install scripts and release age are gated in
   `pnpm-workspace.yaml`.** Ask before adding a dependency or allowlisting a
   build.
@@ -86,15 +86,16 @@ time by design, so a green mount proves nothing about a credential.
 ## Release and publication
 
 Read [RELEASE.md](RELEASE.md) before preparing a version, pushing a release tag,
-publishing, or repairing a release record. Shipping a documentation or code PR
-is not approval to publish. Require explicit maintainer approval for publication
-and each remote release action; never publish on your own initiative.
+publishing, or repairing a release record. Pushing a documentation or code
+change is not approval to publish. Require explicit maintainer approval for
+publication and each remote release action; never publish on your own
+initiative.
 
-1. Land the candidate through a reviewed PR to `main`. Match `package.json`
-   `version`, the `vX.Y.Z` tag, and the versioned `CHANGELOG.md` entry.
-   Pass the release gates in `RELEASE.md` on the exact merged commit.
+1. Land the candidate on `main`. Match `package.json` `version`, the `vX.Y.Z`
+   tag, and the versioned `CHANGELOG.md` entry.
+   Pass the release gates in `RELEASE.md` on the exact pushed commit.
 2. Create an annotated, signed tag on that commit:
-   `git tag -s -a "vX.Y.Z" -m "vX.Y.Z" <merged-sha>`.
+   `git tag -s -a "vX.Y.Z" -m "vX.Y.Z" <candidate-sha>`.
    Verify it with `git verify-tag "vX.Y.Z"`. Never use a lightweight or unsigned
    release tag; require GitHub to verify the signature after the approved push.
 3. Push only that tag with `git push origin "vX.Y.Z"` after approval.
