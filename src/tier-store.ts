@@ -124,19 +124,20 @@ export function createTierStore(
     },
     async write(provider, model, tier) {
       const path = recordPath(provider, model)
+      if (directory === undefined || home === undefined) throw new Error(MISSING_HOME)
       if (tier !== null && (typeof tier !== 'string' || !validTier(tier)))
         throw new Error(INVALID_INPUT)
       // Windows cannot guarantee these POSIX privacy and directory-sync contracts; leave fallback state untouched.
       if (process.platform === WINDOWS_PLATFORM) throw new Error(WINDOWS_UNSUPPORTED)
       try {
-        await mkdir(directory!, { mode: DIRECTORY_MODE })
+        await mkdir(directory, { mode: DIRECTORY_MODE })
       } catch (error) {
         if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error
       }
-      privateDirectory(directory!)
+      privateDirectory(directory)
       // Every writer covers a directory another process may have just created but not yet synced.
-      await syncDirectory(home!)
-      const temporary = join(directory!, `.${randomUUID()}.tmp`)
+      await syncDirectory(home)
+      const temporary = join(directory, `.${randomUUID()}.tmp`)
       let created = false
       try {
         const file = await open(temporary, 'wx', RECORD_MODE)
@@ -150,7 +151,7 @@ export function createTierStore(
         await rename(temporary, path)
         created = false
         try {
-          await syncDirectory(directory!)
+          await syncDirectory(directory)
         } catch (cause) {
           // Rollback could overwrite a concurrent writer after this record became visible.
           throw new Error(UNCERTAIN_WRITE, { cause })

@@ -101,7 +101,9 @@ export function createTierSelection(
     choices,
     resolve: (provider, model, override) => {
       const available = choices(provider, model)
-      const tier = INVOCATION_TIERS.has(override) ? INVOCATION_TIERS.get(override)! : override
+      const mapped = INVOCATION_TIERS.get(override)
+      // Not `??`: a mapped null is the provider-default choice and must not become the override.
+      const tier = mapped === undefined ? override : mapped
       if (
         available.length === 0 ||
         (tier !== null && !available.some((choice) => choice.id === tier))

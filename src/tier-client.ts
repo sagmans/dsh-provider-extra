@@ -184,6 +184,109 @@ function resultValue(result: unknown, message: string): unknown {
   return envelope.value
 }
 
+/** The save a menu row runs when chosen, kept by option so a stale row cannot act on another session. */
+interface TierSelection {
+  readonly sessionId: string
+  select(): Promise<void>
+}
+
+/** What one opening of the menu reads, and the lifetimes that can cancel it. */
+interface TierMenu {
+  readonly models: ModelDirectories
+  readonly tiers: RemotePort['providerExtraTiers']
+  readonly selections: WeakMap<SelectOption, TierSelection>
+  readonly available: (session: ClientSession) => boolean
+  readonly lifetime: AbortSignal
+  readonly registered: AbortSignal
+}
+
+/** Open the menu for the session's current route; any route change after this cancels its rows. */
+async function openTierMenu(
+  menu: TierMenu,
+  session: ClientSession,
+  requestSignal: AbortSignal,
+): Promise<SelectOption[]> {
+  const opening = new AbortController()
+  const signal = AbortSignal.any([requestSignal, menu.lifetime, menu.registered, opening.signal])
+  signal.throwIfAborted()
+  if (!menu.available(session)) return []
+  const directory = menu.models.directoryFor(session.sessionId)
+  const current = directory.store.getSnapshot().current
+  // The menu has nothing to offer until the session has chosen a model.
+  if (!current) return []
+  const provider = parseTierIdentity(current.provider)
+  const model = parseTierIdentity(current.model)
+  const invalidate = () => {
+    const latest = directory.store.getSnapshot().current
+    try {
+      if (
+        menu.available(session) &&
+        menu.models.directoryFor(session.sessionId) === directory &&
+        latest?.provider === provider &&
+        latest.model === model
+      )
+        return
+    } catch {
+      /* A removed session scope must not retain permission to write. */
+    }
+    opening.abort(new Error(STALE_ROUTE))
+  }
+  const checkRoute = () => {
+    invalidate()
+    signal.throwIfAborted()
+  }
+  // A route that changes away and back still invalidates the original billing decision.
+  const unsubscribe = directory.store.subscribe(invalidate)
+  signal.addEventListener('abort', unsubscribe, { once: true })
+  let view: TierView
+  try {
+    await directory.load()
+    checkRoute()
+    view = parseTierView(
+      resultValue(await menu.tiers.describe(provider, model, signal), READ_ERROR),
+    )
+    checkRoute()
+  } catch {
+    const error: unknown = signal.aborted ? signal.reason : new Error(READ_ERROR)
+    opening.abort()
+    throw error
+  }
+  if (view.choices.length === 0) {
+    opening.abort()
+    return []
+  }
+  const options: SelectOption[] = [
+    { id: TIER_DEFAULT, label: DEFAULT_LABEL, active: view.current === undefined },
+    ...view.choices.map((choice) => ({
+      id: choice.id,
+      label: choice.name,
+      detail: choice.description,
+      active: view.current === choice.id,
+    })),
+  ]
+  for (const option of options) {
+    const tier = option.id === TIER_DEFAULT ? undefined : option.id
+    menu.selections.set(option, {
+      sessionId: session.sessionId,
+      async select() {
+        checkRoute()
+        try {
+          parseVoid(
+            resultValue(await menu.tiers.select(provider, model, tier, signal), TIER_SAVE_ERROR),
+          )
+        } catch {
+          signal.throwIfAborted()
+          throw new Error(TIER_SAVE_ERROR)
+        }
+        checkRoute()
+        // The stock shell does not abort its signal on successful selection.
+        opening.abort()
+      },
+    })
+  }
+  return options
+}
+
 /** Optional injection keeps older hosts inert and scopes command ownership to HMR lifetime. */
 export function apply(ctx: Context): void {
   ctx.inject([COMMAND_SERVICE, MODEL_SERVICE, SESSION_SERVICE, REMOTE_SERVICE], (owner) => {
@@ -192,7 +295,7 @@ export function apply(ctx: Context): void {
     const sessions = owner.get(SESSION_SERVICE) as unknown as Sessions
     const remote = owner.get(REMOTE_SERVICE) as RemotePort
     const lifetime = new AbortController()
-    const selections = new WeakMap<SelectOption, { sessionId: string; select(): Promise<void> }>()
+    const selections = new WeakMap<SelectOption, TierSelection>()
     const available = (session: ClientSession): boolean => {
       if (sessions.subagentAddress(session.sessionId) !== undefined) return false
       const state = models.directoryFor(session.sessionId).store.getSnapshot()
@@ -225,93 +328,19 @@ export function apply(ctx: Context): void {
                   empty: UNAVAILABLE,
                   noResults: NO_RESULTS,
                 }),
-                async options(session, requestSignal) {
-                  const opening = new AbortController()
-                  const signal = AbortSignal.any([
+                options: (session, requestSignal) =>
+                  openTierMenu(
+                    {
+                      models,
+                      tiers,
+                      selections,
+                      available,
+                      lifetime: lifetime.signal,
+                      registered: registered.signal,
+                    },
+                    session,
                     requestSignal,
-                    lifetime.signal,
-                    registered.signal,
-                    opening.signal,
-                  ])
-                  signal.throwIfAborted()
-                  if (!available(session)) return []
-                  const directory = models.directoryFor(session.sessionId)
-                  const current = directory.store.getSnapshot().current!
-                  const provider = parseTierIdentity(current.provider)
-                  const model = parseTierIdentity(current.model)
-                  const invalidate = () => {
-                    const latest = directory.store.getSnapshot().current
-                    try {
-                      if (
-                        available(session) &&
-                        models.directoryFor(session.sessionId) === directory &&
-                        latest?.provider === provider &&
-                        latest.model === model
-                      )
-                        return
-                    } catch {
-                      /* A removed session scope must not retain permission to write. */
-                    }
-                    opening.abort(new Error(STALE_ROUTE))
-                  }
-                  const checkRoute = () => {
-                    invalidate()
-                    signal.throwIfAborted()
-                  }
-                  // A route that changes away and back still invalidates the original billing decision.
-                  const unsubscribe = directory.store.subscribe(invalidate)
-                  signal.addEventListener('abort', unsubscribe, { once: true })
-                  let view: TierView
-                  try {
-                    await directory.load()
-                    checkRoute()
-                    view = parseTierView(
-                      resultValue(await tiers.describe(provider, model, signal), READ_ERROR),
-                    )
-                    checkRoute()
-                  } catch {
-                    const error: unknown = signal.aborted ? signal.reason : new Error(READ_ERROR)
-                    opening.abort()
-                    throw error
-                  }
-                  if (view.choices.length === 0) {
-                    opening.abort()
-                    return []
-                  }
-                  const options: SelectOption[] = [
-                    { id: TIER_DEFAULT, label: DEFAULT_LABEL, active: view.current === undefined },
-                    ...view.choices.map((choice) => ({
-                      id: choice.id,
-                      label: choice.name,
-                      detail: choice.description,
-                      active: view.current === choice.id,
-                    })),
-                  ]
-                  for (const option of options) {
-                    const tier = option.id === TIER_DEFAULT ? undefined : option.id
-                    selections.set(option, {
-                      sessionId: session.sessionId,
-                      async select() {
-                        checkRoute()
-                        try {
-                          parseVoid(
-                            resultValue(
-                              await tiers.select(provider, model, tier, signal),
-                              TIER_SAVE_ERROR,
-                            ),
-                          )
-                        } catch {
-                          signal.throwIfAborted()
-                          throw new Error(TIER_SAVE_ERROR)
-                        }
-                        checkRoute()
-                        // The stock shell does not abort its signal on successful selection.
-                        opening.abort()
-                      },
-                    })
-                  }
-                  return options
-                },
+                  ),
                 async onSelect(option, session) {
                   const selection = selections.get(option)
                   if (selection === undefined || selection.sessionId !== session.sessionId)

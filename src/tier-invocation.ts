@@ -98,19 +98,21 @@ export function mountTierInvocation(ctx: Context, tiers: TierSelection): void {
 
   /** Bind one newly registered root, or the exact resumed root, before accepting request metadata. */
   function resolve(request: GenerateOptions): string | null | undefined {
+    // A local copy keeps the narrowing inside the filter below; nothing here awaits.
+    const current = active
     if (
-      !active ||
+      !current ||
       !llm.isAgentLoopRequest(request) ||
       !request.sessionId ||
       request.purpose !== undefined
     )
       return undefined
-    const roots = active.agents.roots()
-    if (!active.root) {
+    const roots = current.agents.roots()
+    if (!current.root) {
       const candidates = roots.filter(
         (root) =>
-          !active!.previousRoots.has(root) &&
-          (active!.sessionId === undefined || root.id === active!.sessionId),
+          !current.previousRoots.has(root) &&
+          (current.sessionId === undefined || root.id === current.sessionId),
       )
       if (candidates.length !== SINGLE_ROOT) {
         // Falling back here could restore saved paid processing against an explicit provider-default request.
@@ -118,9 +120,10 @@ export function mountTierInvocation(ctx: Context, tiers: TierSelection): void {
           throw new Error(AMBIGUOUS_ROOT)
         return undefined
       }
-      active.root = candidates[0]
+      current.root = candidates[0]
     }
-    if (!roots.includes(active.root!) || active.root!.id !== request.sessionId) return undefined
-    return tiers.resolve(request.provider, request.model, active.override)
+    const { root } = current
+    if (!root || !roots.includes(root) || root.id !== request.sessionId) return undefined
+    return tiers.resolve(request.provider, request.model, current.override)
   }
 }

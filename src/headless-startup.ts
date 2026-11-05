@@ -45,6 +45,24 @@ function nativeArgs(args: readonly string[]): string[] {
   return normalized
 }
 
+/** The first usage error in a parsed command line, in the order the reader would fix them. */
+function usageProblem(
+  positionals: readonly string[],
+  task: string | undefined,
+  sessionId: string | undefined,
+  override: string | undefined,
+): string | undefined {
+  if (positionals.length > 1 && positionals.includes(STDIN_TASK))
+    return '`-` must be the only task argument'
+  if ((task !== undefined && task.trim() === '') || (task === undefined && process.stdin.isTTY))
+    return TASK_REQUIRED
+  if (sessionId !== undefined && sessionId.trim() === '')
+    return '--session-id requires a non-empty session id'
+  if (override !== undefined && !isServiceTierOverride(override))
+    return `unsupported --service-tier: ${override}`
+  return undefined
+}
+
 /** Publishing this public service starts the stock runner, so all syntax validation precedes publication. */
 export function apply(ctx: Context): void {
   const cmdline = ctx.get('cmdlineArgs') as { get(): readonly string[] } | undefined
@@ -54,6 +72,12 @@ export function apply(ctx: Context): void {
       'dsh --profile headless: the launcher must provide ctx.cmdlineArgs and ctx.appExit before the tree mounts',
     )
   const args = cmdline.get()
+  /** Usage failures remain launcher-owned exits instead of failing plugin mounts or starting requests. */
+  const reject = (message: string): void => {
+    if (jsonRequested(args)) process.stdout.write(`${JSON.stringify({ type: 'error', message })}\n`)
+    else process.stderr.write(`error: ${message}\n`)
+    exit(USAGE_ERROR)
+  }
   let parsed: {
     values: { json?: boolean; 'session-id'?: string; 'service-tier'?: string; help?: boolean }
     positionals: string[]
@@ -83,20 +107,9 @@ export function apply(ctx: Context): void {
   const task = positionals.length === 0 ? undefined : positionals.join(' ')
   const sessionId = values['session-id']
   const override = values['service-tier']
-  if (positionals.length > 1 && positionals.includes(STDIN_TASK)) {
-    reject('`-` must be the only task argument')
-    return
-  }
-  if ((task !== undefined && task.trim() === '') || (task === undefined && process.stdin.isTTY)) {
-    reject(TASK_REQUIRED)
-    return
-  }
-  if (sessionId !== undefined && sessionId.trim() === '') {
-    reject('--session-id requires a non-empty session id')
-    return
-  }
-  if (override !== undefined && !isServiceTierOverride(override)) {
-    reject(`unsupported --service-tier: ${override}`)
+  const problem = usageProblem(positionals, task, sessionId, override)
+  if (problem !== undefined) {
+    reject(problem)
     return
   }
   const agents = ctx.get('agents') as TierInvocationAgents | undefined
@@ -105,11 +118,4 @@ export function apply(ctx: Context): void {
     throw new Error('headless service tiers require agents and providerTierInvocation')
   ctx.effect(() => controller.activate(override, sessionId, agents))
   ctx.provide(STARTUP_SERVICE, { task, sessionId, json: values.json === true })
-
-  /** Usage failures remain launcher-owned exits instead of failing plugin mounts or starting requests. */
-  function reject(message: string): void {
-    if (jsonRequested(args)) process.stdout.write(`${JSON.stringify({ type: 'error', message })}\n`)
-    else process.stderr.write(`error: ${message}\n`)
-    exit!(USAGE_ERROR)
-  }
 }
