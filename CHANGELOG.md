@@ -85,6 +85,8 @@ carry a breaking change, and a patch carries only fixes.
   instead of `REVIEWER`. The published package is unchanged.
 - `AGENTS.md` states the trunk-based delivery flow: changes land by a signed
   push to `main`, not through a pull request.
+- `README.md` states the trunk-based delivery flow: changes land by a signed
+  push to `main`, not through a pull request.
 
 ### Fixed
 
