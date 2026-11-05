@@ -63,6 +63,10 @@ carry a breaking change, and a patch carries only fixes.
   the managed catalog refuse a missing provider, sign-in flow, or credential
   store with a named error, in place of a `TypeError`. The behavior on valid
   input is the same.
+- The pre-push hook now stops a step that hangs. Network reads, installs, test
+  suites, builds and daemon calls each run under a limit. At the limit, the push
+  fails and names the step and the elapsed time. The limits are constants at the
+  top of each check.
 - The daily hosted harness-matrix workflow is removed, so every check runs
   locally with free tools. The `pre-push` hook now reads the registry for a
   newer harness release on each push. It blocks once an unverified latest

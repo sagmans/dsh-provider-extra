@@ -12,13 +12,21 @@ helper=${DSH_DOGFOOD_HELPER:-$DEFAULT_DOGFOOD_HELPER}
 # An inherited value must not reach the parallel suite in `pnpm run check`.
 unset DSH_DOGFOOD_HELPER
 
+# Limits for run_step. Each one catches a hang, not a slow run, so it stays far
+# above a normal run on a loaded machine: the registry reads take seconds and
+# the check suite takes about a minute.
+NETWORK_TIMEOUT_SECONDS=120
+INSTALL_TIMEOUT_SECONDS=300
+CHECK_TIMEOUT_SECONDS=600
+
 checks() {
-	npm audit signatures || return 1
-	pnpm run check || return 1
+	run_step 'npm audit signatures' "$NETWORK_TIMEOUT_SECONDS" npm audit signatures || return 1
+	run_step 'pnpm run check' "$CHECK_TIMEOUT_SECONDS" pnpm run check || return 1
 	# Separate from the check suite: the helper rebuilds dist/, which the other
 	# test files read in parallel. This variable is what stops the test's skip.
-	DSH_DOGFOOD_HELPER=$helper node --test tests/catalog-setup.test.mjs || return 1
-	pnpm audit --audit-level high || return 1
+	run_step 'catalog setup test' "$CHECK_TIMEOUT_SECONDS" \
+		env DSH_DOGFOOD_HELPER="$helper" node --test tests/catalog-setup.test.mjs || return 1
+	run_step 'pnpm audit' "$NETWORK_TIMEOUT_SECONDS" pnpm audit --audit-level high || return 1
 }
 
 # Helpers (staged_git, pushed_shas, at_sha, darwin_only) from .githooks/lib.
@@ -47,9 +55,9 @@ top=$(git rev-parse --show-toplevel)
 install_deps() {
 	[ "$(pwd -P)" != "$(CDPATH='' cd -- "$top" && pwd -P)" ] || return 0
 	if [ -f pnpm-lock.yaml ]; then
-		pnpm install --frozen-lockfile >/dev/null || return 1
+		run_step 'pnpm install' "$INSTALL_TIMEOUT_SECONDS" pnpm install --frozen-lockfile >/dev/null || return 1
 	elif [ -f package-lock.json ]; then
-		npm ci --ignore-scripts --no-audit --no-fund >/dev/null || return 1
+		run_step 'npm ci' "$INSTALL_TIMEOUT_SECONDS" npm ci --ignore-scripts --no-audit --no-fund >/dev/null || return 1
 	fi
 }
 

@@ -8,6 +8,10 @@
 # release-age window, and blocks on a registry or network error (fail closed).
 set -eu
 
+# Above the tool's own request limit, so the tool reports a slow registry itself
+# and this limit only catches a tool that hangs.
+REGISTRY_TIMEOUT_SECONDS=120
+
 # Helpers (staged_git, pushed_shas, at_sha, darwin_only) from .githooks/lib.
 # shellcheck source=/dev/null
 . "${HOOK_HELPERS:?run from .githooks (scripts/setup-hooks)}"
@@ -15,7 +19,7 @@ set -eu
 # The tool reads only package.json and pnpm-workspace.yaml with Node
 # built-ins, so the commit needs no install.
 registry_check() {
-	node tools/harness-matrix.mjs --check-registry || return 1
+	run_step 'harness registry' "$REGISTRY_TIMEOUT_SECONDS" node tools/harness-matrix.mjs --check-registry || return 1
 }
 
 shas=$(pushed_shas <"$HOOK_STDIN_FILE") || exit 1
