@@ -1,51 +1,78 @@
 # dsh-provider-extra
 
-Extra provider routes for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness):
+Extra provider routes for [DeepSeek
+Harness](https://github.com/deepseek-ai/deepseek-harness):
 
-- **OpenCode Go:** sends the live conversation ID in `x-opencode-session` for routing and prompt caching.
-- **OpenAI Codex:** uses a ChatGPT subscription through pi-ai's OAuth flow and the harness credential store.
+- **OpenCode Go:** sends the live conversation ID in `x-opencode-session` for
+  routing and prompt caching.
+- **OpenAI Codex:** uses a ChatGPT subscription through pi-ai's OAuth flow and
+  the harness credential store.
 
-Published on npm as [`@sagmans/dsh-provider-extra`](https://www.npmjs.com/package/@sagmans/dsh-provider-extra); every release carries a provenance attestation built by the tag workflow, and no npm token is stored. The code is [MIT licensed](LICENSE).
+Published on npm as
+[`@sagmans/dsh-provider-extra`](https://www.npmjs.com/package/@sagmans/dsh-provider-extra);
+every release carries a provenance attestation built by the tag workflow, and no
+npm token is stored. The code is [MIT licensed](LICENSE).
 
 ## Opt-in canonical catalog
 
-Provider-extra remains optional. With no `catalog` Config, existing additive behavior stays unchanged.
-An opted-in profile can select ordered routes from any backend the installed pi-ai catalog provides, or from an endpoint you declare with its own protocol and base URL.
-A route lists its models explicitly, or curates the installed source catalog with `include`/`exclude` patterns that keep every installed fact.
-One validated snapshot owns listings, dispatch, and `agentDefaultModel`; managed settings overlays do not apply.
+Provider-extra remains optional. With no `catalog` Config, existing additive
+behavior stays unchanged.
+An opted-in profile can select ordered routes from any backend the installed
+pi-ai catalog provides, or from an endpoint you declare with its own protocol
+and base URL.
+A route lists its models explicitly, or curates the installed source catalog
+with `include`/`exclude` patterns that keep every installed fact.
+One validated snapshot owns listings, dispatch, and `agentDefaultModel`; managed
+settings overlays do not apply.
 
 Read [catalog configuration and activation](docs/catalog.md) before adoption.
-The [shape example](docs/catalog-v1.example.json) validates with synthetic model identifiers and illustrative metadata, not a real provider/model selection.
+The [shape example](docs/catalog-v1.example.json) validates with synthetic model
+identifiers and illustrative metadata, not a real provider/model selection.
 Keep your model selection in your own profile Config, not in the plugin package.
-For source development, use the [clone-only setup command](docs/catalog.md#clone-only-development-setup) with an explicit private catalog file.
-Only the adopted profile disables competing provider/default rows. TUI and ordinary profiles require no changes.
+For source development, use the [clone-only setup
+command](docs/catalog.md#clone-only-development-setup) with an explicit private
+catalog file.
+Only the adopted profile disables competing provider/default rows. TUI and
+ordinary profiles require no changes.
 
 Canonical default saves use the host profile `configEditor` when available.
-Unsupported hosts reject with `CONFIG_PERSISTENCE_UNAVAILABLE`, rather than writing legacy settings.
-Catalog presence does not prove endpoint availability, pricing, or metadata accuracy.
+Unsupported hosts reject with `CONFIG_PERSISTENCE_UNAVAILABLE`, rather than
+writing legacy settings.
+Catalog presence does not prove endpoint availability, pricing, or metadata
+accuracy.
 
 ## Requirements
 
 - Node.js 24 LTS (verified with 24.22.1).
 - pnpm 11.21.0 for this repository.
-- A DeepSeek Harness install on the supported line: `>=0.2.1-rc.1 <0.3.0-0`, verified against `0.2.1-rc.2` and `0.2.1-rc.3` (see [RELEASE.md](RELEASE.md#harness-matrix)). The range is declared in `dsh.compatibility.dsh` and on every harness peer, so the harness refuses this plugin on a host outside it instead of failing the first turn. Hosts before `0.2.1-rc.1` ship the pi-ai `0.x` model catalog; use `@sagmans/dsh-provider-extra@0.8.1` there.
+- A DeepSeek Harness install on the supported line: `>=0.2.1-rc.1 <0.3.0-0`,
+  verified against `0.2.1-rc.2` and `0.2.1-rc.3` (see
+  [RELEASE.md](RELEASE.md#harness-matrix)). The range is declared in
+  `dsh.compatibility.dsh` and on every harness peer, so the harness refuses this
+  plugin on a host outside it instead of failing the first turn. Hosts before
+  `0.2.1-rc.1` ship the pi-ai `0.x` model catalog; use
+  `@sagmans/dsh-provider-extra@0.8.1` there.
 
 ## Install
 
-Register the bundle in each profile you use. Web and TUI are separate compositions:
+Register the bundle in each profile you use. Web and TUI are separate
+compositions:
 
 ```sh
 dsh plugin --profile web add @sagmans/dsh-provider-extra
 dsh plugin --profile tui add @sagmans/dsh-provider-extra
 ```
 
-A release of the harness CLI is installable without a launcher already on `PATH`:
+A release of the harness CLI is installable without a launcher already on
+`PATH`:
 
 ```sh
 pnpm dlx @deepseek-ai/dsh@0.2.1-rc.3 plugin --profile web add @sagmans/dsh-provider-extra
 ```
 
-The package declares `dsh.bundle.patch`. The CLI adds it to the profile's bundle list, and its patch loads the compiled plugin automatically. A bare `pnpm link` is not the registration procedure.
+The package declares `dsh.bundle.patch`. The CLI adds it to the profile's bundle
+list, and its patch loads the compiled plugin automatically. A bare `pnpm link`
+is not the registration procedure.
 
 To remove it from a profile:
 
@@ -54,7 +81,8 @@ dsh plugin --profile web remove @sagmans/dsh-provider-extra
 dsh plugin --profile tui remove @sagmans/dsh-provider-extra
 ```
 
-These commands remove the profile dependency and bundle activation, not stored credentials. Restart the affected profiles after adding or removing the bundle.
+These commands remove the profile dependency and bundle activation, not stored
+credentials. Restart the affected profiles after adding or removing the bundle.
 
 ### Install from source
 
@@ -69,13 +97,20 @@ dsh plugin --profile web add "link:$PWD"
 dsh plugin --profile tui add "link:$PWD"
 ```
 
-Rebuild with `pnpm run build` after source changes, then restart the affected profiles. The bundle uses compiled JavaScript without a TypeScript loader. Keep the linked checkout at its registered path.
+Rebuild with `pnpm run build` after source changes, then restart the affected
+profiles. The bundle uses compiled JavaScript without a TypeScript loader. Keep
+the linked checkout at its registered path.
 
 ### Optional profile overrides
 
-Defaults use the `opencode-go` and `openai-codex` routes, `OPENCODE_API_KEY`, the provider sign-in command `dsh-provider-extra-login`, and the fallback session ID `dsh-provider-extra`.
+Defaults use the `opencode-go` and `openai-codex` routes, `OPENCODE_API_KEY`,
+the provider sign-in command `dsh-provider-extra-login`, and the fallback
+session ID `dsh-provider-extra`.
 
-To customize them, add an ID-targeted override to `$DSH_HOME/profiles/web/cordis.patch.yml`, `$DSH_HOME/profiles/tui/cordis.patch.yml`, or both. `DSH_HOME` defaults to `~/.dsh`.
+To customize them, add an ID-targeted override to
+`$DSH_HOME/profiles/web/cordis.patch.yml`,
+`$DSH_HOME/profiles/tui/cordis.patch.yml`, or both. `DSH_HOME` defaults to
+`~/.dsh`.
 
 ```yaml
 - id: dsh-provider-extra
@@ -93,11 +128,20 @@ To customize them, add an ID-targeted override to `$DSH_HOME/profiles/web/cordis
     # loginCommandName: dsh-provider-extra-login
 ```
 
-Preserve unrelated profile entries. Do not add a manual `insert` or `name`: the bundle owns plugin activation. Overrides can remain after removal without keeping the plugin active.
+Preserve unrelated profile entries. Do not add a manual `insert` or `name`: the
+bundle owns plugin activation. Overrides can remain after removal without
+keeping the plugin active.
 
-If you used the earlier manual registration, replace its `insert` block with an ID-targeted override before running `add`. Keep your existing `config` values. A leftover manual insert can cause duplicate loading or keep the plugin active after `remove`.
+If you used the earlier manual registration, replace its `insert` block with an
+ID-targeted override before running `add`. Keep your existing `config` values. A
+leftover manual insert can cause duplicate loading or keep the plugin active
+after `remove`.
 
-Keep `opencode-go` and `openai-codex` out of the built-in `llm-pi-ai` provider configuration. A route can have only one adapter. A duplicate produces `DUPLICATE_ADAPTER`. The plugin logs the conflict and leaves that route with its existing owner. You can choose a different `routeId`, such as `opencode-go-session`, when you need both Go routes.
+Keep `opencode-go` and `openai-codex` out of the built-in `llm-pi-ai` provider
+configuration. A route can have only one adapter. A duplicate produces
+`DUPLICATE_ADAPTER`. The plugin logs the conflict and leaves that route with its
+existing owner. You can choose a different `routeId`, such as
+`opencode-go-session`, when you need both Go routes.
 
 Start a profile with the same harness install that owns the profiles:
 
@@ -111,11 +155,21 @@ Select a model from the registered route in the model picker.
 
 ## OpenCode Go credentials and models
 
-Store the API key through the harness credential service, using the reference named by `apiKeyEnv`. Alternatively, supply that environment variable to the harness. Do not put keys in the patch file. `baseURL` and `headers` can override the gateway endpoint and add static headers. For the standard gateway, leave them unset.
+Store the API key through the harness credential service, using the reference
+named by `apiKeyEnv`. Alternatively, supply that environment variable to the
+harness. Do not put keys in the patch file. `baseURL` and `headers` can override
+the gateway endpoint and add static headers. For the standard gateway, leave
+them unset.
 
-The plugin reuses `PiAiAdapter` and pi-ai's `opencode-go` catalog. It injects the routing header on both `prepareCall()` and direct stream dispatch. The request's session ID takes precedence over `fallbackSessionId` and static headers. Without a request ID or configured fallback, the plugin sends no session header.
+The plugin reuses `PiAiAdapter` and pi-ai's `opencode-go` catalog. It injects
+the routing header on both `prepareCall()` and direct stream dispatch. The
+request's session ID takes precedence over `fallbackSessionId` and static
+headers. Without a request ID or configured fallback, the plugin sends no
+session header.
 
-The pinned catalog is extended with `deepseek-flash` (DeepSeek V4.1 Flash), cloned from `deepseek-v4.1-flash`. Add other models to the profile override without rebuilding or restarting:
+The pinned catalog is extended with `deepseek-flash` (DeepSeek V4.1 Flash),
+cloned from `deepseek-v4.1-flash`. Add other models to the profile override
+without rebuilding or restarting:
 
 ```yaml
 - id: dsh-provider-extra
@@ -129,18 +183,29 @@ The pinned catalog is extended with `deepseek-flash` (DeepSeek V4.1 Flash), clon
       - example-go-other-model
 ```
 
-These identifiers are placeholders. Replace them with models your provider serves and templates from the installed catalog.
+These identifiers are placeholders. Replace them with models your provider
+serves and templates from the installed catalog.
 
-Each entry clones wire behavior from its template. Later entries win by ID. A catalog-owned ID is not replaced. An unknown template becomes a model diagnostic without disabling the route. The entry owns definitions for a declared exact selection.
+Each entry clones wire behavior from its template. Later entries win by ID. A
+catalog-owned ID is not replaced. An unknown template becomes a model diagnostic
+without disabling the route. The entry owns definitions for a declared exact
+selection.
 
-When models or codexModels declares an exact selection, that route resolves its models against the entry's extra-model declarations. An unknown selected ID rejects the entry before the route mounts. Later settings edits cannot replace or remove those selected model definitions.
+When models or codexModels declares an exact selection, that route resolves its
+models against the entry's extra-model declarations. An unknown selected ID
+rejects the entry before the route mounts. Later settings edits cannot replace
+or remove those selected model definitions.
 
-`models` serves and advertises exactly its listed IDs, in order. Leave it out to serve all resolved models.
-In additive mode, an empty declaration also means no selection; managed catalog arrays never have this expansion behavior.
+`models` serves and advertises exactly its listed IDs, in order. Leave it out to
+serve all resolved models.
+In additive mode, an empty declaration also means no selection; managed catalog
+arrays never have this expansion behavior.
 
 ## Codex models
 
-The Codex route serves pi-ai's installed `openai-codex` catalog for the signed-in subscription. Extend it the same way when the subscription serves an ID the installed catalog predates:
+The Codex route serves pi-ai's installed `openai-codex` catalog for the
+signed-in subscription. Extend it the same way when the subscription serves an
+ID the installed catalog predates:
 
 ```yaml
 - id: dsh-provider-extra
@@ -156,25 +221,41 @@ The Codex route serves pi-ai's installed `openai-codex` catalog for the signed-i
 
 These identifiers are placeholders, not model recommendations.
 
-Unlike the Go route, these entries must name their `template`: Codex ships no default sibling, so a declaration that names none is reported as a model diagnostic instead of cloned from another vendor's catalog. Later entries win by ID, a catalog-owned ID is not replaced, and an unknown template becomes a diagnostic without disabling the route.
+Unlike the Go route, these entries must name their `template`: Codex ships no
+default sibling, so a declaration that names none is reported as a model
+diagnostic instead of cloned from another vendor's catalog. Later entries win by
+ID, a catalog-owned ID is not replaced, and an unknown template becomes a
+diagnostic without disabling the route.
 
-Routes without models or codexModels continue to read extraModels or codexExtraModels from the settings section on each operation. Settings additions, metadata changes, and removals reach those unselected routes without a restart. A declared selection keeps its entry-owned model definitions instead.
+Routes without models or codexModels continue to read extraModels or
+codexExtraModels from the settings section on each operation. Settings
+additions, metadata changes, and removals reach those unselected routes without
+a restart. A declared selection keeps its entry-owned model definitions instead.
 
-`codexTransport` pins the transport pi-ai uses for this route: `sse`, `websocket`, `websocket-cached`, or `auto`. Leave it out and pi-ai chooses, which on a network that never lets the subscription's websocket continue past the first answer leaves the reply printed and the process waiting; pin `sse` there.
+`codexTransport` pins the transport pi-ai uses for this route: `sse`,
+`websocket`, `websocket-cached`, or `auto`. Leave it out and pi-ai chooses,
+which on a network that never lets the subscription's websocket continue past
+the first answer leaves the reply printed and the process waiting; pin `sse`
+there.
 
 ## Service tiers
 
-Plugin-owned OpenAI and Codex routes expose service tier selection through the `providerServiceTiers` service.
+Plugin-owned OpenAI and Codex routes expose service tier selection through the
+`providerServiceTiers` service.
 Choices are `auto`, `default`, and `priority` (Fast).
-For Codex, Auto omits `service_tier` and lets the provider choose; it has the same wire behavior as Provider default but remains a distinct saved choice.
+For Codex, Auto omits `service_tier` and lets the provider choose; it has the
+same wire behavior as Provider default but remains a distinct saved choice.
 Native OpenAI routes continue to send `service_tier: "auto"` for Auto.
 Priority processing can increase usage cost and requires account access.
 The plugin does not offer `ultrafast` or `flex` for Codex.
 
 Interactive choices apply to one provider and model pair across profiles.
-The plugin atomically stores each choice under `$DSH_HOME/provider-extra-service-tiers/`, without editing configuration or duplicating the catalog.
+The plugin atomically stores each choice under
+`$DSH_HOME/provider-extra-service-tiers/`, without editing configuration or
+duplicating the catalog.
 Menus and requests read the latest saved choice.
-Configured `serviceTierSelections` remain defaults until an interactive choice overrides them:
+Configured `serviceTierSelections` remain defaults until an interactive choice
+overrides them:
 
 ```yaml
 - id: dsh-provider-extra
@@ -185,8 +266,10 @@ Configured `serviceTierSelections` remain defaults until an interactive choice o
         tier: priority
 ```
 
-The selection reaches both stream entry points without changing authentication or transport.
-Managed catalog aliases support tiers when their source is `openai` or `openai-codex` and their protocol supports tier selection.
+The selection reaches both stream entry points without changing authentication
+or transport.
+Managed catalog aliases support tiers when their source is `openai` or
+`openai-codex` and their protocol supports tier selection.
 An OpenAI-compatible protocol alone does not enable tiers.
 Other sources and routes owned by another adapter do not advertise tiers.
 The provider still controls model support and account access.
@@ -197,12 +280,15 @@ Type `/service-tier` in the editor and select the command.
 Its popup offers Provider default, Auto, Standard, and Fast.
 The stock Model/Effort popup stays unchanged.
 Unsupported routes show an unavailable message and no selectable tiers.
-The command uses public npm DSH `0.2.1-rc.2` client services, without upstream patches or a custom React control.
+The command uses public npm DSH `0.2.1-rc.2` client services, without upstream
+patches or a custom React control.
 
 ### Headless
 
-The packaged [headless overlay](headless.patch.yml) requires the public npm DSH `0.2.1-rc.2` startup and request-scoping contracts.
-It replaces only startup parsing; the stock runner still owns execution and resume.
+The packaged [headless overlay](headless.patch.yml) requires the public npm DSH
+`0.2.1-rc.2` startup and request-scoping contracts.
+It replaces only startup parsing; the stock runner still owns execution and
+resume.
 Enable this provider plugin in the headless profile first.
 Pass the installed overlay path before headless options:
 
@@ -210,11 +296,13 @@ Pass the installed overlay path before headless options:
 dsh --profile headless --patch /path/to/dsh-provider-extra/headless.patch.yml --service-tier=fast "Reply with exactly pong"
 ```
 
-Alternatively, compose the overlay entries into your headless profile once, then omit `--patch`.
+Alternatively, compose the overlay entries into your headless profile once, then
+omit `--patch`.
 Do not apply that overlay to Web, Desktop, or TUI profiles.
 Stock headless startup alone does not recognize `--service-tier`.
 
-Accepted values are `auto`, `standard` (`default`), `fast` (`priority`), and `provider-default`.
+Accepted values are `auto`, `standard` (`default`), `fast` (`priority`), and
+`provider-default`.
 Without the flag, requests use the saved choice.
 `provider-default` suppresses it for this invocation without changing storage.
 Only the invoking root agent receives the override, including resumed requests.
@@ -229,27 +317,36 @@ The plugin registers `prefix+t` through the optional `tuiKeymaps` registry.
 The TUI owns generic key dispatch, not this binding or its behavior.
 Use `prefix+t` to open the tier picker independently.
 Rebind `keys.plugin.provider-extra.serviceTier` on the owning TUI row.
-On Config-backed profiles, put `keys` directly under that row's `config`, not under `settings`.
+On Config-backed profiles, put `keys` directly under that row's `config`, not
+under `settings`.
 Keep `sessionId` and the other launch fields when editing the row.
 Removing this provider plugin removes its shortcut and effort follow-up.
-Choose **provider default** to suppress both the saved tier and its configured fallback.
+Choose **provider default** to suppress both the saved tier and its configured
+fallback.
 Cancelling the tier picker does not change the confirmed effort.
 Writes that fail before atomic replacement preserve the previous tier.
-A connection or durability failure after replacement can leave the new tier visible; reopen the picker before retrying.
+A connection or durability failure after replacement can leave the new tier
+visible; reopen the picker before retrying.
 Cancelling an already-submitted save does not undo it.
-Shared saves require a DSH profile with a resolved shared home and a filesystem that supports private POSIX permissions and directory synchronization.
-Windows interactive persistence is unsupported; configured defaults and headless flags remain usable when no shared store exists.
-Unreadable or malformed records block tier reads rather than silently restoring paid defaults; repair or remove the affected record.
-With footer-hint support, explicit Auto and Fast appear beside effort, for example `(high · Fast)`.
+Shared saves require a DSH profile with a resolved shared home and a filesystem
+that supports private POSIX permissions and directory synchronization.
+Windows interactive persistence is unsupported; configured defaults and headless
+flags remain usable when no shared store exists.
+Unreadable or malformed records block tier reads rather than silently restoring
+paid defaults; repair or remove the affected record.
+With footer-hint support, explicit Auto and Fast appear beside effort, for
+example `(high · Fast)`.
 Standard and provider-default selections stay hidden.
 Provider default adds no `service_tier` field to normal requests.
 Existing caller options and payload hooks remain unchanged.
 
 ## Provider sign-in
 
-Sign in from the profile you are already using. The plugin registers a command in the harness command palette.
+Sign in from the profile you are already using. The plugin registers a command
+in the harness command palette.
 In additive mode, it offers providers with an installed interactive login.
-In managed mode, it offers only the routes and authentication methods selected by `catalog`.
+In managed mode, it offers only the routes and authentication methods selected
+by `catalog`.
 
 ```text
 /dsh-provider-extra-login [<id> [oauth|key] | status]
@@ -259,9 +356,12 @@ Omit the ID to pick a provider. Set `loginCommandName` to rename the command.
 Set `loginCommandEnabled: false` to disable it in either mode.
 The command needs a command registry and a session UI to ask sign-in questions.
 
-Managed IDs are exactly the `Config.catalog` route IDs, shown with their configured names.
-Additive IDs remain installed source provider IDs, including `opencode-go` when its configured route is aliased.
-With no method word, the command uses the only available method, or OAuth first when both are available.
+Managed IDs are exactly the `Config.catalog` route IDs, shown with their
+configured names.
+Additive IDs remain installed source provider IDs, including `opencode-go` when
+its configured route is aliased.
+With no method word, the command uses the only available method, or OAuth first
+when both are available.
 Use `oauth` or `key` to select a method explicitly.
 A managed `apiKeyRef` route offers only key entry, including XAI.
 
@@ -270,17 +370,28 @@ It never declares routes or changes Config, defaults, settings, or membership.
 Additive sign-in can declare an undeclared provider in `llm-pi-ai` settings.
 Credentials serve the next request without a restart.
 
-Missing or read-only credential stores refuse sign-in before any secret or OAuth prompt.
-API-key entry uses a secret-marked question and verifies the pending key before storage.
-A zero-model key route fails with `cannot verify this API key: no models are available for provider <route-id>`.
-That failure stores nothing. Success requires a readback from the effective credential store.
+Missing or read-only credential stores refuse sign-in before any secret or OAuth
+prompt.
+API-key entry uses a secret-marked question and verifies the pending key before
+storage.
+A zero-model key route fails with
+`cannot verify this API key: no models are available for provider <route-id>`.
+That failure stores nothing. Success requires a readback from the effective
+credential store.
 
-Managed status prints `API key <ref> (not set|set from <source>)` for reference-backed routes.
+Managed status prints `API key <ref> (not set|set from <source>)` for
+reference-backed routes.
 It never substitutes a provider record for an unresolved reference.
-Source-record mode reports `not signed in` or `signed in (api_key|oauth)` from `llm-pi-ai:<credentialProvider>`.
-Status and OAuth persistence do not check endpoint availability or account entitlement.
+Source-record mode reports `not signed in` or `signed in (api_key|oauth)` from
+`llm-pi-ai:<credentialProvider>`.
+Status and OAuth persistence do not check endpoint availability or account
+entitlement.
 
-Without a command palette — a headless composition, or a sign-in for a server you are not attached to — use the shipped bin instead. It signs into the Codex route only, and needs the same `DSH_HOME` as the harness plus a profile that has booted at least once, because that is what installs the tree the bin resolves the harness packages through:
+Without a command palette — a headless composition, or a sign-in for a server
+you are not attached to — use the shipped bin instead. It signs into the Codex
+route only, and needs the same `DSH_HOME` as the harness plus a profile that has
+booted at least once, because that is what installs the tree the bin resolves
+the harness packages through:
 
 ```sh
 "$DSH_HOME/profiles/web/node_modules/.bin/dsh-provider-extra-login"
@@ -288,11 +399,18 @@ Without a command palette — a headless composition, or a sign-in for a server 
 "$DSH_HOME/profiles/web/node_modules/.bin/dsh-provider-extra-login" --credentials-path /absolute/path/to/.credentials.yaml
 ```
 
-From a source checkout, `pnpm codex:login` runs the same entry point through the TypeScript loader.
+From a source checkout, `pnpm codex:login` runs the same entry point through the
+TypeScript loader.
 
-Choose device-code login for a headless host or browser login for a desktop. Follow the URL and prompts printed by pi-ai. The browser callback uses `localhost:1455`. The prompt also accepts a pasted redirect URL.
+Choose device-code login for a headless host or browser login for a desktop.
+Follow the URL and prompts printed by pi-ai. The browser callback uses
+`localhost:1455`. The prompt also accepts a pasted redirect URL.
 
-The grant is stored in `$DSH_HOME/.credentials.yaml` by default. Writes use the harness document lock, and the running adapter reads the grant on the next request. Never commit the grant or include it in a bug report. Renaming `codexRouteId` changes the credential address, so keep the default unless a separate grant is intentional. Set `codexEnabled: false` to disable this route.
+The grant is stored in `$DSH_HOME/.credentials.yaml` by default. Writes use the
+harness document lock, and the running adapter reads the grant on the next
+request. Never commit the grant or include it in a bug report. Renaming
+`codexRouteId` changes the credential address, so keep the default unless a
+separate grant is intentional. Set `codexEnabled: false` to disable this route.
 
 ## Development and verification
 
@@ -302,27 +420,59 @@ pnpm run check
 pnpm audit --audit-level high
 ```
 
-`check` runs type checking, source tests, the harness matrix guard, the build, integration tests, release guards, and the package smoke. `node tools/harness-matrix.mjs` reads the declared range, the verified releases, and what every harness package declares, and fails when the three disagree; `pnpm run matrix` is the same check.
-Package checks reject non-synthetic catalog/model declarations in shipped configuration and documentation.
-Development setup tests use synthetic credentials-free profiles; the setup helper stays outside the npm package. The plain-Node smoke test mounts both compiled routes in the real Cordis/LLM runtime. Two CLI tests exercise add, repeated add, profile overrides, and remove in disposable web/TUI profiles; they drive the registry CLI this repository develops against (`@deepseek-ai/dsh@0.2.1-rc.3`), so no harness checkout is needed.
+`check` runs type checking, source tests, the harness matrix guard, the build,
+integration tests, release guards, and the package smoke.
+`node tools/harness-matrix.mjs` reads the declared range, the verified releases,
+and what every harness package declares, and fails when the three disagree;
+`pnpm run matrix` is the same check.
+Package checks reject non-synthetic catalog/model declarations in shipped
+configuration and documentation.
+Development setup tests use synthetic credentials-free profiles; the setup
+helper stays outside the npm package. The plain-Node smoke test mounts both
+compiled routes in the real Cordis/LLM runtime. Two CLI tests exercise add,
+repeated add, profile overrides, and remove in disposable web/TUI profiles; they
+drive the registry CLI this repository develops against
+(`@deepseek-ai/dsh@0.2.1-rc.3`), so no harness checkout is needed.
 
-Tests use a local mock gateway or seeded grants. They require no API key, OAuth login, or paid provider requests.
+Tests use a local mock gateway or seeded grants. They require no API key, OAuth
+login, or paid provider requests.
 
-CI installs from the registry with read-only permissions and no account credentials, verifies dependency signatures and attestations, and runs the same checks. New dependency releases must be at least seven days old, and `pnpm-workspace.yaml` limits which lifecycle scripts may run; a verified harness release is published inside that window, so only the exact versions it resolves are exempted, and only until they mature (see [RELEASE.md](RELEASE.md#harness-matrix)).
+CI installs from the registry with read-only permissions and no account
+credentials, verifies dependency signatures and attestations, and runs the same
+checks. New dependency releases must be at least seven days old, and
+`pnpm-workspace.yaml` limits which lifecycle scripts may run; a verified harness
+release is published inside that window, so only the exact versions it resolves
+are exempted, and only until they mature (see
+[RELEASE.md](RELEASE.md#harness-matrix)).
 
-The package smoke test does not prove a real account can authenticate or a remote provider is available. To verify those, install a candidate into a profile built on the supported harness line and send one message through each configured route.
+The package smoke test does not prove a real account can authenticate or a
+remote provider is available. To verify those, install a candidate into a
+profile built on the supported harness line and send one message through each
+configured route.
 
-Before sending a pull request, run the checks and describe the behavior changed. Report security problems privately to the repository maintainer, not in public issues. Remove keys, grants, conversation content, and machine-specific paths from shared logs.
+Before sending a pull request, run the checks and describe the behavior changed.
+Report security problems privately to the repository maintainer, not in public
+issues. Remove keys, grants, conversation content, and machine-specific paths
+from shared logs.
 
 ## Releasing
 
-Published artefacts carry a provenance attestation, which only a CI provider can issue, so releases ship from the tag workflow rather than a laptop.
+Published artefacts carry a provenance attestation, which only a CI provider can
+issue, so releases ship from the tag workflow rather than a laptop.
 
-1. Bump `version` in `package.json`, land it on `main` through a reviewed PR, and wait for CI to pass on the merged SHA.
-2. Tag that SHA with a signed tag and push it. The tag ruleset admits repository admins only.
-3. [`.github/workflows/release.yml`](.github/workflows/release.yml) re-runs the checks and the package smoke; the publish job then publishes automatically with OIDC trusted publishing and automatic provenance. Only an admin can push a `v*` tag, so the signed tag push is the release approval.
+1. Bump `version` in `package.json`, land it on `main` through a reviewed PR,
+   and wait for CI to pass on the merged SHA.
+2. Tag that SHA with a signed tag and push it. The tag ruleset admits repository
+   admins only.
+3. [`.github/workflows/release.yml`](.github/workflows/release.yml) re-runs the
+   checks and the package smoke; the publish job then publishes automatically
+   with OIDC trusted publishing and automatic provenance. Only an admin can push
+   a `v*` tag, so the signed tag push is the release approval.
 
-The workflow stores no npm token: the registry trusts `release.yml` on the `npm-release` environment, and [`scripts/npm/release.py`](scripts/npm/release.py) creates both the environment and that trust. The full runbook is [RELEASE.md](RELEASE.md).
+The workflow stores no npm token: the registry trusts `release.yml` on the
+`npm-release` environment, and
+[`scripts/npm/release.py`](scripts/npm/release.py) creates both the environment
+and that trust. The full runbook is [RELEASE.md](RELEASE.md).
 
 ## License
 
@@ -330,9 +480,19 @@ MIT
 
 ## Git hooks
 
-Checks run in tracked local Git hooks instead of push/PR CI. Run `scripts/setup-hooks` once after cloning; it points this clone's `core.hooksPath` at `.githooks`. Each hook runs the generic checks first (sign-off and commit message format, a gitleaks secret scan, and signed, signed-off commits on push), then this repository's checks in `.githooks/<hook>.d/` in name order. Install [gitleaks](https://github.com/gitleaks/gitleaks) first. Every check must pass before you push; never use `--no-verify`. Pre-push checks test exactly each pushed commit: in place only when it is the clean, unmodified checkout, otherwise in a temporary worktree of that commit.
+Checks run in tracked local Git hooks instead of push/PR CI. Run
+`scripts/setup-hooks` once after cloning; it points this clone's
+`core.hooksPath` at `.githooks`. Each hook runs the generic checks first
+(sign-off and commit message format, a gitleaks secret scan, and signed,
+signed-off commits on push), then this repository's checks in
+`.githooks/<hook>.d/` in name order. Install
+[gitleaks](https://github.com/gitleaks/gitleaks) first. Every check must pass
+before you push; never use `--no-verify`. Pre-push checks test exactly each
+pushed commit: in place only when it is the clean, unmodified checkout,
+otherwise in a temporary worktree of that commit.
 
 This repository's checks:
 
 - `pre-commit`: staged whitespace and conflict-marker check.
-- `pre-push`: `npm audit signatures`, `pnpm run check`, `pnpm audit --audit-level high`.
+- `pre-push`: `npm audit signatures`, `pnpm run check`,
+  `pnpm audit --audit-level high`.
