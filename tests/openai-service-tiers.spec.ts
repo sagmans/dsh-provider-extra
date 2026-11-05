@@ -1,4 +1,5 @@
 /** Wire assertions protect paid policy from protocol-compatible routes and upstream option filtering. */
+
 import assert from 'node:assert/strict'
 import { it } from 'node:test'
 import { zstdDecompressSync } from 'node:zlib'
@@ -12,6 +13,7 @@ import { buildCodexProfile } from '../src/codex.ts'
 import * as plugin from '../src/index.ts'
 import { createTierSelection, withServiceTiers } from '../src/service-tiers.ts'
 import { MemoryCredentials } from './login-host-fixture.ts'
+import { must } from './must.ts'
 
 const OPENAI = 'openai'
 const CODEX = 'openai-codex'
@@ -83,6 +85,19 @@ const RESPONSE = [
 ]
   .map((event) => `data: ${JSON.stringify(event)}\n\n`)
   .join('')
+/** Explicit metadata avoids inheriting unrelated model eligibility from a fixture template. */
+function route(id: string, api: Api, source?: string): CatalogProvider {
+  const shared = {
+    id,
+    name: id,
+    baseURL: ENDPOINT,
+    auth: { apiKeyRef: KEY_REF },
+    models: [{ id: MODEL, name: MODEL, metadata: { ...METADATA, api } }],
+  }
+  if (source === undefined) return { ...shared, api }
+  return { ...shared, source }
+}
+
 const CHAT_RESPONSE =
   'data: ' +
   JSON.stringify({
@@ -90,18 +105,6 @@ const CHAT_RESPONSE =
     choices: [{ index: 0, delta: { content: 'ok' }, finish_reason: 'stop' }],
   }) +
   '\n\ndata: [DONE]\n\n'
-
-/** Explicit metadata avoids inheriting unrelated model eligibility from a fixture template. */
-function route(id: string, api: Api, source?: string): CatalogProvider {
-  return {
-    id,
-    name: id,
-    ...(source === undefined ? { api } : { source }),
-    baseURL: ENDPOINT,
-    auth: { apiKeyRef: KEY_REF },
-    models: [{ id: MODEL, name: MODEL, metadata: { ...METADATA, api } }],
-  }
-}
 
 for (const api of APIS) {
   const cases = [
@@ -170,9 +173,9 @@ for (const api of APIS) {
           assert.notEqual(chunk.reason.kind, 'error', JSON.stringify(chunk))
       }
       assert.equal(payloads.length, 1)
-      assert.equal(payloads[0]!.model, MODEL)
-      assert.equal(payloads[0]!.service_tier, eligible ? tier : undefined)
-      assert.equal(Object.hasOwn(payloads[0]!, 'service_tier'), eligible && tier !== undefined)
+      assert.equal(payloads[0].model, MODEL)
+      assert.equal(payloads[0].service_tier, eligible ? tier : undefined)
+      assert.equal(Object.hasOwn(payloads[0], 'service_tier'), eligible && tier !== undefined)
     })
   }
 }
@@ -193,12 +196,16 @@ for (const api of APIS)
             route(ALIAS, api, api === RESPONSES ? OPENAI : undefined),
           )
           const profiles = new Map([[ALIAS, original]])
-          const provider = withServiceTiers(
-            profiles,
-            () => PRIORITY,
-            () => OPENAI,
-          ).get(ALIAS)!.piProvider!
-          const model = provider.getModels()[0]!
+          const provider = must(
+            must(
+              withServiceTiers(
+                profiles,
+                () => PRIORITY,
+                () => OPENAI,
+              ).get(ALIAS),
+            ).piProvider,
+          )
+          const model = provider.getModels()[0]
           let hookCalls = 0
           const options: StreamOptions = {
             apiKey: KEY,
@@ -234,9 +241,9 @@ for (const api of APIS)
           ))
             assert.notEqual(event.type, 'error', JSON.stringify(event))
           assert.equal(payloads.length, 1)
-          assert.equal(payloads[0]!.service_tier, PRIORITY)
-          assert.equal(payloads[0]!.temperature, TEMPERATURE)
-          assert.deepEqual(payloads[0]!.metadata, { hook: HEADER_VALUE })
+          assert.equal(payloads[0].service_tier, PRIORITY)
+          assert.equal(payloads[0].temperature, TEMPERATURE)
+          assert.deepEqual(payloads[0].metadata, { hook: HEADER_VALUE })
           assert.equal(hookCalls, 1)
           assert.equal(options.onPayload, originalHook)
           assert.equal(Object.hasOwn(options, 'serviceTier'), false)
@@ -251,9 +258,12 @@ for (const [source, api] of [
 ] as const) {
   it(`rejects source ${source} with API ${api}`, async () => {
     const profile = buildCatalogProfile(route(ALIAS, RESPONSES, OPENAI))
-    const model = { ...profile.piProvider!.getModels()[0]!, api }
+    const model = { ...must(profile.piProvider).getModels()[0], api }
     const profiles = new Map([
-      [ALIAS, { ...profile, piProvider: { ...profile.piProvider!, getModels: () => [model] } }],
+      [
+        ALIAS,
+        { ...profile, piProvider: { ...must(profile.piProvider), getModels: () => [model] } },
+      ],
     ])
     const selection = createTierSelection(
       () => undefined,
@@ -278,12 +288,16 @@ for (const source of [OPENAI, GO_SOURCE, undefined])
         transport: 'sse',
       })
       const profiles = new Map([[OPENAI, original]])
-      const provider = withServiceTiers(
-        profiles,
-        () => PRIORITY,
-        () => source,
-      ).get(OPENAI)!.piProvider!
-      const model = provider.getModels()[0]!
+      const provider = must(
+        must(
+          withServiceTiers(
+            profiles,
+            () => PRIORITY,
+            () => source,
+          ).get(OPENAI),
+        ).piProvider,
+      )
+      const model = provider.getModels()[0]
       const selection = createTierSelection(
         () => undefined,
         async () => {},
@@ -310,7 +324,7 @@ for (const source of [OPENAI, GO_SOURCE, undefined])
       }))
         assert.notEqual(event.type, 'error', JSON.stringify(event))
       assert.equal(payloads.length, 1)
-      assert.equal(Object.hasOwn(payloads[0]!, 'service_tier'), false)
+      assert.equal(Object.hasOwn(payloads[0], 'service_tier'), false)
     })
   }
 
@@ -330,9 +344,10 @@ for (const api of APIS)
         () => profiles,
         () => OPENAI,
       )
-      const provider = withServiceTiers(profiles, selection.current, () => OPENAI).get(ALIAS)!
-        .piProvider!
-      const model = provider.getModels()[0]!
+      const provider = must(
+        must(withServiceTiers(profiles, selection.current, () => OPENAI).get(ALIAS)).piProvider,
+      )
+      const model = provider.getModels()[0]
       const payloads: Record<string, unknown>[] = []
       t.mock.method(
         globalThis,
@@ -364,7 +379,7 @@ for (const api of APIS)
           options,
         ))
           assert.notEqual(event.type, 'error', JSON.stringify(event))
-        const actual = payloads.pop()!
+        const actual = must(payloads.pop())
         assert.equal(actual.service_tier, expected)
         assert.equal(Object.hasOwn(actual, 'service_tier'), expected !== undefined)
         assert.equal(actual.temperature, TEMPERATURE)
@@ -372,7 +387,7 @@ for (const api of APIS)
         assert.equal(selection.current(ALIAS, MODEL), PRIORITY)
         for await (const event of provider[stream](model, normalizeContext({ messages: [] }), base))
           assert.notEqual(event.type, 'error', JSON.stringify(event))
-        assert.equal(payloads.pop()!.service_tier, PRIORITY)
+        assert.equal(must(payloads.pop()).service_tier, PRIORITY)
       }
       assert.throws(() => selection.resolve(ALIAS, MODEL, INVALID_TIER), /unsupported service tier/)
       assert.throws(
@@ -385,22 +400,26 @@ for (const api of APIS)
 
 it('ignores invalid retained tiers at the provider boundary', async (t) => {
   const original = buildCatalogProfile(route(ALIAS, RESPONSES, OPENAI))
-  const provider = withServiceTiers(
-    new Map([[ALIAS, original]]),
-    () => INVALID_TIER,
-    () => OPENAI,
-  ).get(ALIAS)!.piProvider!
+  const provider = must(
+    must(
+      withServiceTiers(
+        new Map([[ALIAS, original]]),
+        () => INVALID_TIER,
+        () => OPENAI,
+      ).get(ALIAS),
+    ).piProvider,
+  )
   const payloads: Record<string, unknown>[] = []
   t.mock.method(globalThis, 'fetch', async (input: string | URL | Request, init?: RequestInit) => {
     payloads.push((await new Request(input, init).json()) as Record<string, unknown>)
     return new Response(RESPONSE, { headers: { 'content-type': 'text/event-stream' } })
   })
   for await (const event of provider.streamSimple(
-    provider.getModels()[0]!,
+    provider.getModels()[0],
     normalizeContext({ messages: [] }),
     { apiKey: KEY },
   ))
     assert.notEqual(event.type, 'error', JSON.stringify(event))
   assert.equal(payloads.length, 1)
-  assert.equal(Object.hasOwn(payloads[0]!, 'service_tier'), false)
+  assert.equal(Object.hasOwn(payloads[0], 'service_tier'), false)
 })

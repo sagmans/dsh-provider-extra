@@ -255,7 +255,7 @@ test('legitimate reload retains captured dispatch and does not interrupt an alre
   try {
     const prepared = await ctx.llm.prepareCall(SELECTION)
     const replacement = catalog(endpoint)
-    replacement.providers[0]!.headers[HEADER] = SECOND
+    replacement.providers[0].headers[HEADER] = SECOND
     // Cordis 4.0.3+ update() only schedules the restart; await() settles the new generation.
     mounted.update({ catalog: replacement })
     await mounted.await()
@@ -286,7 +286,7 @@ test('successive managed reloads replace only their own default and remain usabl
   t.after(() => mounted.dispose())
   for (const generation of RELOAD_GENERATIONS) {
     const replacement = catalog()
-    replacement.providers[0]!.models[0]!.name = generation
+    replacement.providers[0].models[0].name = generation
     mounted.update({ catalog: replacement })
     await mounted.await()
     assert.equal((await ctx.llm.resolveModelInfo(ROUTE, MODEL)).name, generation)

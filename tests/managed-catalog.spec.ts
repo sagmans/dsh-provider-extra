@@ -112,7 +112,7 @@ test('invalid complete candidate mounts neither its valid route nor default serv
   try {
     const candidate = catalog()
     candidate.providers.push({
-      ...candidate.providers[0]!,
+      ...candidate.providers[0],
       id: 'broken',
       models: [{ id: 'missing-model', name: 'Missing' }],
     })
@@ -200,7 +200,7 @@ test('successful reload replaces rows and defaults while prepared metadata retai
       const prepared = await ctx.llm.prepareCall(SELECTION)
       const oldContext = structuredClone(prepared.context)
       const candidate = catalog()
-      Object.assign(candidate.providers[0]!.models[0]!, { metadata: { contextWindow: 123456 } })
+      Object.assign(candidate.providers[0].models[0], { metadata: { contextWindow: 123456 } })
       // Cordis 4.0.3+ update() only schedules the restart; await() settles the new generation.
       mounted.update({ catalog: candidate })
       await mounted.await()
@@ -263,7 +263,7 @@ test('failed catalog reload preserves valid rows and default', async () => {
     const mounted = await ctx.plugin(plugin, { catalog: catalog() } as never)
     try {
       const candidate = catalog()
-      candidate.providers[0]!.models[0]!.id = 'not-a-model'
+      candidate.providers[0].models[0].id = 'not-a-model'
       await assert.rejects(async () => {
         await mounted.update({ catalog: candidate } as never)
       })

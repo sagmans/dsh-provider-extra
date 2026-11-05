@@ -1,4 +1,5 @@
 /** Legacy source-ID syntax must write the separate grant its configured alias actually reads. */
+
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
@@ -11,13 +12,14 @@ import { buildCodexProfile, recordKeyFor } from '../src/codex.ts'
 import * as plugin from '../src/index.ts'
 import { mountLoginCommand } from '../src/login-host.ts'
 import { AGENT, COMMAND, MemoryCredentials, REF, SOURCE } from './login-host-fixture.ts'
+import { must } from './must.ts'
 
 const CODEX_SOURCE = 'openai-codex'
 const CODEX_ALIAS = 'legacy-subscription-alias'
 /** The installed line names its own Codex models, so a hardcoded id does not exist on every line. */
-const CODEX_MODEL = builtinProviders()
-  .find((provider) => provider.id === CODEX_SOURCE)!
-  .getModels()[0]!.id
+const CODEX_MODEL = must(
+  builtinProviders().find((provider) => provider.id === CODEX_SOURCE),
+).getModels()[0].id
 const ACCOUNT = 'local-codex-account'
 const AUTH_CLAIM = 'https://api.openai.com/auth'
 const ACCESS = [
@@ -73,7 +75,7 @@ for (const route of [CODEX_SOURCE, CODEX_ALIAS]) {
       models: [CODEX_MODEL],
       transport: 'sse',
     })
-    const provider = profile.piProvider!
+    const provider = must(profile.piProvider)
     const profiles = new Map([
       [
         route,
@@ -82,7 +84,7 @@ for (const route of [CODEX_SOURCE, CODEX_ALIAS]) {
           piProvider: {
             ...provider,
             auth: {
-              oauth: { ...provider.auth.oauth!, login: async () => GRANT },
+              oauth: { ...must(provider.auth.oauth), login: async () => GRANT },
             },
           },
         },
@@ -102,7 +104,7 @@ for (const route of [CODEX_SOURCE, CODEX_ALIAS]) {
       ),
     )
     t.after(() => login.dispose())
-    const result = await ctx.commands.find(AGENT, COMMAND)!.handler({
+    const result = await must(ctx.commands.find(AGENT, COMMAND)).handler({
       commandId: 'legacy-codex-login',
       agent: AGENT,
       rawInput: CODEX_SOURCE,

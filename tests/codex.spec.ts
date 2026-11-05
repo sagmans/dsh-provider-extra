@@ -37,6 +37,7 @@ import type { LoginModels, LoginTerminal } from '../src/codex-login.ts'
 import { answerPrompt, renderEvent, renderPrompt, runCodexLogin } from '../src/codex-login.ts'
 import type { Config as ConfigShape } from '../src/index.ts'
 import { Config } from '../src/index.ts'
+import { must } from './must.ts'
 
 /**
  * Resolve one raw entry document the way the loader hands it to the schema: a
@@ -67,8 +68,8 @@ function servedIds(
     extraModels?: { id: string; name?: string; template?: string }[]
   } = {},
 ): string[] {
-  return buildCodexProfile({ ...route, ...config })
-    .piProvider!.getModels()
+  return must(buildCodexProfile({ ...route, ...config }).piProvider)
+    .getModels()
     .map((model) => model.id)
 }
 
@@ -110,10 +111,11 @@ function memoryService(
   }
 }
 
+/** A terminal the test can read back after the login printed and asked. */
+type ScriptedTerminal = LoginTerminal & { printed: string[]; asked: string[] }
+
 /** A scripted terminal answering every question from a queue. */
-function scriptedTerminal(
-  answers: string[],
-): LoginTerminal & { printed: string[]; asked: string[] } {
+function scriptedTerminal(answers: string[]): ScriptedTerminal {
   const printed: string[] = []
   const asked: string[] = []
   const queue = [...answers]
@@ -150,10 +152,10 @@ describe('codex profile', () => {
     assert.equal(profile.apiKeyEnv, undefined)
     const provider = profile.piProvider
     assert.notEqual(provider, undefined)
-    assert.equal(provider!.id, route.provider)
-    assert.equal(provider!.name, route.displayName)
-    assert.notEqual(provider!.auth.oauth, undefined)
-    const models = provider!.getModels()
+    assert.equal(must(provider).id, route.provider)
+    assert.equal(must(provider).name, route.displayName)
+    assert.notEqual(must(provider).auth.oauth, undefined)
+    const models = must(provider).getModels()
     assert.ok(models.length > 0, 'installed catalog ships codex models')
     for (const model of models) assert.equal(model.provider, route.provider)
   })
@@ -189,16 +191,16 @@ describe('codex settings-declared extra models', () => {
         { id: 'declared-extra-fixture', name: 'Declared extra fixture', template: 'gpt-5.6-luna' },
       ],
     })
-    const models = profile.piProvider!.getModels()
+    const models = must(profile.piProvider).getModels()
     const extra = models.find((model) => model.id === 'declared-extra-fixture')
-    const template = models.find((model) => model.id === 'gpt-5.6-luna')!
+    const template = must(models.find((model) => model.id === 'gpt-5.6-luna'))
     assert.notEqual(extra, undefined, 'route serves the declared model')
-    assert.equal(extra!.name, 'Declared extra fixture')
-    assert.equal(extra!.api, template.api)
-    assert.equal(extra!.contextWindow, template.contextWindow)
-    assert.equal(extra!.maxTokens, template.maxTokens)
+    assert.equal(must(extra).name, 'Declared extra fixture')
+    assert.equal(must(extra).api, template.api)
+    assert.equal(must(extra).contextWindow, template.contextWindow)
+    assert.equal(must(extra).maxTokens, template.maxTokens)
     // The catalog keeps dispatch and wire quirks; only identity answers to the route.
-    assert.equal(extra!.provider, route.provider)
+    assert.equal(must(extra).provider, route.provider)
   })
 
   it('records an unknown template beside serviceable models', () => {
@@ -208,11 +210,13 @@ describe('codex settings-declared extra models', () => {
     })
     assert.ok(profile.modelErrors.has('declared-extra-fixture'), 'failure is diagnosable')
     assert.equal(
-      profile.piProvider!.getModels().find((model) => model.id === 'declared-extra-fixture'),
+      must(profile.piProvider)
+        .getModels()
+        .find((model) => model.id === 'declared-extra-fixture'),
       undefined,
     )
     // One mistyped declaration must not silence the subscription route.
-    assert.ok(profile.piProvider!.getModels().length > 0)
+    assert.ok(must(profile.piProvider).getModels().length > 0)
   })
 
   it('records a declaration that names no template and clones nothing', () => {
@@ -222,22 +226,28 @@ describe('codex settings-declared extra models', () => {
       'a route with no shipped default must say so',
     )
     assert.equal(
-      profile.piProvider!.getModels().find((model) => model.id === 'declared-extra-fixture'),
+      must(profile.piProvider)
+        .getModels()
+        .find((model) => model.id === 'declared-extra-fixture'),
       undefined,
     )
   })
 
   it('leaves a catalog-shipped id to the catalog', () => {
     // The installed line names its own catalog, so the shipped id and the name it keeps come from there.
-    const shipped = builtinProviders()
-      .find((provider) => provider.id === CODEX_CATALOG_ID)!
-      .getModels()[0]!
+    const shipped = must(
+      builtinProviders().find((provider) => provider.id === CODEX_CATALOG_ID),
+    ).getModels()[0]
     const profile = buildCodexProfile({
       ...route,
       extraModels: [{ id: shipped.id, name: 'Renamed' }],
     })
     assert.equal(
-      profile.piProvider!.getModels().find((model) => model.id === shipped.id)!.name,
+      must(
+        must(profile.piProvider)
+          .getModels()
+          .find((model) => model.id === shipped.id),
+      ).name,
       shipped.name,
     )
   })
@@ -385,8 +395,8 @@ describe('harness credential store', () => {
     const store = new HarnessCredentialStore(() => service)
     await store.modify(CODEX_CATALOG_ID, async () => grant())
     const models = createModels(codexAuth(() => service))
-    models.setProvider(buildCodexProfile(route).piProvider!)
-    const model = buildCodexProfile(route).piProvider!.getModels()[0]!
+    models.setProvider(must(buildCodexProfile(route).piProvider))
+    const model = must(buildCodexProfile(route).piProvider).getModels()[0]
     const resolved = await models.getAuth(model, {})
     assert.equal(resolved?.auth.apiKey, 'access-token')
   })
@@ -468,7 +478,9 @@ describe('terminal login', () => {
       /answer the prompt/,
     )
   })
+})
 
+describe('terminal login conversation', () => {
   it('passes text answers through with their placeholder hint', async () => {
     const terminal = scriptedTerminal(['pasted-code'])
     const answer = await answerPrompt(terminal, {
@@ -477,7 +489,7 @@ describe('terminal login', () => {
       placeholder: 'http://localhost:1455/auth/callback',
     })
     assert.equal(answer, 'pasted-code')
-    assert.ok(terminal.asked[0]!.includes('http://localhost:1455/auth/callback'))
+    assert.ok(terminal.asked[0].includes('http://localhost:1455/auth/callback'))
   })
 
   it('conducts the login against pi-ai’s own conversation and prints no secret', async () => {

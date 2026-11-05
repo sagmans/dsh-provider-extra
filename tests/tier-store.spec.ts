@@ -1,4 +1,5 @@
 /** Real homes exercise durable policy without touching profile configuration. */
+
 import assert from 'node:assert/strict'
 import { fork } from 'node:child_process'
 import {
@@ -19,6 +20,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { it, type TestContext } from 'node:test'
 import { createTierStore } from '../src/tier-store.ts'
+import { must } from './must.ts'
 
 const PROVIDER = 'example-provider'
 const MODEL = 'example-model'
@@ -55,8 +57,8 @@ it('shares fresh pair selections and explicit provider defaults without modifyin
   assert.equal((await stat(directory)).mode & PERMISSIONS, PRIVATE_DIRECTORY)
   const records = await readdir(directory)
   assert.equal(records.length, 1)
-  assert.match(records[0]!, /^[a-f0-9]{64}\.json$/)
-  assert.equal((await stat(join(directory, records[0]!))).mode & PERMISSIONS, PRIVATE_FILE)
+  assert.match(records[0], /^[a-f0-9]{64}\.json$/)
+  assert.equal((await stat(join(directory, records[0]))).mode & PERMISSIONS, PRIVATE_FILE)
 })
 
 it('rejects malformed, oversized, mismatched, and noncanonical records without returning configured policy', async (t) => {
@@ -65,7 +67,7 @@ it('rejects malformed, oversized, mismatched, and noncanonical records without r
   const store = createTierStore(home, validTier)
   await store.write(PROVIDER, MODEL, PRIORITY)
   const directory = join(home, DIRECTORY)
-  const path = join(directory, (await readdir(directory))[0]!)
+  const path = join(directory, (await readdir(directory))[0])
   const record = { version: 1, provider: PROVIDER, model: MODEL, tier: PRIORITY }
   const badRecords = [
     '{',
@@ -109,7 +111,7 @@ async function concurrentWrites(
       if (child.exitCode === null) child.kill()
     })
     let errors = ''
-    child.stderr!.on('data', (value) => {
+    must(child.stderr).on('data', (value) => {
       errors += String(value)
     })
     let readError: unknown
@@ -196,7 +198,7 @@ it('preserves the last selection on write failure and cleans exclusive temporari
   } finally {
     await chmod(directory, PRIVATE_DIRECTORY)
   }
-  const recordPath = join(directory, records[0]!)
+  const recordPath = join(directory, records[0])
   await unlink(recordPath)
   await mkdir(recordPath)
   await assert.rejects(store.write(PROVIDER, MODEL, STANDARD), { code: 'EISDIR' })
@@ -216,7 +218,7 @@ it('rejects redirected and public state without touching symlink targets', async
   assert.deepEqual(await readdir(outside), [])
   await unlink(directory)
   await store.write(PROVIDER, MODEL, PRIORITY)
-  const recordPath = join(directory, (await readdir(directory))[0]!)
+  const recordPath = join(directory, (await readdir(directory))[0])
   await chmod(recordPath, 0o644)
   assert.throws(() => store.read(PROVIDER, MODEL), { message: READ_FAILURE })
   await chmod(recordPath, PRIVATE_FILE)
@@ -246,7 +248,7 @@ it('rejects invalid identities, tiers, and unresolved homes before creating stor
     [PROVIDER, '\u0000'],
   ]) {
     await assert.rejects(
-      store.write(provider!, model!, PRIORITY),
+      store.write(provider, model, PRIORITY),
       /invalid service tier storage selection/,
     )
   }
@@ -330,7 +332,7 @@ it('fails before publishing when the home directory cannot be synchronized', asy
 it('rejects Windows persistence without creating state that disables configured fallback', async (t) => {
   const home = await mkdtemp(join(tmpdir(), 'tier-store-'))
   t.after(() => rm(home, { recursive: true, force: true }))
-  const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!
+  const originalPlatform = must(Object.getOwnPropertyDescriptor(process, 'platform'))
   Object.defineProperty(process, 'platform', { ...originalPlatform, value: WINDOWS_PLATFORM })
   try {
     const store = createTierStore(home, validTier)

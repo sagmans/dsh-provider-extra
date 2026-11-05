@@ -1,9 +1,11 @@
 /** Profile persistence must write the same Config that supplies the default. */
+
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import { compileCatalog } from '../src/catalog.ts'
 import { catalogDefault } from '../src/catalog-default.ts'
+import { must } from './must.ts'
 
 const MODEL = 'gpt-5.6-luna'
 const selection = { provider: 'openai', model: MODEL }
@@ -42,7 +44,7 @@ test('configEditor edits only catalog.default and awaits canonical reconciliatio
     },
   }
   ctx.provide('configEditor', editor)
-  const defaults = catalogDefault(ctx, compileCatalog(catalog)!)
+  const defaults = catalogDefault(ctx, must(compileCatalog(catalog)))
   const next = { ...selection, reasoningEffort: 'high' }
   await defaults.saveSelection(next)
   assert.equal(settled, true)
@@ -62,7 +64,7 @@ test('writer revalidates latest catalog membership and never writes a second sto
       update({ catalog: { version: 1, providers: [], default: null } })
     },
   })
-  const defaults = catalogDefault(ctx, compileCatalog(catalog)!)
+  const defaults = catalogDefault(ctx, must(compileCatalog(catalog)))
   await assert.rejects(defaults.saveSelection(selection))
   assert.deepEqual(defaults.currentSelection(), selection)
 })
@@ -75,13 +77,13 @@ test('invalid effort is refused before invoking the profile writer', async () =>
       assert.fail('invalid selection reached persistence')
     },
   })
-  const defaults = catalogDefault(ctx, compileCatalog(catalog)!)
+  const defaults = catalogDefault(ctx, must(compileCatalog(catalog)))
   await assert.rejects(defaults.saveSelection({ ...selection, reasoningEffort: 'impossible' }))
 })
 
 test('missing entry, missing editor and failed writer explicitly reject', async () => {
   const ctx = new Context()
-  const defaults = catalogDefault(ctx, compileCatalog(catalog)!)
+  const defaults = catalogDefault(ctx, must(compileCatalog(catalog)))
   await assert.rejects(defaults.saveSelection(selection), {
     code: 'CONFIG_PERSISTENCE_UNAVAILABLE',
   })

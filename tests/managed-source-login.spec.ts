@@ -1,4 +1,5 @@
 /** Every supported API-key source must preserve the selected storage mode. */
+
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
@@ -13,6 +14,7 @@ import {
   REF,
   SESSION,
 } from './login-host-fixture.ts'
+import { must } from './must.ts'
 
 const COMPLETIONS = 'openai-completions'
 const RESPONSES = 'openai-responses'
@@ -69,10 +71,11 @@ function responsesResponse(model: string): Response {
 for (const source of SOURCES)
   for (const mode of ['reference', 'record'] as const) {
     test(`${source} login verifies configured delegate and writes only its ${mode}`, async (t) => {
-      const model = builtinProviders()
-        .find((provider) => provider.id === source)!
-        .getModels()
-        .find((model) => model.api === COMPLETIONS || model.api === RESPONSES)!
+      const model = must(
+        must(builtinProviders().find((provider) => provider.id === source))
+          .getModels()
+          .find((model) => model.api === COMPLETIONS || model.api === RESPONSES),
+      )
       const route = `${source}-login-test`
       const store = new MemoryCredentials()
       store.records.set(recordKeyFor(source), { kind: 'api-key', key: OLD_KEY })

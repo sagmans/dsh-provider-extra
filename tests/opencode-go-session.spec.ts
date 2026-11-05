@@ -30,6 +30,7 @@ import {
   openCodeGoAuth,
   SESSION_HEADER_NAME,
 } from '../src/opencode-go.ts'
+import { must } from './must.ts'
 
 /**
  * Resolve one raw entry document the way the loader hands it to the schema: a
@@ -51,8 +52,8 @@ const DECLARED_EXTRA = { id: 'my-flash', template: CATALOG_MODEL_ID }
 
 /** The served ids of one route configuration, in the order it advertises them. */
 function servedIds(route: Partial<OpenCodeGoRouteConfig> = {}): string[] {
-  return buildOpenCodeGoProfile({ ...baseRoute, ...route })
-    .piProvider!.getModels()
+  return must(buildOpenCodeGoProfile({ ...baseRoute, ...route }).piProvider)
+    .getModels()
     .map((model) => model.id)
 }
 
@@ -108,8 +109,10 @@ before(async () => {
   serverUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`
   const catalog = builtinProviders().find((provider) => provider.id === OPENCODE_GO_PROVIDER_ID)
   assert.notEqual(catalog, undefined, 'installed pi-ai catalog ships OpenCode Go')
-  const completions = catalog!.getModels().find((model) => model.api === 'openai-completions')
-  modelId = (completions ?? catalog!.getModels()[0]!).id
+  const completions = must(catalog)
+    .getModels()
+    .find((model) => model.api === 'openai-completions')
+  modelId = (completions ?? must(catalog).getModels()[0]).id
   baseRoute = {
     provider: 'opencode-go-test',
     displayName: 'OpenCode Go (test)',
@@ -226,18 +229,18 @@ describe('OpenCode Go session routing header', () => {
 
 describe('DeepSeek V4.1 Flash catalog entry', () => {
   it('serves deepseek-flash re-keyed to the route', () => {
-    const models = buildOpenCodeGoProfile(baseRoute).piProvider!.getModels()
+    const models = must(buildOpenCodeGoProfile(baseRoute).piProvider).getModels()
     const flash = models.find((model) => model.id === DEEPSEEK_V41_FLASH_ID)
     assert.notEqual(flash, undefined, 'route serves DeepSeek V4.1 Flash')
-    assert.equal(flash!.name, DEEPSEEK_V41_FLASH_NAME)
-    assert.equal(flash!.provider, baseRoute.provider)
-    assert.equal(flash!.api, 'openai-completions')
+    assert.equal(must(flash).name, DEEPSEEK_V41_FLASH_NAME)
+    assert.equal(must(flash).provider, baseRoute.provider)
+    assert.equal(must(flash).api, 'openai-completions')
     // The mock baseURL override reaches the appended entry like every sibling.
-    assert.equal(flash!.baseUrl, baseRoute.baseURL)
+    assert.equal(must(flash).baseUrl, baseRoute.baseURL)
   })
 
   it('appears exactly once even when the profile rebuilds', () => {
-    const models = buildOpenCodeGoProfile(baseRoute).piProvider!.getModels()
+    const models = must(buildOpenCodeGoProfile(baseRoute).piProvider).getModels()
     assert.equal(models.filter((model) => model.id === DEEPSEEK_V41_FLASH_ID).length, 1)
   })
 
@@ -250,27 +253,34 @@ describe('DeepSeek V4.1 Flash catalog entry', () => {
 
 describe('settings-declared extra models', () => {
   it('serves a declared model cloned from its template', () => {
-    const models = buildOpenCodeGoProfile({
-      ...baseRoute,
-      extraModels: [{ id: 'my-flash', template: CATALOG_MODEL_ID }],
-    }).piProvider!.getModels()
+    const models = must(
+      buildOpenCodeGoProfile({
+        ...baseRoute,
+        extraModels: [{ id: 'my-flash', template: CATALOG_MODEL_ID }],
+      }).piProvider,
+    ).getModels()
     const extra = models.find((model) => model.id === 'my-flash')
-    const template = models.find((model) => model.id === CATALOG_MODEL_ID)!
+    const template = must(models.find((model) => model.id === CATALOG_MODEL_ID))
     assert.notEqual(extra, undefined, 'route serves the declared model')
     // Unnamed declarations read as their template; identity answers to the route.
-    assert.equal(extra!.name, template.name)
-    assert.equal(extra!.api, template.api)
-    assert.equal(extra!.provider, baseRoute.provider)
-    assert.equal(extra!.baseUrl, baseRoute.baseURL)
+    assert.equal(must(extra).name, template.name)
+    assert.equal(must(extra).api, template.api)
+    assert.equal(must(extra).provider, baseRoute.provider)
+    assert.equal(must(extra).baseUrl, baseRoute.baseURL)
   })
 
   it('lets a declaration reshape the shipped default under the same id', () => {
-    const models = buildOpenCodeGoProfile({
-      ...baseRoute,
-      extraModels: [{ id: DEEPSEEK_V41_FLASH_ID, name: 'Custom Flash' }],
-    }).piProvider!.getModels()
+    const models = must(
+      buildOpenCodeGoProfile({
+        ...baseRoute,
+        extraModels: [{ id: DEEPSEEK_V41_FLASH_ID, name: 'Custom Flash' }],
+      }).piProvider,
+    ).getModels()
     assert.equal(models.filter((model) => model.id === DEEPSEEK_V41_FLASH_ID).length, 1)
-    assert.equal(models.find((model) => model.id === DEEPSEEK_V41_FLASH_ID)!.name, 'Custom Flash')
+    assert.equal(
+      must(models.find((model) => model.id === DEEPSEEK_V41_FLASH_ID)).name,
+      'Custom Flash',
+    )
   })
 
   it('leaves a catalog-shipped id to the catalog', () => {
@@ -279,7 +289,11 @@ describe('settings-declared extra models', () => {
       extraModels: [{ id: CATALOG_MODEL_ID, name: 'Renamed' }],
     })
     assert.equal(
-      profile.piProvider!.getModels().find((model) => model.id === CATALOG_MODEL_ID)!.name,
+      must(
+        must(profile.piProvider)
+          .getModels()
+          .find((model) => model.id === CATALOG_MODEL_ID),
+      ).name,
       CATALOG_MODEL_NAME,
     )
   })
@@ -291,11 +305,13 @@ describe('settings-declared extra models', () => {
     })
     assert.ok(profile.modelErrors.has('bad-flash'), 'failure is diagnosable')
     assert.equal(
-      profile.piProvider!.getModels().find((model) => model.id === 'bad-flash'),
+      must(profile.piProvider)
+        .getModels()
+        .find((model) => model.id === 'bad-flash'),
       undefined,
     )
     // One mistyped declaration must not silence the rest of the route.
-    assert.ok(profile.piProvider!.getModels().length > 20)
+    assert.ok(must(profile.piProvider).getModels().length > 20)
   })
 
   it('streams a declared extra through the mock gateway with the session header', async () => {
@@ -335,14 +351,16 @@ describe('exact model selection', () => {
       extraModels: [DECLARED_EXTRA],
     })
     assert.deepEqual(ids, [DECLARED_EXTRA.id, DEEPSEEK_V41_FLASH_ID, CATALOG_MODEL_ID])
-    const chosen = buildOpenCodeGoProfile({
-      ...baseRoute,
-      models: [DECLARED_EXTRA.id],
-      extraModels: [DECLARED_EXTRA],
-    }).piProvider!.getModels()
+    const chosen = must(
+      buildOpenCodeGoProfile({
+        ...baseRoute,
+        models: [DECLARED_EXTRA.id],
+        extraModels: [DECLARED_EXTRA],
+      }).piProvider,
+    ).getModels()
     // A selected extra is served exactly like a selected catalog model.
-    assert.equal(chosen[0]!.provider, baseRoute.provider)
-    assert.equal(chosen[0]!.baseUrl, baseRoute.baseURL)
+    assert.equal(chosen[0].provider, baseRoute.provider)
+    assert.equal(chosen[0].baseUrl, baseRoute.baseURL)
   })
 
   it('keeps a repeated id as one model at its first position', () => {

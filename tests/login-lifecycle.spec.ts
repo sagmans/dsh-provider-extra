@@ -1,4 +1,5 @@
 /** Minted grants and already-started atomic writes outlive later cancellation verdicts. */
+
 import assert from 'node:assert/strict'
 import type { TestContext } from 'node:test'
 import { test } from 'node:test'
@@ -23,17 +24,18 @@ import {
   ROUTE,
   SOURCE,
 } from './login-host-fixture.ts'
+import { must } from './must.ts'
 
 const CODEX_SOURCE = 'openai-codex'
 const CODEX_ROUTE = 'subscription-alias'
 /** The installed line names its own Codex models, so a hardcoded id does not exist on every line. */
-const CODEX_MODEL = builtinProviders()
-  .find((provider) => provider.id === CODEX_SOURCE)!
-  .getModels()[0]!.id
+const CODEX_MODEL = must(
+  builtinProviders().find((provider) => provider.id === CODEX_SOURCE),
+).getModels()[0].id
 const XAI_SOURCE = 'xai'
-const XAI_MODEL = builtinProviders()
-  .find((provider) => provider.id === XAI_SOURCE)!
-  .getModels()[0]!.id
+const XAI_MODEL = must(
+  builtinProviders().find((provider) => provider.id === XAI_SOURCE),
+).getModels()[0].id
 const GRANT: OAuthCredential = {
   type: 'oauth',
   access: 'local-access',
@@ -57,29 +59,31 @@ async function mountSubscription(
   source = CODEX_SOURCE,
 ) {
   const model = source === CODEX_SOURCE ? CODEX_MODEL : XAI_MODEL
-  const snapshot = compileCatalog({
-    version: 1,
-    providers: [
-      {
-        id: CODEX_ROUTE,
-        name: 'Configured subscription',
-        source,
-        auth: { credentialProvider: source },
-        models: [{ id: model, name: 'Configured model' }],
-      },
-    ],
-    default: { provider: CODEX_ROUTE, model },
-  })!
+  const snapshot = must(
+    compileCatalog({
+      version: 1,
+      providers: [
+        {
+          id: CODEX_ROUTE,
+          name: 'Configured subscription',
+          source,
+          auth: { credentialProvider: source },
+          models: [{ id: model, name: 'Configured model' }],
+        },
+      ],
+      default: { provider: CODEX_ROUTE, model },
+    }),
+  )
   const profiles = new Map(snapshot.profiles)
-  const profile = profiles.get(CODEX_ROUTE)!
-  const provider = profile.piProvider!
+  const profile = must(profiles.get(CODEX_ROUTE))
+  const provider = must(profile.piProvider)
   profiles.set(CODEX_ROUTE, {
     ...profile,
     piProvider: {
       ...provider,
       auth: {
         ...provider.auth,
-        oauth: { ...provider.auth.oauth!, login: flow },
+        oauth: { ...must(provider.auth.oauth), login: flow },
       },
     },
   })
@@ -109,7 +113,7 @@ async function mountSubscription(
   return {
     store,
     run: async (signal: AbortSignal) =>
-      ctx.commands.find(AGENT, COMMAND)!.handler({
+      must(ctx.commands.find(AGENT, COMMAND)).handler({
         commandId: 'local-subscription-login',
         agent: AGENT,
         rawInput: CODEX_ROUTE,
@@ -207,7 +211,7 @@ test('managed OAuth reports StoredCredentialError when ownership is lost after p
 })
 
 test('dual-method managed XAI defaults to OAuth without a method word', async (t) => {
-  const source = builtinProviders().find((provider) => provider.id === XAI_SOURCE)!
+  const source = must(builtinProviders().find((provider) => provider.id === XAI_SOURCE))
   assert.equal(typeof source.auth.apiKey?.login, 'function')
   assert.equal(typeof source.auth.oauth?.login, 'function')
   t.mock.method(globalThis, 'fetch', async () => {
@@ -248,12 +252,12 @@ for (const event of ['cancelled', 'ownership-conflict', 'cancelled-and-conflicte
       },
     )
     const result = await run(controller.signal)
-    assert.deepEqual(store!.records.get(recordKeyFor(CODEX_SOURCE)), {
+    assert.deepEqual(must(store).records.get(recordKeyFor(CODEX_SOURCE)), {
       kind: 'grant',
       payload: GRANT,
     })
-    assert.deepEqual(store!.writes, [recordKeyFor(CODEX_SOURCE)])
-    assert.equal(store!.records.has(recordKeyFor(CODEX_ROUTE)), false)
+    assert.deepEqual(must(store).writes, [recordKeyFor(CODEX_SOURCE)])
+    assert.equal(must(store).records.has(recordKeyFor(CODEX_ROUTE)), false)
     if (event === 'cancelled') assert.equal(result.kind, 'success', JSON.stringify(result))
     else {
       assert.equal(result.kind, 'error')
@@ -354,5 +358,5 @@ test('a named xai reference cannot select OAuth or create a provider grant', asy
   const result = await run(`${XAI_SOURCE} oauth`)
   assert.equal(result.kind, 'error')
   assert.equal(prompts.length, 0)
-  assert.deepEqual(store!.writes, [])
+  assert.deepEqual(must(store).writes, [])
 })

@@ -19,6 +19,7 @@ import type {
   LoginCommandHost,
 } from '../src/login-contract.ts'
 import type { RouteDeclaration } from '../src/login-route.ts'
+import { must } from './must.ts'
 
 /** The registry knows the agent contract; deriving it keeps this suite free of a host dependency. */
 type AgentHandle = Parameters<CommandRuntime['list']>[0]
@@ -493,12 +494,12 @@ describe('provider sign-in command in the harness registry', () => {
         .list(agent)
         .find((descriptor) => descriptor.name === DEFAULT_LOGIN_COMMAND_NAME)
       assert.notEqual(listed, undefined)
-      assert.ok(listed!.description.length > 0)
-      assert.ok((listed!.input?.hint ?? '').length > 0)
+      assert.ok(must(listed).description.length > 0)
+      assert.ok((must(listed).input?.hint ?? '').length > 0)
 
       const found = ctx.commands.find(agent, DEFAULT_LOGIN_COMMAND_NAME)
       assert.notEqual(found, undefined)
-      const result = await found!.handler(invocation('openai-codex'))
+      const result = await must(found).handler(invocation('openai-codex'))
       assert.equal(result.kind, 'success')
 
       dispose()

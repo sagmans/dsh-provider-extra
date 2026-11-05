@@ -1,4 +1,5 @@
 /** Tier choices must survive restart and reach both upstream stream entry points. */
+
 import assert from 'node:assert/strict'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -13,6 +14,7 @@ import * as plugin from '../src/index.ts'
 import { createTierSelection, mountServiceTiers, withServiceTiers } from '../src/service-tiers.ts'
 import { TIER_CONTRIBUTION, TIER_NAMESPACE } from '../src/tier-client.ts'
 import { MemoryCredentials } from './login-host-fixture.ts'
+import { must } from './must.ts'
 
 const PROVIDER = DEFAULT_CODEX_ROUTE_ID
 const MODEL = 'gpt-5.6-luna'
@@ -112,7 +114,7 @@ it('does not apply a choice when durable persistence fails', async () => {
 it('forwards tier through both streams without mutating the original options', async () => {
   const original = buildCodexProfile({ provider: PROVIDER, displayName: PROVIDER })
   const received: unknown[] = []
-  const source = original.piProvider!
+  const source = must(original.piProvider)
   const profile = {
     ...original,
     piProvider: {
@@ -127,9 +129,10 @@ it('forwards tier through both streams without mutating the original options', a
       },
     },
   }
-  const routed = withServiceTiers(new Map([[PROVIDER, profile]]), () => PRIORITY).get(PROVIDER)!
-    .piProvider!
-  const model = source.getModels().find((entry) => entry.id === MODEL)!
+  const routed = must(
+    must(withServiceTiers(new Map([[PROVIDER, profile]]), () => PRIORITY).get(PROVIDER)).piProvider,
+  )
+  const model = must(source.getModels().find((entry) => entry.id === MODEL))
   const options = { temperature: 0.5, onPayload: () => ({ preserved: true }) }
   for (const supplied of [options, undefined]) {
     routed.stream(model, normalizeContext({ messages: [] }), supplied)
@@ -250,8 +253,8 @@ it('resolves invocation aliases against authoritative choices without persistenc
 for (const stream of STREAMS) {
   it(`gives invocation tiers precedence and isolates later ${stream} calls`, async () => {
     const original = buildCodexProfile({ provider: PROVIDER, displayName: PROVIDER })
-    const source = original.piProvider!
-    const model = source.getModels().find((entry) => entry.id === MODEL)!
+    const source = must(original.piProvider)
+    const model = must(source.getModels().find((entry) => entry.id === MODEL))
     type Options = import('@earendil-works/pi-ai').StreamOptions & { serviceTier?: string | null }
     const received: Options[] = []
     const profile = {
@@ -264,29 +267,32 @@ for (const stream of STREAMS) {
         },
       },
     }
-    const routed = withServiceTiers(new Map([[PROVIDER, profile]]), () => PRIORITY).get(PROVIDER)!
-      .piProvider!
+    const routed = must(
+      must(withServiceTiers(new Map([[PROVIDER, profile]]), () => PRIORITY).get(PROVIDER))
+        .piProvider,
+    )
     const context = normalizeContext({ messages: [] })
     const onPayload = async () => ({ preserved: true })
     const base = { apiKey: AUTH_KEY, temperature: TEMPERATURE, onPayload }
     for (const tier of [STANDARD, AUTO, PRIORITY, null, undefined]) {
       const options = { ...base, serviceTier: tier }
       routed[stream](model, context, options)
-      const forwarded = received.pop()!
+      const forwarded = must(received.pop())
       const expected = tier === undefined ? PRIORITY : tier
       assert.equal(forwarded.apiKey, AUTH_KEY)
       assert.equal(forwarded.temperature, TEMPERATURE)
       const wireTier = expected === AUTO ? undefined : (expected ?? undefined)
       assert.equal(forwarded.serviceTier, wireTier)
       assert.equal(Object.hasOwn(forwarded, 'serviceTier'), expected !== null)
-      assert.deepEqual(await forwarded.onPayload!({}, model), {
+      assert.ok(forwarded.onPayload)
+      assert.deepEqual(await forwarded.onPayload({}, model), {
         preserved: true,
         ...(wireTier === undefined ? {} : { service_tier: wireTier }),
       })
       assert.equal(options.onPayload, onPayload)
       assert.equal(options.serviceTier, tier)
       routed[stream](model, context, base)
-      assert.equal(received.pop()!.serviceTier, PRIORITY)
+      assert.equal(must(received.pop()).serviceTier, PRIORITY)
     }
   })
 }
@@ -337,8 +343,10 @@ for (const stream of STREAMS) {
       async () => assert.fail('invocations must not persist'),
       () => profiles,
     )
-    const provider = withServiceTiers(profiles, selection.current).get(PROVIDER)!.piProvider!
-    const model = provider.getModels().find((entry) => entry.id === MODEL)!
+    const provider = must(
+      must(withServiceTiers(profiles, selection.current).get(PROVIDER)).piProvider,
+    )
+    const model = must(provider.getModels().find((entry) => entry.id === MODEL))
     const payloads: Record<string, unknown>[] = []
     t.mock.method(
       globalThis,
@@ -371,7 +379,7 @@ for (const stream of STREAMS) {
         options,
       ))
         assert.notEqual(event.type, 'error', JSON.stringify(event))
-      const actual = payloads.pop()!
+      const actual = must(payloads.pop())
       const wireTier = expected === AUTO ? undefined : expected
       assert.equal(actual.service_tier, wireTier)
       assert.equal(Object.hasOwn(actual, 'service_tier'), wireTier !== undefined)
@@ -381,7 +389,7 @@ for (const stream of STREAMS) {
         apiKey: ACCESS,
       }))
         assert.notEqual(event.type, 'error', JSON.stringify(event))
-      assert.equal(payloads.pop()!.service_tier, PRIORITY)
+      assert.equal(must(payloads.pop()).service_tier, PRIORITY)
     }
     assert.equal(selection.current(PROVIDER, MODEL), PRIORITY)
   })
@@ -454,10 +462,10 @@ for (const managed of [false, true])
           chunks.push(chunk)
         assert.equal(payloads.length, 1, JSON.stringify(chunks))
         const wireTier = tier === AUTO ? undefined : tier
-        assert.equal(payloads[0]!.service_tier, wireTier)
-        assert.equal(Object.hasOwn(payloads[0]!, 'service_tier'), wireTier !== undefined)
+        assert.equal(payloads[0].service_tier, wireTier)
+        assert.equal(Object.hasOwn(payloads[0], 'service_tier'), wireTier !== undefined)
         assert.equal(ctx.providerServiceTiers.current(route, MODEL), tier)
-        assert.equal(payloads[0]!.model, MODEL)
+        assert.equal(payloads[0].model, MODEL)
       },
     )
   }

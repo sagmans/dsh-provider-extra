@@ -1,4 +1,5 @@
 /** Managed declarations must remain authoritative without consulting a live provider. */
+
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -22,6 +23,7 @@ import type {
 } from '../src/catalog.ts'
 import { compileCatalog } from '../src/catalog.ts'
 import { buildCatalogProfile } from '../src/catalog-routes.ts'
+import { must } from './must.ts'
 
 /** Membership is the profile's, so coverage ranges over every installed backend. */
 const SOURCES = builtinProviders()
@@ -110,9 +112,7 @@ after(
 
 /** Installed fixtures exercise real metadata without making any provider request. */
 function sourceModel(source = 'openai'): Model<Api> {
-  return builtinProviders()
-    .find((provider) => provider.id === source)!
-    .getModels()[0]!
+  return must(builtinProviders().find((provider) => provider.id === source)).getModels()[0]
 }
 
 /** Declared routes keep membership and credential mode required, so specs read them without re-checking. */
@@ -134,33 +134,37 @@ function config(route: DeclaredRoute = provider()): CatalogConfig {
   return {
     version: 1,
     providers: [route],
-    default: route.models.length ? { provider: route.id, model: route.models[0]!.id } : null,
+    default: route.models.length ? { provider: route.id, model: route.models[0].id } : null,
   }
 }
 
 function served(input: CatalogConfig): readonly Model<Api>[] {
-  return compileCatalog(input)!.profiles.get(input.providers[0]!.id)!.piProvider!.getModels()
+  return must(
+    must(must(compileCatalog(input)).profiles.get(input.providers[0].id)).piProvider,
+  ).getModels()
 }
 
 describe('managed catalog compilation', () => {
   it('keeps explicit request defaults separate from model capacity', () => {
     const route = provider()
-    Object.assign(route.models[0]!, { defaultMaxTokens: REQUEST_DEFAULT })
-    const profile = compileCatalog(config(route))!.profiles.get(ROUTE)!
-    assert.equal(profile.configuredMaxTokens.get(route.models[0]!.id), REQUEST_DEFAULT)
-    assert.equal(profile.piProvider!.getModels()[0]!.maxTokens, sourceModel().maxTokens)
-    const ordinary = compileCatalog(config(provider()))!.profiles.get(ROUTE)!
+    Object.assign(route.models[0], { defaultMaxTokens: REQUEST_DEFAULT })
+    const profile = must(must(compileCatalog(config(route))).profiles.get(ROUTE))
+    assert.equal(profile.configuredMaxTokens.get(route.models[0].id), REQUEST_DEFAULT)
+    assert.equal(must(profile.piProvider).getModels()[0].maxTokens, sourceModel().maxTokens)
+    const ordinary = must(must(compileCatalog(config(provider()))).profiles.get(ROUTE))
     assert.equal(ordinary.configuredMaxTokens.size, 0)
   })
 
   it('rejects invalid explicit request defaults before publication', () => {
     for (const invalid of [null, '1024', 0, -1, 1.5, Infinity, NaN, sourceModel().maxTokens + 1]) {
       const route = provider()
-      Object.assign(route.models[0]!, { defaultMaxTokens: invalid })
+      Object.assign(route.models[0], { defaultMaxTokens: invalid })
       assert.throws(() => compileCatalog(config(route)), /defaultMaxTokens/)
     }
   })
+})
 
+describe('managed catalog generations', () => {
   it('detaches all selected facts and protects retained profile generations', () => {
     const input = config(
       provider('openai', [
@@ -172,27 +176,27 @@ describe('managed catalog compilation', () => {
         },
       ]),
     )
-    input.providers[0]!.headers = { 'x-generation': FIRST_GENERATION }
-    const snapshot = compileCatalog(input)!
-    const profile = snapshot.profiles.get(ROUTE)!
-    const model = profile.piProvider!.getModels()[0]!
-    input.providers[0]!.models![0]!.metadata!.cost!.input = 9
-    input.providers[0]!.headers!['x-generation'] = NEXT_GENERATION
-    input.providers[0]!.models![0]!.aliases!.push('later-alias')
+    input.providers[0].headers = { 'x-generation': FIRST_GENERATION }
+    const snapshot = must(compileCatalog(input))
+    const profile = must(snapshot.profiles.get(ROUTE))
+    const model = must(profile.piProvider).getModels()[0]
+    must(must(must(input.providers[0].models)[0].metadata).cost).input = 9
+    input.providers[0].headers['x-generation'] = NEXT_GENERATION
+    must(must(input.providers[0].models)[0].aliases).push('later-alias')
     assert.equal(model.cost.input, 1)
-    assert.equal(profile.headers!['x-generation'], FIRST_GENERATION)
+    assert.equal(must(profile.headers)['x-generation'], FIRST_GENERATION)
     assert.throws(() => snapshot.resolveSelection({ provider: ROUTE, model: 'later-alias' }))
     for (const value of [
       snapshot,
       snapshot.config,
       snapshot.config.providers,
-      snapshot.providers.get(ROUTE)!,
+      must(snapshot.providers.get(ROUTE)),
       profile,
-      profile.piProvider!,
-      profile.piProvider!.getModels(),
+      must(profile.piProvider),
+      must(profile.piProvider).getModels(),
       model,
       model.cost,
-      profile.piProvider!.auth,
+      must(profile.piProvider).auth,
     ]) {
       assert.equal(Object.isFrozen(value), true)
     }
@@ -206,11 +210,14 @@ describe('managed catalog compilation', () => {
       assert.equal(map, snapshot.profiles)
     })
     assert.equal(
-      compileCatalog(input)!.profiles.get(ROUTE)!.piProvider!.getModels()[0]!.cost.input,
+      must(must(must(compileCatalog(input)).profiles.get(ROUTE)).piProvider).getModels()[0].cost
+        .input,
       9,
     )
   })
+})
 
+describe('managed catalog request routing', () => {
   for (const method of ['stream', 'streamSimple'] as const) {
     it(`injects live and fallback Go routing on ${method}`, async () => {
       const route = provider('opencode-go', [
@@ -224,7 +231,7 @@ describe('managed catalog compilation', () => {
       route.fallbackSessionId = FALLBACK_SESSION
       route.headers = { [SESSION_HEADER.toUpperCase()]: 'stale-static', 'x-static': 'configured' }
       const profile = buildCatalogProfile(route)
-      const pi = profile.piProvider!
+      const pi = must(profile.piProvider)
       for (const sessionId of [LIVE_SESSION, undefined]) {
         const options = {
           apiKey: TEST_KEY,
@@ -232,7 +239,7 @@ describe('managed catalog compilation', () => {
           headers: { [SESSION_HEADER.toUpperCase()]: 'stale-request', 'x-request': 'preserved' },
         }
         const response = await pi[method](
-          pi.getModels()[0]!,
+          pi.getModels()[0],
           normalizeContext({ messages: [] }),
           options,
         ).result()
@@ -241,7 +248,7 @@ describe('managed catalog compilation', () => {
           'error',
           response.errorMessage ?? 'stopReason was error',
         )
-        const request = captured.at(-1)!
+        const request = must(captured.at(-1))
         assert.equal(request.headers.get(SESSION_HEADER), sessionId ?? FALLBACK_SESSION)
         assert.equal(request.headers.get('x-static'), 'configured')
         assert.equal(request.headers.get('x-request'), 'preserved')
@@ -253,10 +260,10 @@ describe('managed catalog compilation', () => {
       const route = { ...provider('openai-codex'), baseURL: endpoint, transport: 'sse' as const }
       const profile = buildCatalogProfile(route)
       assert.equal(profile.apiKeyEnv, undefined)
-      assert.equal(typeof profile.piProvider!.auth.oauth?.login, 'function')
+      assert.equal(typeof must(profile.piProvider).auth.oauth?.login, 'function')
       const before = upgrades
-      const pi = profile.piProvider!
-      const response = await pi[method](pi.getModels()[0]!, normalizeContext({ messages: [] }), {
+      const pi = must(profile.piProvider)
+      const response = await pi[method](pi.getModels()[0], normalizeContext({ messages: [] }), {
         apiKey: CODEX_TOKEN,
         transport: 'websocket',
         maxRetries: 0,
@@ -265,34 +272,36 @@ describe('managed catalog compilation', () => {
       }).result()
       assert.notEqual(response.stopReason, 'error', response.errorMessage ?? 'stopReason was error')
       assert.equal(upgrades, before, 'pinned SSE must not attempt a WebSocket upgrade')
-      assert.equal(captured.at(-1)!.headers.get('chatgpt-account-id'), 'test-account')
+      assert.equal(must(captured.at(-1)).headers.get('chatgpt-account-id'), 'test-account')
     })
   }
+})
 
+describe('managed catalog dispatch facts', () => {
   it('does not invent Go routing identity when session and fallback are absent', async () => {
     const profile = buildCatalogProfile({
       ...provider('opencode-go', [{ id: GO_MODEL, name: NAME }]),
       baseURL: endpoint,
     })
-    const pi = profile.piProvider!
+    const pi = must(profile.piProvider)
     const response = await pi
-      .streamSimple(pi.getModels()[0]!, normalizeContext({ messages: [] }), { apiKey: TEST_KEY })
+      .streamSimple(pi.getModels()[0], normalizeContext({ messages: [] }), { apiKey: TEST_KEY })
       .result()
     assert.notEqual(response.stopReason, 'error', response.errorMessage ?? 'stopReason was error')
-    assert.equal(captured.at(-1)!.headers.get(SESSION_HEADER), null)
+    assert.equal(must(captured.at(-1)).headers.get(SESSION_HEADER), null)
   })
 
   it('validates effort against explicitly overridden thinking metadata', () => {
     const route = provider('openai-codex')
-    route.models[0]!.metadata = { thinkingLevelMap: { high: null, low: 'low' } }
+    route.models[0].metadata = { thinkingLevelMap: { high: null, low: 'low' } }
     const input = config(route)
-    const snapshot = compileCatalog(input)!
+    const snapshot = must(compileCatalog(input))
     assert.throws(() => snapshot.resolveSelection({ ...input.default, reasoningEffort: 'high' }))
     assert.equal(
       snapshot.resolveSelection({ ...input.default, reasoningEffort: 'low' }).reasoningEffort,
       'low',
     )
-    assert.equal(snapshot.profiles.get(ROUTE)!.configuredMaxTokens.size, 0)
+    assert.equal(must(snapshot.profiles.get(ROUTE)).configuredMaxTokens.size, 0)
   })
 
   it('retains prepared adapter dispatch facts across catalog replacement', async () => {
@@ -302,7 +311,7 @@ describe('managed catalog compilation', () => {
       headers: { 'x-generation': FIRST_GENERATION },
       fallbackSessionId: FALLBACK_SESSION,
     }
-    let snapshot = compileCatalog(config(route))!
+    let snapshot = must(compileCatalog(config(route)))
     const adapter = new PiAiAdapter({
       profiles: () => snapshot.profiles,
       resolveApiKey: async () => TEST_KEY,
@@ -313,25 +322,25 @@ describe('managed catalog compilation', () => {
     })
     const prepared = await adapter.prepareCall(ROUTE, GO_MODEL)
     route.headers['x-generation'] = NEXT_GENERATION
-    route.models[0]!.name = NEXT_GENERATION
-    snapshot = compileCatalog(config(route))!
+    route.models[0].name = NEXT_GENERATION
+    snapshot = must(compileCatalog(config(route)))
     const request: GenerateOptions = { provider: ROUTE, model: GO_MODEL, messages: [] }
     for await (const _chunk of prepared.stream(request)) {
       /* Draining proves the retained delegate reaches the loopback gateway. */
     }
-    assert.equal(captured.at(-1)!.headers.get('x-generation'), FIRST_GENERATION)
-    assert.equal(captured.at(-1)!.headers.get(SESSION_HEADER), FALLBACK_SESSION)
+    assert.equal(must(captured.at(-1)).headers.get('x-generation'), FIRST_GENERATION)
+    assert.equal(must(captured.at(-1)).headers.get(SESSION_HEADER), FALLBACK_SESSION)
     const replacement = await adapter.prepareCall(ROUTE, GO_MODEL)
     for await (const _chunk of replacement.stream(request)) {
       /* Both generations must remain serviceable independently. */
     }
-    assert.equal(captured.at(-1)!.headers.get('x-generation'), NEXT_GENERATION)
+    assert.equal(must(captured.at(-1)).headers.get('x-generation'), NEXT_GENERATION)
   })
 
   it('lets a declared endpoint outrank the installed one', () => {
     for (const source of SOURCES) {
       assert.equal(
-        served(config({ ...provider(source), baseURL: endpoint }))[0]!.baseUrl,
+        served(config({ ...provider(source), baseURL: endpoint }))[0].baseUrl,
         endpoint,
         source,
       )
@@ -341,18 +350,20 @@ describe('managed catalog compilation', () => {
   for (const source of SOURCES) {
     it(`serves exactly the selected canonical model for ${source}`, () => {
       const input = config(provider(source))
-      const snapshot = compileCatalog(input)!
+      const snapshot = must(compileCatalog(input))
       assert.deepEqual(
         served(input).map((model) => model.id),
-        [input.default!.model],
+        [must(input.default).model],
       )
-      assert.equal(served(input)[0]!.name, NAME)
-      assert.equal(served(input)[0]!.provider, ROUTE)
+      assert.equal(served(input)[0].name, NAME)
+      assert.equal(served(input)[0].provider, ROUTE)
       assert.deepEqual(snapshot.selection, input.default)
       assert.deepEqual(snapshot.providers.get(ROUTE), input.providers[0])
     })
   }
+})
 
+describe('managed catalog sources and aliases', () => {
   it('rejects a source nothing installs without a fallback', () => {
     for (const source of [UNKNOWN, 'not-a-backend']) {
       assert.throws(() => compileCatalog(config({ ...provider(), source })), /source/)
@@ -378,7 +389,7 @@ describe('managed catalog compilation', () => {
   it('never expands an empty route and requires null default for zero models', () => {
     const input = config(provider('openai', []))
     assert.deepEqual(served(input), [])
-    assert.equal(compileCatalog(input)!.selection, null)
+    assert.equal(must(compileCatalog(input)).selection, null)
     assert.throws(() =>
       compileCatalog({ ...input, default: { provider: ROUTE, model: sourceModel().id } }),
     )
@@ -389,10 +400,10 @@ describe('managed catalog compilation', () => {
     const input = config(
       provider('openai', [{ id: sourceModel().id, name: NAME, aliases: ['friendly'] }]),
     )
-    input.default!.model = 'friendly'
-    const snapshot = compileCatalog(input)!
-    assert.equal(snapshot.selection!.model, sourceModel().id)
-    assert.equal(snapshot.config.default!.model, sourceModel().id)
+    must(input.default).model = 'friendly'
+    const snapshot = must(compileCatalog(input))
+    assert.equal(must(snapshot.selection).model, sourceModel().id)
+    assert.equal(must(snapshot.config.default).model, sourceModel().id)
     assert.equal(
       snapshot.resolveSelection({ provider: ROUTE, model: 'friendly' }).model,
       sourceModel().id,
@@ -410,7 +421,7 @@ describe('managed catalog compilation', () => {
     const input = config(
       provider('opencode-go', [{ id: WIRE_ID, name: NAME, template: sibling.id }]),
     )
-    const model = served(input)[0]!
+    const model = served(input)[0]
     assert.equal(model.id, WIRE_ID)
     assert.equal(model.name, NAME)
     assert.equal(model.api, sibling.api)
@@ -443,7 +454,9 @@ describe('managed catalog compilation', () => {
       ),
     )
   })
+})
 
+describe('managed catalog metadata', () => {
   it('rejects protocol changes that would inherit incompatible template metadata', () => {
     const sibling = sourceModel('opencode-go')
     assert.equal(sibling.api, 'anthropic-messages')
@@ -471,7 +484,7 @@ describe('managed catalog compilation', () => {
     for (const id of [sourceModel().id, WIRE_ID]) {
       const model = served(
         config({ ...provider('openai', [{ id, name: NAME, metadata }]), baseURL: ENDPOINT }),
-      )[0]!
+      )[0]
       assert.equal(model.id, id)
       assert.equal(model.name, NAME)
       assert.equal(model.baseUrl, ENDPOINT)
@@ -495,7 +508,7 @@ describe('managed catalog compilation', () => {
   it('uses public thinking semantics and rejects unsupported or invalid efforts', () => {
     const input = config()
     const supported = getSupportedThinkingLevels(sourceModel())
-    const snapshot = compileCatalog(input)!
+    const snapshot = must(compileCatalog(input))
     for (const reasoningEffort of supported) {
       assert.equal(
         snapshot.resolveSelection({ ...input.default, reasoningEffort }).reasoningEffort,
@@ -510,11 +523,13 @@ describe('managed catalog compilation', () => {
     }
     assert.throws(() => snapshot.resolveSelection({ ...input.default, reasoningEffort: 'high' }))
   })
+})
 
+describe('managed catalog refusals', () => {
   it('rejects malformed structure, unknown fields, duplicate IDs and ambiguous aliases', () => {
     const valid = config()
     const route = provider()
-    const model = route.models[0]!
+    const model = route.models[0]
     const invalid: unknown[] = [
       null,
       {},
@@ -593,7 +608,7 @@ describe('managed catalog compilation', () => {
   })
   it('distinguishes absent catalog from an explicitly empty catalog', () => {
     assert.equal(compileCatalog(undefined), undefined)
-    const snapshot = compileCatalog({ version: 1, providers: [], default: null })!
+    const snapshot = must(compileCatalog({ version: 1, providers: [], default: null }))
     assert.deepEqual(snapshot.config, { version: 1, providers: [], default: null })
     assert.equal(snapshot.profiles.size, 0)
     assert.equal(snapshot.providers.size, 0)
@@ -632,12 +647,12 @@ describe('declared endpoints without an installed source', () => {
   }
 
   function config(route: CatalogProvider): CatalogConfig {
-    return { version: 1, providers: [route], default: { provider: route.id!, model: CUSTOM_MODEL } }
+    return { version: 1, providers: [route], default: { provider: route.id, model: CUSTOM_MODEL } }
   }
 
   it('streams the declared protocol against the declared endpoint', async () => {
-    const snapshot = compileCatalog(config(custom()))!
-    const model = snapshot.profiles.get(ROUTE)!.piProvider!.getModels()[0]!
+    const snapshot = must(compileCatalog(config(custom())))
+    const model = must(must(snapshot.profiles.get(ROUTE)).piProvider).getModels()[0]
     assert.equal(model.api, 'openai-completions')
     assert.equal(model.baseUrl, endpoint)
     assert.equal(model.provider, ROUTE)
@@ -653,7 +668,7 @@ describe('declared endpoints without an installed source', () => {
     const request: GenerateOptions = { provider: ROUTE, model: CUSTOM_MODEL, messages: [] }
     let chunks = 0
     for await (const _chunk of prepared.stream(request)) chunks++
-    const received = captured.at(-1)!
+    const received = must(captured.at(-1))
     assert.equal(received.body.model, CUSTOM_MODEL)
     assert.equal(received.headers.get('authorization'), `Bearer ${CUSTOM_KEY}`)
     assert.ok(chunks > 0)
@@ -681,7 +696,7 @@ describe('declared endpoints without an installed source', () => {
 
   it('refuses to move a declared model off its declared protocol', () => {
     const route = custom()
-    route.models[0]!.metadata = { ...route.models[0]!.metadata, api: 'openai-responses' }
+    route.models[0].metadata = { ...route.models[0].metadata, api: 'openai-responses' }
     assert.throws(() => compileCatalog(config(route)), /speaks its declared protocol/)
   })
 
@@ -695,12 +710,10 @@ describe('declared endpoints without an installed source', () => {
 
 describe('filtered membership', () => {
   const SOURCE = 'openai'
-  const INSTALLED = builtinProviders()
-    .find((provider) => provider.id === SOURCE)!
-    .getModels()
+  const INSTALLED = must(builtinProviders().find((provider) => provider.id === SOURCE)).getModels()
   const IDS = INSTALLED.map((model) => model.id)
   /** One family prefix keeps the expectation readable while still exercising real patterns. */
-  const PREFIX = IDS[0]!.split('-')[0]!
+  const PREFIX = IDS[0].split('-')[0]
   const MATCHED = IDS.filter((id) => id.startsWith(PREFIX))
 
   function config(filter: CatalogFilter, served: readonly string[]): CatalogConfig {
@@ -715,14 +728,13 @@ describe('filtered membership', () => {
           filter,
         },
       ],
-      default: served.length === 0 ? null : { provider: ROUTE, model: served[0]! },
+      default: served.length === 0 ? null : { provider: ROUTE, model: served[0] },
     }
   }
 
   const servedIds = (input: CatalogConfig): string[] =>
-    compileCatalog(input)!
-      .profiles.get(ROUTE)!
-      .piProvider!.getModels()
+    must(must(must(compileCatalog(input)).profiles.get(ROUTE)).piProvider)
+      .getModels()
       .map((model) => model.id)
 
   it('serves only the installed models its include patterns match', () => {
@@ -733,16 +745,17 @@ describe('filtered membership', () => {
   it('subtracts excluded ids without restating the ones it keeps', () => {
     const kept = MATCHED.filter((id) => id !== MATCHED[0])
     assert.deepEqual(
-      servedIds(config({ include: [`${PREFIX}*`], exclude: [MATCHED[0]!] }, kept)),
+      servedIds(config({ include: [`${PREFIX}*`], exclude: [MATCHED[0]] }, kept)),
       kept,
     )
   })
 
   it('keeps every installed fact on an expanded entry', () => {
-    const source = INSTALLED.find((model) => model.id === MATCHED[0])!
-    const model = compileCatalog(config({ include: [MATCHED[0]!] }, MATCHED))!
-      .profiles.get(ROUTE)!
-      .piProvider!.getModels()[0]!
+    const source = must(INSTALLED.find((model) => model.id === MATCHED[0]))
+    const model = must(
+      must(must(compileCatalog(config({ include: [MATCHED[0]] }, MATCHED))).profiles.get(ROUTE))
+        .piProvider,
+    ).getModels()[0]
     assert.equal(model.id, source.id)
     assert.equal(model.name, source.name)
     assert.equal(model.api, source.api)
@@ -754,12 +767,12 @@ describe('filtered membership', () => {
   })
 
   it('resolves a filtered id for selection and refuses everything else', () => {
-    const snapshot = compileCatalog(config({ include: [`${PREFIX}*`] }, MATCHED))!
+    const snapshot = must(compileCatalog(config({ include: [`${PREFIX}*`] }, MATCHED)))
     assert.equal(
-      snapshot.resolveSelection({ provider: ROUTE, model: MATCHED.at(-1)! }).model,
+      snapshot.resolveSelection({ provider: ROUTE, model: must(MATCHED.at(-1)) }).model,
       MATCHED.at(-1),
     )
-    assert.equal(snapshot.selection!.model, MATCHED[0])
+    assert.equal(must(snapshot.selection).model, MATCHED[0])
     const outside = IDS.find((id) => !MATCHED.includes(id))
     if (outside !== undefined)
       assert.throws(
@@ -792,7 +805,7 @@ describe('filtered membership', () => {
           providers: [
             {
               ...declared,
-              models: [{ id: IDS[0]!, name: NAME }],
+              models: [{ id: IDS[0], name: NAME }],
               filter: { include: [`${PREFIX}*`] },
             },
           ],

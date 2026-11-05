@@ -1,4 +1,5 @@
 /** Tests use the npm command contribution boundary, never a model-popup extension. */
+
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
@@ -8,6 +9,7 @@ import { pathToFileURL } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { Context } from '@deepseek-ai/cordis'
 import { apply, TIER_CONTRIBUTION, TIER_DEFAULT, type TierView } from '../src/tier-client.ts'
+import { must } from './must.ts'
 
 const ROOT = new URL('../', import.meta.url)
 const ROUTE = { provider: 'example-provider', model: 'example-alias', reasoningEffort: 'high' }
@@ -117,7 +119,7 @@ async function fixture(t: TestContext) {
   const signal = new AbortController()
   const command = () => {
     assert.ok(commands.has('service-tier'), 'register a stock commandUi contribution')
-    return commands.get('service-tier')!
+    return must(commands.get('service-tier'))
   }
   return {
     ctx,
@@ -155,10 +157,10 @@ async function fixture(t: TestContext) {
 test('strict codecs reject malformed arguments and response fields', () => {
   const [describe, select] = TIER_CONTRIBUTION.descriptors
   for (const value of [undefined, null, '', '   ', 7, {}, []])
-    assert.throws(() => describe.parameters[0]!.codec.create().parse(value))
+    assert.throws(() => describe.parameters[0].codec.create().parse(value))
   for (const value of [null, 3, '', 'fast', {}])
-    assert.throws(() => select.parameters[2]!.codec.create().parse(value))
-  assert.equal(select.parameters[2]!.codec.create().parse(undefined), undefined)
+    assert.throws(() => select.parameters[2].codec.create().parse(value))
+  assert.equal(select.parameters[2].codec.create().parse(undefined), undefined)
   for (const value of [
     null,
     [],
@@ -188,11 +190,11 @@ test('local service-tier popup uses the current alias and preserves model and ef
     ['Provider default', 'Auto', 'Standard', 'Fast'],
   )
   assert.equal(options.find((row) => row.active)?.id, TIER_DEFAULT)
-  assert.match(options[3]!.detail!, /cost.*account/i)
-  await f.pick(options[3]!)
+  assert.match(must(options[3].detail), /cost.*account/i)
+  await f.pick(options[3])
   const reopened = await f.open()
   assert.equal(reopened.find((row) => row.active)?.id, 'priority')
-  await f.pick(reopened[0]!)
+  await f.pick(reopened[0])
   assert.deepEqual(
     f.writes.map((args) => args.slice(0, 3)),
     [
@@ -235,11 +237,11 @@ test('session scope replacement and addressed-session changes reject previous op
   const f = await fixture(t)
   const options = await f.open()
   f.setAddressed(true)
-  await assert.rejects(f.pick(options[3]!), /Model changed/)
+  await assert.rejects(f.pick(options[3]), /Model changed/)
   f.setAddressed(false)
   const fresh = await f.open()
   f.replaceSessionScope()
-  await assert.rejects(f.pick(fresh[3]!), /Model changed/)
+  await assert.rejects(f.pick(fresh[3]), /Model changed/)
   assert.equal(f.writes.length, 0)
 })
 
@@ -251,10 +253,10 @@ test('a failed write retries in the same popup without changing the displayed ch
   f.remote.providerExtraTiers.select = async () => {
     throw new Error(PRIVATE_FAILURE)
   }
-  await assert.rejects(f.pick(options[1]!), { message: SAVE_FAILURE })
+  await assert.rejects(f.pick(options[1]), { message: SAVE_FAILURE })
   assert.equal(options.find((row) => row.active)?.id, 'default')
   f.remote.providerExtraTiers.select = original
-  await f.pick(options[1]!)
+  await f.pick(options[1])
   assert.equal(f.listeners.size, 0)
   assert.equal((await f.open()).find((row) => row.active)?.id, 'auto')
   assert.deepEqual(
@@ -289,12 +291,12 @@ test('selection rejects foreign options, another session, and a changed route', 
   const options = await f.open()
   await assert.rejects(f.pick({ id: 'fast', label: 'Fast' }), /Invalid service tier/)
   await assert.rejects(
-    f.pick(options[3]!, { sessionId: 'example-other-session' }),
+    f.pick(options[3], { sessionId: 'example-other-session' }),
     /Invalid service tier/,
   )
   f.setRoute({ ...ROUTE, provider: 'example-other' })
   f.setRoute(ROUTE)
-  await assert.rejects(f.pick(options[3]!), /Model changed/)
+  await assert.rejects(f.pick(options[3]), /Model changed/)
   assert.deepEqual(f.writes, [])
 })
 
@@ -316,7 +318,7 @@ for (const phase of ['read', 'write'] as const)
     } else {
       const options = await f.open()
       f.remote.providerExtraTiers.select = delayed
-      pending = f.pick(options[3]!)
+      pending = f.pick(options[3])
     }
     await started.promise
     f.signal.abort()
@@ -338,7 +340,7 @@ for (const phase of ['read', 'write'] as const)
         if (failure === 'envelope') return { ok: false, error: { message: PRIVATE_FAILURE } }
         return { ok: true, value: { private: PRIVATE_FAILURE } }
       }
-      await assert.rejects(phase === 'read' ? f.open() : f.pick(options[3]!), {
+      await assert.rejects(phase === 'read' ? f.open() : f.pick(options[3]), {
         message: phase === 'read' ? READ_FAILURE : SAVE_FAILURE,
       })
       assert.equal(f.writes.length, 0)
@@ -346,7 +348,7 @@ for (const phase of ['read', 'write'] as const)
       f.setView({ choices: CHOICES, current: 'default' })
       const reopened = await f.open()
       assert.equal(reopened.find((row) => row.active)?.id, 'default')
-      await f.pick(reopened[3]!)
+      await f.pick(reopened[3])
       assert.deepEqual(
         f.writes.map((args) => args.slice(0, 3)),
         [[ROUTE.provider, ROUTE.model, 'priority']],
@@ -364,7 +366,7 @@ test('a save already accepted may commit, but route changes cannot report stale 
     committed.push(args[2])
     return { ok: true, value: undefined }
   }
-  const pending = f.pick(options[3]!)
+  const pending = f.pick(options[3])
   f.setRoute({ ...ROUTE, model: 'example-other' })
   response.resolve()
   await assert.rejects(pending, /Model changed/)
@@ -377,7 +379,7 @@ for (const outcome of ['resolve', 'reject'] as const)
     const options = await f.open()
     const response = deferred<unknown>()
     f.remote.providerExtraTiers.select = async () => response.promise
-    const pending = f.pick(options[3]!)
+    const pending = f.pick(options[3])
     const rejected = assert.rejects(pending, { name: 'AbortError' })
     await f.fork.dispose()
     assert.equal(f.mounts(), 0)
@@ -392,7 +394,7 @@ for (const outcome of ['resolve', 'reject'] as const)
       return { ok: true, value: undefined }
     }
     const fresh = await f.open()
-    await f.pick(fresh[2]!)
+    await f.pick(fresh[2])
     if (outcome === 'resolve') response.resolve({ ok: true, value: undefined })
     else response.reject(new Error(PRIVATE_FAILURE))
     await rejected
@@ -452,7 +454,7 @@ test('stock npm Remote facade permits popup calls from a restricted plugin conte
     exports: Record<string, { browser: string }>
   }
   const artifact = readFileSync(
-    new URL(gatewayExports[GATEWAY_CLIENT_EXPORT]!.browser, pathToFileURL(gatewayManifest)),
+    new URL(gatewayExports[GATEWAY_CLIENT_EXPORT].browser, pathToFileURL(gatewayManifest)),
     'utf8',
   )
   runInNewContext(artifact, {
@@ -468,7 +470,7 @@ test('stock npm Remote facade permits popup calls from a restricted plugin conte
       },
     },
   })
-  const runtime = gateway!.factory((id) => {
+  const runtime = must(gateway).factory((id) => {
     assert.equal(id, '@deepseek-ai/cordis')
     return cordis
   })
@@ -526,7 +528,7 @@ test('stock npm Remote facade permits popup calls from a restricted plugin conte
   await settle()
   assert.ok(command, 'mount contribution before registering the command')
   const options = await command.ui.options(SESSION, new AbortController().signal)
-  await command.ui.onSelect(options[3]!, SESSION)
+  await command.ui.onSelect(options[3], SESSION)
   assert.deepEqual(
     calls.map(({ endpoint, args }) => ({ endpoint, args })),
     [
@@ -550,9 +552,9 @@ test('stock npm Remote facade permits popup calls from a restricted plugin conte
   client = ctx.plugin(apply)
   await client
   await settle()
-  const reopened = await command!.ui.options(SESSION, new AbortController().signal)
-  await command!.ui.onSelect(reopened[0]!, SESSION)
-  assert.deepEqual(calls.at(-1)!.args, { provider: ROUTE.provider, model: ROUTE.model })
+  const reopened = await command.ui.options(SESSION, new AbortController().signal)
+  await command.ui.onSelect(reopened[0], SESSION)
+  assert.deepEqual(must(calls.at(-1)).args, { provider: ROUTE.provider, model: ROUTE.model })
 })
 
 test('published artifact VM-loads without runtime imports or Node globals', () => {
@@ -570,8 +572,8 @@ test('published artifact VM-loads without runtime imports or Node globals', () =
       },
     },
   })
-  assert.equal(loaded!.id, '@sagmans/dsh-provider-extra')
-  const exports = loaded!.factory((id) => {
+  assert.equal(must(loaded).id, '@sagmans/dsh-provider-extra')
+  const exports = must(loaded).factory((id) => {
     throw new Error(`Unexpected runtime dependency: ${id}`)
   })
   assert.equal(typeof exports.apply, 'function')

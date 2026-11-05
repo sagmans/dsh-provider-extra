@@ -287,11 +287,13 @@ it('scopes iterator construction, next, return and throw without leaking into co
   try {
     const cancelled = runtime.stream(request(ROOT))[Symbol.asyncIterator]()
     await cancelled.next()
-    await cancelled.return!()
+    assert.ok(cancelled.return)
+    await cancelled.return()
     const thrown = runtime.stream(request(ROOT))[Symbol.asyncIterator]()
     await thrown.next()
     const failure = new Error(FAILURE)
-    await assert.rejects(thrown.throw!(failure), (error) => error === failure)
+    assert.ok(thrown.throw)
+    await assert.rejects(thrown.throw(failure), (error) => error === failure)
     assert.deepEqual(
       seen.map(([step]) => step),
       ['construct', 'iterator', 'next', 'return', 'construct', 'iterator', 'next', 'throw'],

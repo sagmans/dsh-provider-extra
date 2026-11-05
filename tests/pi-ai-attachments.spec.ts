@@ -29,6 +29,7 @@ import type { GenerateOptions, LlmAdapter, Message, StreamChunk } from '@deepsee
 import { createToolResultMessage, LlmRuntime } from '@deepseek-ai/dsh-llm'
 import { apply } from '../src/index.ts'
 import { buildOpenCodeGoProfile } from '../src/opencode-go.ts'
+import { must } from './must.ts'
 
 const API_KEY_ENV = 'OPENCODE_API_KEY_ATTACH_TEST'
 const ROUTE = 'opencode-go-attach-test'
@@ -64,14 +65,14 @@ const catalogProfile = buildOpenCodeGoProfile({
   apiKeyEnv: API_KEY_ENV,
   baseURL: 'http://127.0.0.1:1/v1',
 })
-const CATALOG = catalogProfile.piProvider!.getModels()
+const CATALOG = must(catalogProfile.piProvider).getModels()
 const IMAGE_MODEL_BY_PROTOCOL = new Map<Protocol, string>(
   PROTOCOLS.map((protocol) => {
     const model = CATALOG.find(
       (candidate) => candidate.api === protocol && candidate.input?.includes('image'),
     )
     assert.notEqual(model, undefined, `installed catalog ships an image-capable ${protocol} model`)
-    return [protocol, model!.id]
+    return [protocol, must(model).id]
   }),
 )
 const TEXT_MODEL = CATALOG.find(
@@ -345,7 +346,7 @@ function mount(
     options.codex === true ? 2 : 1,
     'each enabled route registers exactly one adapter',
   )
-  return { adapter: adapters[0]!, adapters, warnings }
+  return { adapter: adapters[0], adapters, warnings }
 }
 
 /** A durable image reference as the attachment service publishes it. */
@@ -407,7 +408,7 @@ function replayedToolResultHistory(): Message[] {
       source: {
         kind: 'model',
         provider: ROUTE,
-        model: IMAGE_MODEL_BY_PROTOCOL.get('openai-completions')!,
+        model: must(IMAGE_MODEL_BY_PROTOCOL.get('openai-completions')),
       },
     },
     createToolResultMessage({
@@ -493,7 +494,7 @@ describe('durable image attachments on the registered route', () => {
   for (const protocol of PROTOCOLS) {
     it(`carries the image to the wire on ${protocol}`, async () => {
       const { adapter } = mount()
-      const model = IMAGE_MODEL_BY_PROTOCOL.get(protocol)!
+      const model = must(IMAGE_MODEL_BY_PROTOCOL.get(protocol))
       const { chunks, requests } = await stream(adapter, model, [imageMessage()])
       assert.equal(
         terminal(chunks).reason.kind,
@@ -507,7 +508,7 @@ describe('durable image attachments on the registered route', () => {
 
   it('replays a read_image tool result from history and finishes the next turn', async () => {
     const { adapter } = mount()
-    const model = IMAGE_MODEL_BY_PROTOCOL.get('openai-completions')!
+    const model = must(IMAGE_MODEL_BY_PROTOCOL.get('openai-completions'))
     const { chunks, requests } = await stream(adapter, model, replayedToolResultHistory())
     assert.equal(
       terminal(chunks).reason.kind,
@@ -523,23 +524,25 @@ describe('durable image attachments on the registered route', () => {
 
   it('names the normalized host copy mapped into the tool world', async () => {
     const { adapter } = mount({ fs: true })
-    const model = IMAGE_MODEL_BY_PROTOCOL.get('openai-completions')!
+    const model = must(IMAGE_MODEL_BY_PROTOCOL.get('openai-completions'))
     const { requests } = await stream(adapter, model, [imageMessage()])
-    assert.ok(requests[0]!.body.includes(WORLD_PATH), 'handle text names the mapped read-only copy')
+    assert.ok(requests[0].body.includes(WORLD_PATH), 'handle text names the mapped read-only copy')
   })
 
   it('still sends the image when the composition mounts no filesystem service', async () => {
     const { adapter } = mount({ fs: false })
-    const model = IMAGE_MODEL_BY_PROTOCOL.get('openai-completions')!
+    const model = must(IMAGE_MODEL_BY_PROTOCOL.get('openai-completions'))
     const { chunks, requests } = await stream(adapter, model, [imageMessage()])
     assert.equal(terminal(chunks).reason.kind, 'stop')
     assert.equal(bodiesWithImage(requests).length, 1, 'the mapping is optional, the image is not')
-    assert.ok(!requests[0]!.body.includes(WORLD_PATH), 'no execution-world path exists to name')
+    assert.ok(!requests[0].body.includes(WORLD_PATH), 'no execution-world path exists to name')
   })
+})
 
+describe('refused image attachments on the registered route', () => {
   it('refuses a traversal-shaped reference before transport', async () => {
     const { adapter } = mount()
-    const model = IMAGE_MODEL_BY_PROTOCOL.get('openai-completions')!
+    const model = must(IMAGE_MODEL_BY_PROTOCOL.get('openai-completions'))
     const refused = await refusal(adapter, model, [
       imageMessage(imageRef({ attachmentId: '../../outside' })),
     ])
@@ -548,21 +551,21 @@ describe('durable image attachments on the registered route', () => {
 
   it('refuses a missing stored object before transport', async () => {
     const { adapter } = mount({ fault: 'missing-object' })
-    const model = IMAGE_MODEL_BY_PROTOCOL.get('openai-completions')!
+    const model = must(IMAGE_MODEL_BY_PROTOCOL.get('openai-completions'))
     const refused = await refusal(adapter, model, [imageMessage()])
     assert.equal(refused.code, 'ATTACHMENT_NOT_FOUND')
   })
 
   it('refuses stored metadata that contradicts the object before transport', async () => {
     const { adapter } = mount({ fault: 'corrupt-object' })
-    const model = IMAGE_MODEL_BY_PROTOCOL.get('openai-completions')!
+    const model = must(IMAGE_MODEL_BY_PROTOCOL.get('openai-completions'))
     const refused = await refusal(adapter, model, [imageMessage()])
     assert.equal(refused.code, 'ATTACHMENT_CORRUPT')
   })
 
   it('refuses the request when the composition mounts no attachment service', async () => {
     const { adapter } = mount({ attachments: false })
-    const model = IMAGE_MODEL_BY_PROTOCOL.get('openai-completions')!
+    const model = must(IMAGE_MODEL_BY_PROTOCOL.get('openai-completions'))
     const refused = await refusal(adapter, model, [imageMessage()])
     assert.equal(refused.code, 'UNSUPPORTED_CONTENT')
   })
@@ -578,7 +581,7 @@ describe('durable image attachments on the registered route', () => {
     const chunks: StreamChunk[] = []
     for await (const chunk of runtime.stream({
       provider: ROUTE,
-      model: TEXT_MODEL!.id,
+      model: must(TEXT_MODEL).id,
       messages: [imageMessage()],
     }))
       chunks.push(chunk)
@@ -587,7 +590,7 @@ describe('durable image attachments on the registered route', () => {
     assert.equal(requests.length, 1)
     assert.equal(bodiesWithImage(requests).length, 0, 'a text-only model receives no image bytes')
     assert.ok(
-      requests[0]!.body.includes('image omitted'),
+      requests[0].body.includes('image omitted'),
       'the occurrence reaches the model as placeholder text',
     )
   })
@@ -596,7 +599,7 @@ describe('durable image attachments on the registered route', () => {
 describe('replay-state diagnostics on the registered route', () => {
   it('warns when stored replay state degrades to provider-neutral conversion', async () => {
     const { adapter, warnings } = mount()
-    const model = IMAGE_MODEL_BY_PROTOCOL.get('openai-completions')!
+    const model = must(IMAGE_MODEL_BY_PROTOCOL.get('openai-completions'))
     const assistant = {
       id: 'assistant-m1',
       role: 'assistant',
@@ -628,12 +631,12 @@ describe('the Codex subscription route', () => {
   it('keeps the incident model image-capable on its own route', async () => {
     const { adapters } = mount({ codex: true })
     const runtime = new LlmRuntime(new Context())
-    runtime.registerAdapter([CODEX_ROUTE], adapters.at(-1)!)
+    runtime.registerAdapter([CODEX_ROUTE], must(adapters.at(-1)))
     const models = await runtime.listModels(CODEX_ROUTE)
     const reported = models.find((model) => model.id === CODEX_ROUTE_MODEL)
     assert.notEqual(reported, undefined, 're-keying preserves every catalog model')
     assert.ok(
-      reported!.inputModalities?.includes('image'),
+      must(reported).inputModalities?.includes('image'),
       'the model that failed still accepts images',
     )
   })

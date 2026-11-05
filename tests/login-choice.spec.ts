@@ -1,8 +1,10 @@
 /** Ambiguous labels or free text must never choose another configured credential owner. */
+
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { choiceByWords, pickerQuestion, resolveChoice, words } from '../src/login-choice.ts'
 import type { LoginChoice } from '../src/login-contract.ts'
+import { must } from './must.ts'
 
 const FIRST: LoginChoice = {
   providerId: 'Team-A',
@@ -27,12 +29,12 @@ test('picker free text resolves the requested route and method rather than first
 
 test('duplicate display labels include route identity and resolve the chosen owner', () => {
   const question = pickerQuestion(CHOICES)
-  const labels = question.options!.map((option) => option.label)
+  const labels = must(question.options).map((option) => option.label)
   assert.equal(new Set(labels).size, CHOICES.length)
-  assert.ok(labels[0]!.includes(FIRST.providerId))
-  assert.ok(labels[1]!.includes(SECOND.providerId))
+  assert.ok(labels[0].includes(FIRST.providerId))
+  assert.ok(labels[1].includes(SECOND.providerId))
   assert.equal(
-    resolveChoice(CHOICES, { answers: [{ id: question.id, selected: [labels[1]!] }] }),
+    resolveChoice(CHOICES, { answers: [{ id: question.id, selected: [labels[1]] }] }),
     SECOND,
   )
 })

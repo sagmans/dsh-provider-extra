@@ -1,4 +1,5 @@
 /** Authentication changes credentials, never the managed profile's route ownership. */
+
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { recordKeyFor } from '../src/codex.ts'
@@ -18,6 +19,7 @@ import {
   SESSION,
   SOURCE,
 } from './login-host-fixture.ts'
+import { must } from './must.ts'
 
 const SOURCE_RECORD = recordKeyFor(SOURCE)
 const RENAMED_COMMAND = 'configured-login'
@@ -73,9 +75,9 @@ test('record-backed managed alias persists only the configured source record', a
   const { store, run } = await mountLogin(t, { config: { catalog: catalog(true) } })
   const result = await run(`${ROUTE} key`)
   assert.equal(result.kind, 'success', JSON.stringify(result))
-  assert.deepEqual(store!.records.get(SOURCE_RECORD), { kind: 'api-key', key: KEY })
-  assert.equal(store!.records.has(recordKeyFor(ROUTE)), false)
-  assert.deepEqual(store!.writes, [SOURCE_RECORD])
+  assert.deepEqual(must(store).records.get(SOURCE_RECORD), { kind: 'api-key', key: KEY })
+  assert.equal(must(store).records.has(recordKeyFor(ROUTE)), false)
+  assert.deepEqual(must(store).writes, [SOURCE_RECORD])
   assert.match((await run('status')).text ?? '', /signed in \(api_key\)/u)
 })
 
@@ -95,7 +97,7 @@ for (const condition of [
     const controller = new AbortController()
     const config = { catalog: catalog() }
     if (condition === 'empty-models') {
-      config.catalog.providers[0]!.models = []
+      config.catalog.providers[0].models = []
       config.catalog.default = null as never
     }
     let requests = 0
@@ -126,7 +128,7 @@ test('unknown picker text refuses with its typed route and the configured candid
   const typed = 'not-configured key'
   const { run, prompts, store } = await mountLogin(t, {
     ask: async (request) => ({
-      answers: [{ id: request.questions[0]!.id, selected: [], custom: typed }],
+      answers: [{ id: request.questions[0].id, selected: [], custom: typed }],
     }),
   })
   const result = await run('')
@@ -134,7 +136,7 @@ test('unknown picker text refuses with its typed route and the configured candid
   assert.ok(result.text.includes(typed))
   assert.ok(result.text.includes(ROUTE))
   assert.equal(prompts.length, 1)
-  assert.deepEqual(store!.writes, [])
+  assert.deepEqual(must(store).writes, [])
 })
 
 test('ambiguous case-insensitive route input refuses and names both configured candidates', async (t) => {
@@ -142,7 +144,7 @@ test('ambiguous case-insensitive route input refuses and names both configured c
   const exact = 'Team-A'
   const alternate = 'team-a'
   config.catalog.providers = [exact, alternate].map((id) => ({
-    ...config.catalog.providers[0]!,
+    ...config.catalog.providers[0],
     id,
   }))
   config.catalog.default.provider = exact
@@ -153,7 +155,7 @@ test('ambiguous case-insensitive route input refuses and names both configured c
   assert.ok(result.text.includes(exact))
   assert.ok(result.text.includes(alternate))
   assert.equal(prompts.length, 0)
-  assert.deepEqual(store!.writes, [])
+  assert.deepEqual(must(store).writes, [])
 })
 
 test('managed mode honors the command enablement and name options', async (t) => {
@@ -188,8 +190,8 @@ test('legacy Go login writes its named reference and probes its configured route
   const result = await run(`${SOURCE} key`)
   assert.equal(result.kind, 'success', JSON.stringify(result))
   assert.match(result.text ?? '', /route reads it/u)
-  assert.equal(store!.values.get(REF), KEY)
-  assert.deepEqual(store!.writes, [REF])
+  assert.equal(must(store).values.get(REF), KEY)
+  assert.deepEqual(must(store).writes, [REF])
 })
 
 test('ownership lost during the secret prompt prevents the configured key probe', async (t) => {
@@ -231,5 +233,5 @@ test('ownership lost during the secret prompt prevents the configured key probe'
   assert.equal(result.kind, 'error')
   assert.match(result.text, /CATALOG_OWNER_COLLISION/u)
   assert.equal(requests, 0)
-  assert.deepEqual(store!.writes, [])
+  assert.deepEqual(must(store).writes, [])
 })

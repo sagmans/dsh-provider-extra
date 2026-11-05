@@ -1,4 +1,5 @@
 /** Provider-owned UI must commit paid policy before claiming success and remain optional. */
+
 import assert from 'node:assert/strict'
 import { it } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
@@ -9,6 +10,7 @@ import {
   TIER_ACTION_ID,
   type TierActionPorts,
 } from '../src/tui-actions.ts'
+import { must } from './must.ts'
 
 const PROVIDER = 'openai-codex'
 const MODEL = 'example-tier-model'
@@ -43,7 +45,7 @@ function harness(picked: string | undefined, available = true, failure = false) 
     route: ROUTE,
     pick: async (spec) => {
       picks++
-      assert.equal(spec.rows[0]!.id, '')
+      assert.equal(spec.rows[0].id, '')
       return picked
     },
     notice: (text) => notices.push(text),
@@ -55,7 +57,7 @@ it('saves the selected paid policy and reports only committed success', async ()
   const test = harness(PRIORITY)
   await test.choose(test.ports)
   assert.deepEqual(test.calls, [[PROVIDER, MODEL, PRIORITY]])
-  assert.match(test.notices.at(-1)!, /set to priority/)
+  assert.match(must(test.notices.at(-1)), /set to priority/)
 })
 it('clears explicit policy and leaves cancellation untouched', async () => {
   const cleared = harness('')
@@ -71,7 +73,7 @@ it('skips unsupported follow-ups while direct invocation explains the missing ca
   await test.choose(test.ports, true)
   assert.deepEqual(test.notices, [])
   await test.choose(test.ports)
-  assert.match(test.notices[0]!, /advertises no service tiers/)
+  assert.match(test.notices[0], /advertises no service tiers/)
   assert.equal(test.picks(), 0)
 })
 it('does not leak adapter details or report a failed write as success', async () => {
@@ -119,15 +121,15 @@ it('owns the default chord and effort follow-up for its injection lifetime', asy
   const owner = await ctx.plugin((owner: Context) => mountTierActions(owner, tiers))
   await new Promise<void>((resolve) => setImmediate(resolve))
   assert.equal(actions.length, 1)
-  assert.equal(actions[0]!.id, TIER_ACTION_ID)
-  assert.deepEqual(actions[0]!.defaultKeys, ['t'])
+  assert.equal(actions[0].id, TIER_ACTION_ID)
+  assert.deepEqual(actions[0].defaultKeys, ['t'])
   assert.equal(hooks.size, 1)
   for (const [tier, expected] of FOOTER_CASES) {
     selected = tier
-    assert.equal(actions[0]!.routeHint?.(ROUTE), expected)
+    assert.equal(actions[0].routeHint?.(ROUTE), expected)
   }
-  assert.equal(actions[0]!.routeHint?.(OTHER_ROUTE), undefined)
-  await actions[0]!.handler(test.ports)
+  assert.equal(actions[0].routeHint?.(OTHER_ROUTE), undefined)
+  await actions[0].handler(test.ports)
   assert.deepEqual(test.calls, [[PROVIDER, MODEL, PRIORITY]])
   await owner.dispose()
   assert.equal(actions.length, 0)
