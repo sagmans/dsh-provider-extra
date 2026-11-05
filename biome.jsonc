@@ -34,12 +34,9 @@
     "rules": {
       "preset": "recommended",
       "style": {
-        // Info, not an error: the existing code uses `!` to state invariants the
-        // type checker cannot prove (a Map read after has(), a host API the
-        // harness always supplies, an index read already proven in range).
-        // Rewriting every site as a runtime guard changes shipped code paths
-        // and is not part of adopting the linter; the findings stay visible.
-        "noNonNullAssertion": "info"
+        // The recommended preset only warns; an absent value hidden by `!` must stop
+        // every lint run, with or without its warnings flag.
+        "noNonNullAssertion": "error"
       }
     }
   },

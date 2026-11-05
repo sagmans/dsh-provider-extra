@@ -59,6 +59,10 @@ carry a breaking change, and a patch carries only fixes.
 
 ### Changed
 
+- Biome now refuses non-null assertions in the code and the tests. Sign-in and
+  the managed catalog refuse a missing provider, sign-in flow, or credential
+  store with a named error, in place of a `TypeError`. The behavior on valid
+  input is the same.
 - The daily hosted harness-matrix workflow is removed, so every check runs
   locally with free tools. The `pre-push` hook now reads the registry for a
   newer harness release on each push. It blocks once an unverified latest
