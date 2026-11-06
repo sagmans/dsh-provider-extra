@@ -12,6 +12,10 @@ on:
 permissions:
   contents: read
 
+# Runners have no user-level uv pin and must select a patched interpreter.
+env:
+  UV_PYTHON: "3.14.10"
+
 jobs:
   verify:
     timeout-minutes: 20
@@ -33,6 +37,15 @@ jobs:
           # could poison the artefact this tag publishes, and the release runs
           # too rarely for a cache to save time.
           package-manager-cache: false
+      # A fresh runner needs the same managed interpreter boundary as local checks.
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        timeout-minutes: 5
+        with:
+          version: '2026.10.23'
+          cache: false
+          mise_toml: |
+            [tools]
+            uv = "0.13.6"
       - run: pnpm install --frozen-lockfile
       # The released artefact is built from this tree, so its registry signatures
       # are checked before the tag can reach the publish job.
@@ -81,6 +94,15 @@ jobs:
           # manager; the publish job must build from a clean install only.
           package-manager-cache: false
       # devDependencies supply tsc for the prepack build that npm publish runs.
+      # A fresh runner needs the same managed interpreter boundary as local checks.
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        timeout-minutes: 5
+        with:
+          version: '2026.10.23'
+          cache: false
+          mise_toml: |
+            [tools]
+            uv = "0.13.6"
       - run: pnpm install --frozen-lockfile
       # --provenance keeps the attestation explicit and fails loudly if the
       # trusted-publisher match is misconfigured.
