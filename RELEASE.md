@@ -137,7 +137,7 @@ approval only when stdin and stdout are terminals, so the helper gives those
 reads a pseudo-terminal and mirrors the approval URL to stderr; approve it in a
 browser when the helper pauses.
 
-Prerequisites: `python3` 3.11 or newer, npm 11.15.0 or newer, authenticated
+Prerequisites: uv with a managed Python 3.11 or newer, npm 11.15.0 or newer, authenticated
 `npm` and `gh` CLIs, repository administration access, and a clean checkout.
 
 ## First publication (`v0.1.0` only)
@@ -165,9 +165,12 @@ Review the packed inventory and confirm the artefact came from the reviewed SHA.
 Then preview and publish:
 
 ```sh
-DRY_RUN=1 python3 scripts/npm/release.py preflight
-DRY_RUN=1 python3 scripts/npm/release.py bootstrap-publish
-CONFIRM=bootstrap-publish python3 scripts/npm/release.py bootstrap-publish
+DRY_RUN=1 uv run --no-project --python-preference only-managed python \
+  scripts/npm/release.py preflight
+DRY_RUN=1 uv run --no-project --python-preference only-managed python \
+  scripts/npm/release.py bootstrap-publish
+CONFIRM=bootstrap-publish uv run --no-project --python-preference only-managed python \
+  scripts/npm/release.py bootstrap-publish
 ```
 
 `bootstrap-publish` refuses an existing package, publishes the reviewed tarball
@@ -184,14 +187,20 @@ ambiguous, inspect the registry before any retry.
 Each remote action needs its own approval. Preview first, then confirm:
 
 ```sh
-DRY_RUN=1 python3 scripts/npm/release.py setup-github-release
-CONFIRM=setup-github-release python3 scripts/npm/release.py setup-github-release
+DRY_RUN=1 uv run --no-project --python-preference only-managed python \
+  scripts/npm/release.py setup-github-release
+CONFIRM=setup-github-release uv run --no-project --python-preference only-managed python \
+  scripts/npm/release.py setup-github-release
 
-DRY_RUN=1 python3 scripts/npm/release.py configure-trust
-CONFIRM=configure-trust python3 scripts/npm/release.py configure-trust
+DRY_RUN=1 uv run --no-project --python-preference only-managed python \
+  scripts/npm/release.py configure-trust
+CONFIRM=configure-trust uv run --no-project --python-preference only-managed python \
+  scripts/npm/release.py configure-trust
 
-DRY_RUN=1 python3 scripts/npm/release.py harden-publishing
-CONFIRM=harden-publishing python3 scripts/npm/release.py harden-publishing
+DRY_RUN=1 uv run --no-project --python-preference only-managed python \
+  scripts/npm/release.py harden-publishing
+CONFIRM=harden-publishing uv run --no-project --python-preference only-managed python \
+  scripts/npm/release.py harden-publishing
 ```
 
 - `setup-github-release` creates the `npm-release` environment, which admits
@@ -215,8 +224,10 @@ Then verify identity, integrity, public access, and the exact trust. The trust
 read asks for browser approval, so run it from an interactive terminal:
 
 ```sh
-DRY_RUN=1 python3 scripts/npm/release.py verify
-python3 scripts/npm/release.py verify
+DRY_RUN=1 uv run --no-project --python-preference only-managed python \
+  scripts/npm/release.py verify
+uv run --no-project --python-preference only-managed python \
+  scripts/npm/release.py verify
 ```
 
 ## Tagging a release

@@ -111,6 +111,8 @@ carry a breaking change, and a patch carries only fixes.
 
 ### Fixed
 
+- Release-helper checks require uv-managed Python, including when the shell
+  environment does not provide the usual Python path.
 - `pre-push` now runs the `catalog-setup` tests against the real dogfood helper
   and blocks when the helper is missing. These tests used to skip, so a change
   to the helper's clone marker reached developers before any check saw it.
