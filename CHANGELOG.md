@@ -8,6 +8,16 @@ carry a breaking change, and a patch carries only fixes.
 
 ## [Unreleased]
 
+### Added
+
+- The Web and Desktop Models page renders a Codex **Sign in** control from this
+  plugin. A host transport lists the harness authorization flows and relays one
+  attempt by polling; a client slot registers into
+  `settings.models.provider-card` for `llm-pi-ai` cards. No core patch, command
+  palette, or restart is needed, and the resulting grant is the same
+  `llm-pi-ai/openai-codex` record the CLI and the adapter read. Codex is the
+  first allowed provider; the allowlist is one constant.
+
 ### Security
 
 - Development installs resolve `@modelcontextprotocol/client` `2.3.1` through

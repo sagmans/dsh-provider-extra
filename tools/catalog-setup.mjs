@@ -34,9 +34,12 @@ const OWNERS = new Set([
   '@deepseek-ai/dsh-llm-pi-ai',
   '@deepseek-ai/dsh-agent-default-model',
 ])
+/** The plugin's sign-in transport: same bundle, no route, no default owner. */
+const SIGN_IN = `${PACKAGE}/sign-in`
 const SUPPORT = new Set([
   CORE,
   PACKAGE,
+  SIGN_IN,
   '@deepseek-ai/dsh-llm-retry',
   '@deepseek-ai/dsh-deepseek-llm-api-extensions',
 ])

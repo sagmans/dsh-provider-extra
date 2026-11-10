@@ -39,7 +39,9 @@ const COMPILER_OPTIONS = {
  * a require call, and erases type-only imports, so its absence is the
  * no-runtime-import contract the loader's single factory relies on.
  */
-const RUNTIME_REQUIRE = /\brequire\s*\(/u
+const RUNTIME_REQUIRE = /\brequire\s*\(\s*(['"])([^'"]+)\1\s*\)/gu
+/** The loader supplies these shared modules; anything else would not resolve in the browser. */
+const ALLOWED_RUNTIME_MODULES = new Set(['react'])
 
 /** The project's own `tsc` entry, so the build uses the pinned compiler and never a global one. */
 function projectCompiler() {
@@ -66,7 +68,11 @@ try {
   )
   execFileSync(process.execPath, [projectCompiler(), '-p', config], { stdio: 'inherit' })
   const compiled = await readFile(join(outDir, EMITTED_NAME), ENCODING)
-  if (RUNTIME_REQUIRE.test(compiled)) throw new Error(RUNTIME_IMPORT)
+  for (const match of compiled.matchAll(RUNTIME_REQUIRE)) {
+    const id = match[2]
+    if (!ALLOWED_RUNTIME_MODULES.has(id))
+      throw new Error(`${RUNTIME_IMPORT}; found require(${JSON.stringify(id)})`)
+  }
   const metadata = JSON.parse(await readFile(METADATA, ENCODING))
   const wrapper =
     'window.__ModuleLoader__.load({id:' +

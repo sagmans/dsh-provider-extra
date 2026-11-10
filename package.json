@@ -19,6 +19,7 @@
   "exports": {
     ".": "./dist/index.js",
     "./client": "./dist/client.js",
+    "./sign-in": "./dist/sign-in.js",
     "./headless-startup": "./dist/headless-startup.js",
     "./headless.patch.yml": "./headless.patch.yml",
     "./cordis.patch.yml": "./cordis.patch.yml",
@@ -115,6 +116,8 @@
     "@deepseek-ai/schemastery": "3.19.0",
     "@earendil-works/pi-ai": "1.4.0",
     "@types/node": "26.6.5",
+    "@types/react": "18.3.31",
+    "react": "18.3.1",
     "tsx": "4.23.15",
     "typescript": "7.0.2"
   }

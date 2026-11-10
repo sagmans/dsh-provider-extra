@@ -343,6 +343,24 @@ Existing caller options and payload hooks remain unchanged.
 
 ## Provider sign-in
 
+On the Web and Desktop Models page, this plugin renders a **Sign in** control
+inside the eligible provider card, beside the adapter's own fields. It needs no
+command palette, no restart, and no key entry: the host half lists the
+authorization flows the installed harness exposes and relays one interactive
+attempt (notices, links, verification codes, and questions) to the browser by
+polling, and the client half registers into `settings.models.provider-card`
+under the `llm-pi-ai` family.
+
+Codex is the first offered provider: the card appears for the `openai-codex`
+catalog route when its `llm-pi-ai` profile names no credential reference and
+its native authentication reports OAuth with no environment key. `SIGN_IN_PROVIDERS`
+in `src/tier-client.ts` is the allowlist to extend once another flow is proven.
+The control shows whether a grant is already stored, offers browser or
+device-code login exactly as pi-ai asks, and withdraws the attempt when the
+panel closes; a grant committed mid-login still authenticates the route. The
+same grant serves the CLI below, because both address
+`llm-pi-ai/openai-codex`.
+
 Sign in from the profile you are already using. The plugin registers a command
 in the harness command palette.
 In additive mode, it offers providers with an installed interactive login.

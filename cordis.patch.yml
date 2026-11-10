@@ -4,3 +4,6 @@
       name: '@sagmans/dsh-provider-extra'
       config:
         fallbackSessionId: dsh-provider-extra
+    # Models-page sign-in transport; independent of the route modes above.
+    - id: dsh-provider-extra-sign-in
+      name: '@sagmans/dsh-provider-extra/sign-in'
