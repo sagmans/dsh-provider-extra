@@ -20,6 +20,9 @@ carry a breaking change, and a patch carries only fixes.
 
 ### Security
 
+- Retired the temporary release-age waiver for `0.2.2-rc.1` and its
+  dependencies after every exempt version cleared the seven-day window.
+
 - Development installs resolve `@modelcontextprotocol/client` `2.3.1` through
   the scoped `pnpm-workspace.yaml` override, clearing GHSA-6prh-2h8m-c8cw: the
   HTTP client transports and OAuth requests of earlier releases followed
@@ -59,9 +62,7 @@ carry a breaking change, and a patch carries only fixes.
   harness tuple has an alternative that names its own prerelease
   line. The cordis and schemastery peers widen to `>=4.0.5 <4.2.0-0`
   and `>=3.18.5 <3.20.0-0`, because the `0.2.2` line ships `4.1.0`
-  and `3.19.0`. The released packages were published inside the
-  release-age window, so `pnpm-workspace.yaml` exempts each lockfile
-  entry by exact version until 2026-11-11 09:23 UTC.
+  and `3.19.0`.
 
 - DeepSeek Harness `0.2.1-rc.3` with pi-ai `1.4.0` is now a verified release,
   and development builds compile against it. The supported range does not
