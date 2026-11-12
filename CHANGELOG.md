@@ -119,6 +119,8 @@ carry a breaking change, and a patch carries only fixes.
 - `RELEASE.md` states the trunk-based delivery flow: a harness matrix bump lands
   on `main`, `pre-push` is the gate on the pushed commit, and the release tag
   goes on the candidate commit.
+- Dependency updates are maintained by hand on `main`; the automated update PR
+  configuration is retired. Security alerts stay enabled for manual triage.
 
 ### Fixed
 
