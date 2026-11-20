@@ -8,7 +8,18 @@ carry a breaking change, and a patch carries only fixes.
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-11-21
+
+### Fixed
+
+- The tag release workflow installs its pinned managed Python before the
+  release checks run. The repository forbids implicit interpreter downloads, so
+  a fresh runner had none, and the `0.9.1` run stopped before publishing.
+
 ## [0.9.1] - 2026-11-20
+
+Not published: the release workflow could not find its managed Python.
+Its changes ship in 0.9.2; the signed tag remains unchanged.
 
 ### Fixed
 
@@ -342,7 +353,8 @@ Not published: the release workflow could not start. Its changes ship in
   a hand-written literal replays as model-visible content on whichever line it
   does not match.
 
-[Unreleased]: https://github.com/sagmans/dsh-provider-extra/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/sagmans/dsh-provider-extra/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/sagmans/dsh-provider-extra/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/sagmans/dsh-provider-extra/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/sagmans/dsh-provider-extra/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/sagmans/dsh-provider-extra/compare/v0.8.0...v0.8.1
