@@ -46,6 +46,12 @@ jobs:
           mise_toml: |
             [tools]
             uv = "0.13.6"
+      # The repository forbids implicit interpreter downloads, so a fresh runner
+      # installs the pinned UV_PYTHON explicitly before any lifecycle needs it.
+      - name: Install managed Python
+        env:
+          UV_PYTHON_DOWNLOADS: manual
+        run: uv python install "$UV_PYTHON"
       - run: pnpm install --frozen-lockfile
       # The released artefact is built from this tree, so its registry signatures
       # are checked before the tag can reach the publish job.
@@ -103,6 +109,12 @@ jobs:
           mise_toml: |
             [tools]
             uv = "0.13.6"
+      # The repository forbids implicit interpreter downloads, so a fresh runner
+      # installs the pinned UV_PYTHON explicitly before any lifecycle needs it.
+      - name: Install managed Python
+        env:
+          UV_PYTHON_DOWNLOADS: manual
+        run: uv python install "$UV_PYTHON"
       - run: pnpm install --frozen-lockfile
       # --provenance keeps the attestation explicit and fails loudly if the
       # trusted-publisher match is misconfigured.
