@@ -8,7 +8,18 @@ carry a breaking change, and a patch carries only fixes.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-20
+
+### Fixed
+
+- The tag release workflow starts again. The repository now allows the pinned
+  action that provisions the managed Python prerequisite, which it had refused,
+  so the `0.9.0` run stopped before any job.
+
 ## [0.9.0] - 2026-11-20
+
+Not published: the release workflow could not start. Its changes ship in
+0.9.1; the signed tag remains unchanged.
 
 ### Added
 
@@ -331,7 +342,8 @@ carry a breaking change, and a patch carries only fixes.
   a hand-written literal replays as model-visible content on whichever line it
   does not match.
 
-[Unreleased]: https://github.com/sagmans/dsh-provider-extra/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/sagmans/dsh-provider-extra/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/sagmans/dsh-provider-extra/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/sagmans/dsh-provider-extra/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/sagmans/dsh-provider-extra/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/sagmans/dsh-provider-extra/compare/v0.7.0...v0.8.0
