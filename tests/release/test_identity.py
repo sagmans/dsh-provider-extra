@@ -7,9 +7,9 @@ the suite, where the fix is still a commit.
 """
 
 import json
-from pathlib import Path
 import re
 import unittest
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 TARGET_ENV = ROOT / "scripts/npm/target.env"

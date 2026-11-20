@@ -15,6 +15,7 @@ unset DSH_DOGFOOD_HELPER
 # Limits for run_step. Each one catches a hang, not a slow run, so it stays far
 # above a normal run on a loaded machine: the registry reads take seconds and
 # the check suite takes about a minute.
+TOOL_CHECK_TIMEOUT_SECONDS=30
 NETWORK_TIMEOUT_SECONDS=120
 INSTALL_TIMEOUT_SECONDS=300
 CHECK_TIMEOUT_SECONDS=600
@@ -26,7 +27,7 @@ checks() {
 	# test files read in parallel. This variable is what stops the test's skip.
 	run_step 'catalog setup test' "$CHECK_TIMEOUT_SECONDS" \
 		env DSH_DOGFOOD_HELPER="$helper" node --test tests/catalog-setup.test.mjs || return 1
-	run_step 'pnpm audit' "$NETWORK_TIMEOUT_SECONDS" pnpm audit --audit-level high || return 1
+	run_step 'pnpm audit' "$NETWORK_TIMEOUT_SECONDS" pnpm audit --audit-level high --config.offline=false --config.audit=true || return 1
 }
 
 # Helpers (staged_git, pushed_shas, at_sha, darwin_only) from .githooks/lib.
@@ -63,6 +64,7 @@ install_deps() {
 
 # at_sha runs this with set -e off, so every step returns on failure.
 run_at() {
+	run_step 'tool floors' "$TOOL_CHECK_TIMEOUT_SECONDS" bash scripts/stack-checks.sh tools || return 1
 	install_deps || return 1
 	checks || return 1
 }

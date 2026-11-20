@@ -5,12 +5,12 @@ import hashlib
 import io
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 import tarfile
 import tempfile
 import unittest
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 HELPER = ROOT / "scripts/npm/release.py"
@@ -27,19 +27,31 @@ class ReleaseTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.cwd = Path(self.temp.name)
         self.metadata = {
-            "name": PACKAGE, "version": "1.0.0",
+            "name": PACKAGE,
+            "version": "1.0.0",
             "repository": {"url": "git+https://github.com/example/tool.git"},
         }
         self.env = {
             **os.environ,
-            "PKG_NAME": PACKAGE, "PKG_VERSION": "1.0.0", "REPO": REPOSITORY,
-            "REGISTRY": REGISTRY, "SOURCE_SHA": SOURCE_SHA,
-            "NPM_USER": "example", "WORKFLOW_FILE": "release.yml",
-            "ENVIRONMENT": "npm-release", "WORKFLOW_REVIEWED": "1",
-            "DRY_RUN": "0", "CONFIRM": "", "SCENARIO": "absent",
-            "NPM_BIN": str(self.cwd / "npm"), "GH_BIN": str(self.cwd / "gh"),
-            "GIT_BIN": str(self.cwd / "git"), "CALL_LOG": str(self.cwd / "calls.jsonl"),
-            "RELEASE_OWNER": "example", "TAG_PATTERN": "v*", "RULESET_NAME": "release-tags",
+            "PKG_NAME": PACKAGE,
+            "PKG_VERSION": "1.0.0",
+            "REPO": REPOSITORY,
+            "REGISTRY": REGISTRY,
+            "SOURCE_SHA": SOURCE_SHA,
+            "NPM_USER": "example",
+            "WORKFLOW_FILE": "release.yml",
+            "ENVIRONMENT": "npm-release",
+            "WORKFLOW_REVIEWED": "1",
+            "DRY_RUN": "0",
+            "CONFIRM": "",
+            "SCENARIO": "absent",
+            "NPM_BIN": str(self.cwd / "npm"),
+            "GH_BIN": str(self.cwd / "gh"),
+            "GIT_BIN": str(self.cwd / "git"),
+            "CALL_LOG": str(self.cwd / "calls.jsonl"),
+            "RELEASE_OWNER": "example",
+            "TAG_PATTERN": "v*",
+            "RULESET_NAME": "release-tags",
         }
         for name in ("npm", "gh", "git"):
             tool = self.cwd / name
@@ -62,9 +74,14 @@ class ReleaseTests(unittest.TestCase):
         self.env.update(ARTIFACT=str(artifact), ARTIFACT_INTEGRITY="sha512-" + integrity)
 
     def run_helper(self, action, **env):
-        return subprocess.run(
-            [sys.executable, str(HELPER), action], cwd=self.cwd,
-            env={**self.env, **env}, text=True, capture_output=True, check=False,
+        # Test fixture runs the local helper with an explicit argv array and shell=False.
+        return subprocess.run(  # noqa: S603
+            [sys.executable, str(HELPER), action],
+            cwd=self.cwd,
+            env={**self.env, **env},
+            text=True,
+            capture_output=True,
+            check=False,
         )
 
     def calls(self):
@@ -116,6 +133,7 @@ class ReleaseTests(unittest.TestCase):
         )
         sys.path.insert(0, str(ROOT / "scripts/npm"))
         import execution
+
         result = execution.run([sys.executable, "-c", script], tty=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
@@ -208,10 +226,14 @@ class ReleaseTests(unittest.TestCase):
 
     def test_preflight_rejects_invalid_or_mismatched_inputs(self):
         cases = [
-            {"PKG_NAME": "other"}, {"REPO": "wrong/repo"}, {"REGISTRY": ""},
+            {"PKG_NAME": "other"},
+            {"REPO": "wrong/repo"},
+            {"REGISTRY": ""},
             {"REGISTRY": "https://user:secret@registry.npmjs.org/"},
-            {"SOURCE_SHA": "b" * 40}, {"DRY_RUN": "true"},
-            {"SCENARIO": "dirty"}, {"SCENARIO": "old-npm"},
+            {"SOURCE_SHA": "b" * 40},
+            {"DRY_RUN": "true"},
+            {"SCENARIO": "dirty"},
+            {"SCENARIO": "old-npm"},
         ]
         for env in cases:
             with self.subTest(env=env):

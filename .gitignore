@@ -151,3 +151,8 @@ vite.config.ts.timestamp-*
 
 # Python bytecode from the release guard suite
 __pycache__/
+
+# Local Python lint/typecheck tool environment and caches (regenerated from uv.lock)
+.venv/
+.mypy_cache/
+.ruff_cache/

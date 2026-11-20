@@ -1,0 +1,51 @@
+# Development tooling for the Python helpers and their tests. This repository
+# is a Node/TypeScript package, not a Python package: uv installs only the
+# pinned lint, format, and typecheck tools from uv.lock while the helpers
+# themselves stay standard-library only.
+[project]
+name = "dsh-provider-extra-dev"
+version = "0.0.0"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "mypy==2.4.1",
+  "ruff==0.17.5",
+]
+
+[tool.uv]
+package = false
+# Tool environments must not select an interpreter supplied by the host OS.
+python-preference = "only-managed"
+# Supply chain window: uv only resolves releases older than 7 days, matching
+# the quarantine window used across pnpm-workspace.yaml and mise.
+exclude-newer = "7 days"
+# Use an installed managed Python 3.11+; a managed download is not pinned by uv.lock.
+python-downloads = "never"
+
+[tool.mypy]
+# Matches the oldest Python supported by the release helpers.
+python_version = "3.11"
+# Type-check function bodies without requiring signature annotations across
+# every adapted standard-library helper.
+check_untyped_defs = true
+warn_unreachable = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+# Helpers under scripts/npm import sibling modules directly when run as scripts.
+mypy_path = ["scripts/npm"]
+explicit_package_bases = true
+namespace_packages = true
+files = ["scripts/npm", "tests/release"]
+
+[tool.ruff]
+# Matches the oldest Python supported by the release helpers.
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+# Enforce pycodestyle, pyflakes, isort, bugbear, pyupgrade, simplify,
+# ruff-specific, and Bandit security rules (S) without forcing docstrings or
+# full annotations onto adapted helpers; complexity is gated by lizard.
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "S"]

@@ -2,13 +2,13 @@
 
 import json
 import os
-from pathlib import Path
 import pty
 import re
 import shlex
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 PTY_CHUNK_BYTES = 65536
 # The registry needed about six minutes to serve the tarball of a version it had already accepted,
@@ -65,7 +65,8 @@ def run(command, *, data=None, check=True, tty=False):
         require(data is None, "interactive capture does not accept standard input")
         result = _run_in_pty(command)
     else:
-        result = subprocess.run(command, input=data, text=True, capture_output=True, check=False)
+        # Subprocess receives a validated argv array with shell=False.
+        result = subprocess.run(command, input=data, text=True, capture_output=True, check=False)  # noqa: S603
     if check and result.returncode != 0:
         raise ReadFailure(f"{Path(command[0]).name} read failed; inspect authentication and service status privately")
     return result
@@ -77,7 +78,10 @@ def _run_in_pty(command):
     seen = ""
     try:
         try:
-            process = subprocess.Popen(command, stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
+            # Subprocess receives a validated argv array with shell=False.
+            process = subprocess.Popen(  # noqa: S603
+                command, stdin=slave, stdout=slave, stderr=slave, start_new_session=True
+            )
         finally:
             os.close(slave)
         chunks = []
@@ -144,5 +148,6 @@ def mutate(action, command, *, data=None):
     if dry_run:
         return
     # Inherited streams keep npm's interactive 2FA usable; callers must not record secrets.
-    result = subprocess.run(command, input=data, text=True, check=False)
+    # Subprocess receives a validated argv array with shell=False.
+    result = subprocess.run(command, input=data, text=True, check=False)  # noqa: S603
     require(result.returncode == 0, "mutation failed or outcome unknown; inspect remote state before any retry")

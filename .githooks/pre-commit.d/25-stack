@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# Format-checks and lints staged Python and shell files via scripts/stack-checks.sh
+# in an isolated checkout of the staged index, so partial `git add -p` commits and
+# config/script deletions are judged strictly by what is about to be committed.
+set -euo pipefail
+
+readonly CHECK_TIMEOUT_SECONDS=120
+readonly REQUIRED_INDEX_SCRIPTS=(scripts/stack-checks.sh .githooks/lib/tools.sh)
+
+# Helpers (staged_git, run_with_timeout) from .githooks/lib.
+# shellcheck source=/dev/null
+. "${HOOK_HELPERS:?run from .githooks (scripts/setup-hooks)}"
+
+readonly TIMEOUT_STATUS="${TIMEOUT_EXIT_STATUS:-124}"
+
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/hook-stack.XXXXXX") || exit 1
+# Only the mktemp directory this hook created, never a computed parent.
+cleanup() {
+	case "$scratch" in
+	*/hook-stack.*) rm -rf -- "$scratch" ;;
+	esac
+}
+# A signal still ends the hook with a failure after the cleanup.
+trap cleanup EXIT
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
+
+# Run one pre-commit step under a limit and report timeouts as commit rejections
+# rather than reusing pre-push's run_step wrapper.
+run_commit_step() {
+	local name="$1" started rc
+	shift
+	started=$(date +%s)
+	rc=0
+	run_with_timeout "$CHECK_TIMEOUT_SECONDS" "$@" || rc=$?
+	if [ "$rc" -eq "$TIMEOUT_STATUS" ]; then
+		echo "❌ Commit rejected: step '$name' timed out after $(($(date +%s) - started))s (limit ${CHECK_TIMEOUT_SECONDS}s)" >&2
+	fi
+	return "$rc"
+}
+
+# Capture every staged change (including deletions and typechanges) so removing
+# config or check files cannot bypass pre-commit.
+staged_list="$scratch/staged"
+staged_git diff --cached --name-only -z >"$staged_list" || exit 1
+[ -s "$staged_list" ] || exit 0
+
+# Refuse staged symlinks before checking anything out of the index so tools
+# cannot follow a symlink outside the scratch tree. Write to a file instead of
+# piping into grep -q so SIGPIPE under pipefail cannot fail open.
+stage_list="$scratch/stage"
+staged_git ls-files --stage >"$stage_list" || exit 1
+symlink_rc=0
+grep -q '^120000 ' "$stage_list" || symlink_rc=$?
+if [ "$symlink_rc" -eq 0 ]; then
+	echo "pre-commit: $(basename -- "$0"): staged symlinks are not allowed" >&2
+	exit 1
+elif [ "$symlink_rc" -ne 1 ]; then
+	echo "pre-commit: $(basename -- "$0"): failed to inspect staged index" >&2
+	exit 1
+fi
+
+# Classify the staged paths using the staged version of scripts/stack-checks.sh
+# so shell scope stays single-sourced and staged script deletions fail closed.
+staged_git checkout-index -f --prefix="$scratch/probe/" -- "${REQUIRED_INDEX_SCRIPTS[@]}" || {
+	echo "pre-commit: $(basename -- "$0"): required stack check scripts missing from staged index" >&2
+	exit 1
+}
+targets=$(cd "$scratch/probe" && bash scripts/stack-checks.sh staged-targets "$staged_list") || exit 1
+[ -n "$targets" ] || exit 0
+
+run_py=0
+run_sh=0
+while IFS= read -r target; do
+	case "$target" in
+	py) run_py=1 ;;
+	sh) run_sh=1 ;;
+	*)
+		echo "pre-commit: $(basename -- "$0"): unexpected stack target '$target'" >&2
+		exit 1
+		;;
+	esac
+done <<EOF
+$targets
+EOF
+
+mkdir -p "$scratch/root"
+staged_git checkout-index --all --prefix="$scratch/root/" || exit 1
+
+run_in_root() {
+	(cd "$scratch/root" && "$@")
+}
+
+if [ "$run_py" -eq 1 ]; then
+	run_commit_step 'python lint' run_in_root bash scripts/stack-checks.sh --venv "$scratch/venv" py-lint || exit 1
+fi
+if [ "$run_sh" -eq 1 ]; then
+	run_commit_step 'shell lint' run_in_root bash scripts/stack-checks.sh sh || exit 1
+fi

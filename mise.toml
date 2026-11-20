@@ -1,0 +1,7 @@
+# Development tool pins enforced by scripts/stack-checks.sh and local hooks.
+# pnpm is pinned in package.json packageManager so pnpm and release CI share one version.
+[tools]
+node = "24.22.3"
+shellcheck = "0.11.0"
+shfmt = "3.14.1"
+uv = "0.13.8"

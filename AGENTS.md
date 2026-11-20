@@ -13,7 +13,11 @@ configuration: [docs/catalog.md](docs/catalog.md). Publication:
 | Task | Command |
 | --- | --- |
 | Install | `pnpm install --frozen-lockfile` |
+| Tool version floors (`mise.toml`, `packageManager`) | `pnpm run check:tools` |
 | Lint and format check (Biome) | `pnpm run lint` (`pnpm run lint:fix` repairs) |
+| Python format and lint (pinned `ruff` via `uv.lock`) | `pnpm run lint:py` |
+| Python typecheck (pinned `mypy` via `uv.lock`) | `pnpm run typecheck:py` |
+| Shell lint and format (`shellcheck`, `shfmt`) | `pnpm run lint:sh` |
 | Typecheck | `pnpm run typecheck` |
 | Unit and integration specs | `pnpm test` |
 | Built-output tests | `pnpm run build && pnpm run test:build` |
@@ -127,14 +131,17 @@ broken packages as `RELEASE.md` directs. Helper mutations require
 Checks run in `.githooks/`, not in push/PR CI. Run `scripts/setup-hooks` after
 cloning. All checks must pass before you push. Never use `--no-verify`.
 `pre-commit`: Biome on the staged files (`pnpm run lint:fix` repairs most
-findings). `pre-push`: `npm audit signatures`, `pnpm run check`, the
-`catalog-setup` tests against the real dogfood helper,
+findings), pinned `ruff` format/lint on staged Python files (`uv.lock`), and
+`shellcheck`/`shfmt` on staged shell scripts. `pre-push`: `npm audit signatures`,
+`pnpm run check`, the `catalog-setup` tests against the real dogfood helper,
 `pnpm audit --audit-level high`, and the harness registry check
-(`node tools/harness-matrix.mjs --check-registry`, tip only, needs network). The
-helper comes from the installed `dsh-tui-dogfood` skill or an absolute
-`DSH_DOGFOOD_HELPER` path. A missing helper blocks the push.
+(`node tools/harness-matrix.mjs --check-registry`, tip only, needs network).
+Tool floors live in `mise.toml`, `package.json`, `pnpm-lock.yaml`, and
+`uv.lock`. The helper comes from the installed `dsh-tui-dogfood` skill or an
+absolute `DSH_DOGFOOD_HELPER` path. A missing helper blocks the push.
 
 Commit messages follow `.githooks/GIT_CONVENTION.md`, which `commit-msg` and
 `pre-push` enforce. The generic checks need gitleaks, osv-scanner, semgrep,
 lizard and markdownlint-cli2, plus actionlint and zizmor when a push changes
-workflow files. A missing tool blocks the hook.
+workflow files; stack checks also require `uv`, `shellcheck`, and `shfmt`
+(pinned in `mise.toml`). A missing tool blocks the hook.

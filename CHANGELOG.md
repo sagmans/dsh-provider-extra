@@ -95,6 +95,12 @@ carry a breaking change, and a patch carries only fixes.
 
 ### Changed
 
+- Pin repository tooling in `mise.toml`, `packageManager`, and
+  `pyproject.toml`/`uv.lock`, enforce fail-closed Python (`ruff` format/lint,
+  `mypy`) and shell (`shellcheck`, `shfmt`) checks across `pre-commit` and
+  `pnpm run check`, verify tool floors before `pre-push` dependency install,
+  and force online `pnpm audit` at `pre-push`. The published package is
+  unchanged.
 - Biome now refuses non-null assertions in the code and the tests. Sign-in and
   the managed catalog refuse a missing provider, sign-in flow, or credential
   store with a named error, in place of a `TypeError`. The behavior on valid
