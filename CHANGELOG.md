@@ -20,6 +20,12 @@ carry a breaking change, and a patch carries only fixes.
 
 ### Security
 
+- Development installs exempt the exact versions of DeepSeek Harness
+  `0.2.2-rc.5` and its dependencies (328 packages) from the seven-day
+  release-age window, with the owner's approval. The exemption lasts until
+  2026-11-25 13:21 UTC, when the youngest entry
+  (`@deepseek-ai/dsh-web-app@0.2.2-rc.5`) is a week old; remove it then. The
+  published package is unchanged.
 - Retired the temporary release-age waiver for `0.2.2-rc.1` and its
   dependencies after every exempt version cleared the seven-day window.
 
@@ -56,6 +62,15 @@ carry a breaking change, and a patch carries only fixes.
 
 ### Compatibility
 
+- DeepSeek Harness `0.2.2-rc.5` with pi-ai `1.4.0` is now a verified release,
+  and development builds compile against it. The supported range does not
+  change. The harness narrowed the failure codes `LlmError` accepts and
+  removed the agent registry's `roots()`, so the plugin raises its own codes
+  through one typed helper and the headless service-tier override reads the live
+  agent list when `roots()` is missing. Behaviour on earlier verified releases
+  is unchanged. The gates ran with pi-ai `1.4.0`; a fresh `0.2.2-rc.5` host
+  floats pi-ai through `^1.3.0` to a newer minor that the vendor peer does not
+  admit yet, as `0.2.2-rc.1` hosts already did.
 - DeepSeek Harness `0.2.2-rc.1` with pi-ai `1.4.0` is now a verified
   release, and development builds compile against it. The supported
   range is `>=0.2.1-rc.1 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0`, so each

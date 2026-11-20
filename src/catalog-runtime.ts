@@ -8,6 +8,7 @@ import type { CodexCredentialService } from './codex.ts'
 import { codexAuth } from './codex.ts'
 import type { LoginConfig } from './login-host.ts'
 import { mountLoginCommand } from './login-host.ts'
+import { pluginLlmError } from './plugin-error.ts'
 import type { TierSelectionConfig } from './service-tiers.ts'
 import { mountServiceTiers, withServiceTiers } from './service-tiers.ts'
 
@@ -35,7 +36,7 @@ function assertCatalogOwnership(
     ctx.llm.listProviders().some((provider) => !ownedRoutes.includes(provider.id)) ||
     ctx.llm.listConfigurableProviders().length > 0
   ) {
-    throw new LlmError(
+    throw pluginLlmError(
       'dsh-provider-extra: ' +
         OWNER_COLLISION +
         ': disable competing provider and agent-default-model rows in this opted-in profile before mounting catalog',
@@ -110,7 +111,10 @@ function catalogApiKey(
     requireOwnership()
     const configured = snapshot.providers.get(route)
     if (configured === undefined)
-      throw new LlmError(`dsh-provider-extra: unknown catalog route "${route}"`, 'UNKNOWN_PROVIDER')
+      throw pluginLlmError(
+        `dsh-provider-extra: unknown catalog route "${route}"`,
+        'UNKNOWN_PROVIDER',
+      )
     if (configured.auth === undefined || !('apiKeyRef' in configured.auth)) return undefined
     const ref = configured.auth.apiKeyRef
     const credentials = ctx.get('credentials') as Credentials | undefined
@@ -209,7 +213,7 @@ export function mountCatalog(
   ctx.on('internal/update', (next, ...args: unknown[]) => {
     const proceed = args.at(-1)
     if (typeof proceed !== 'function') {
-      throw new LlmError(
+      throw pluginLlmError(
         'dsh-provider-extra: internal/update delivered no continuation',
         MISSING_UPDATE_CONTINUATION,
       )
@@ -224,6 +228,14 @@ export function mountCatalog(
     profiles: () => snapshot.profiles,
     requireOwnership,
   })
+  hideAutomaticSettingsPage(ctx)
+}
+
+/**
+ * The catalog is an operator-owned Config edited in the profile, so the settings
+ * service must not generate an automatic page that edits it from another place.
+ */
+function hideAutomaticSettingsPage(ctx: Context): void {
   ctx.inject(['settings'], (child) => {
     const settings = child.get('settings') as {
       configure?: (options: { auto: boolean }, fiber: typeof ctx.fiber) => () => void

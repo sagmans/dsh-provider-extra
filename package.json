@@ -61,7 +61,8 @@
       "dshReleases": {
         "0.2.1-rc.2": "compatible",
         "0.2.1-rc.3": "compatible",
-        "0.2.2-rc.1": "compatible"
+        "0.2.2-rc.1": "compatible",
+        "0.2.2-rc.5": "compatible"
       }
     }
   },
@@ -105,14 +106,14 @@
   "devDependencies": {
     "@biomejs/biome": "2.6.3",
     "@deepseek-ai/cordis": "4.1.0",
-    "@deepseek-ai/dsh": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-commands": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-credentials": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-credentials-local": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-llm": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-llm-pi-ai": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-settings": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-user-questions": "0.2.2-rc.1",
+    "@deepseek-ai/dsh": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-commands": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-credentials": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-credentials-local": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-llm": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-llm-pi-ai": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-settings": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-user-questions": "0.2.2-rc.5",
     "@deepseek-ai/schemastery": "3.19.0",
     "@earendil-works/pi-ai": "1.4.0",
     "@types/node": "26.6.5",

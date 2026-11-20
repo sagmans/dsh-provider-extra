@@ -63,9 +63,10 @@ the host's newer request shapes (`0.2.0-rc.2` with `0.85.1`). pi-ai `1.3.0`
 dropped `deepseek-v4-flash`, the template the `0.8.x` plugin line cloned. The
 shipped extra now clones `deepseek-v4.1-flash`, which pi-ai `0.87.1` and
 `1.1.0` through `1.4.0` carry and `0.85.1` does not. The gates ran on
-`0.2.1-rc.2`, `0.2.1-rc.3`, and `0.2.2-rc.1`, which resolve pi-ai `1.3.0`
-and `1.4.0`, so the vendor peer is `>=1.1.0 <1.5.0-0`, capped below the
-next vendor minor because a minor can drop a template id. Hosts on pi-ai
+`0.2.1-rc.2`, `0.2.1-rc.3`, `0.2.2-rc.1`, and `0.2.2-rc.5`, with this
+repository's lockfile resolving pi-ai `1.3.0` and `1.4.0`, so the vendor peer
+is `>=1.1.0 <1.5.0-0`, capped below the next vendor minor because a minor can
+drop a template id. Hosts on pi-ai
 `0.x` stay on the `0.8.x` plugin line until a gate run verifies them.
 `tools/harness-matrix.mjs` reads the vendor pins from `LINE_VENDOR_PINS` and
 refuses a peer that cannot admit one, or that has no upper bound.

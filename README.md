@@ -47,7 +47,7 @@ accuracy.
 - pnpm 11.21.0 for this repository.
 - A DeepSeek Harness install on the supported line: `>=0.2.1-rc.1
   <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0`, verified against `0.2.1-rc.2`,
-  `0.2.1-rc.3`, and `0.2.2-rc.1` (see
+  `0.2.1-rc.3`, `0.2.2-rc.1`, and `0.2.2-rc.5` (see
   [RELEASE.md](RELEASE.md#harness-matrix)). The range is declared in
   `dsh.compatibility.dsh` and on every harness peer, so the harness refuses this
   plugin on a host outside it instead of failing the first turn. Hosts before
@@ -68,7 +68,7 @@ A release of the harness CLI is installable without a launcher already on
 `PATH`:
 
 ```sh
-pnpm dlx @deepseek-ai/dsh@0.2.2-rc.1 plugin --profile web add @sagmans/dsh-provider-extra
+pnpm dlx @deepseek-ai/dsh@0.2.2-rc.5 plugin --profile web add @sagmans/dsh-provider-extra
 ```
 
 The package declares `dsh.bundle.patch`. The CLI adds it to the profile's bundle
@@ -451,7 +451,7 @@ helper stays outside the npm package. The plain-Node smoke test mounts both
 compiled routes in the real Cordis/LLM runtime. Two CLI tests exercise add,
 repeated add, profile overrides, and remove in disposable web/TUI profiles; they
 drive the registry CLI this repository develops against
-(`@deepseek-ai/dsh@0.2.2-rc.1`), so no harness checkout is needed.
+(`@deepseek-ai/dsh@0.2.2-rc.5`), so no harness checkout is needed.
 
 Tests use a local mock gateway or seeded grants. They require no API key, OAuth
 login, or paid provider requests.

@@ -9,12 +9,28 @@ const SERVICE_NAME = 'providerTierInvocation'
 const SINGLE_ROOT = 1
 const AMBIGUOUS_ROOT = 'headless service tier override cannot identify a unique invoking root'
 const UNSUPPORTED_RUNTIME =
-  'headless service tiers require the npm DSH 0.2.1-rc.2 loop marker and agents root registry'
+  'headless service tiers require the npm DSH loop marker and an agents registry that lists live agents'
 const scope = new AsyncLocalStorage<string | null | undefined>()
 
-/** The public registry determines runtime ownership, not user-supplied request metadata. */
+/**
+ * The public registry determines runtime ownership, not user-supplied request metadata.
+ * Releases before 0.2.2-rc.5 expose `roots()`; later ones keep only `list()`.
+ */
 export interface TierInvocationAgents {
-  roots(): readonly { readonly id: string }[]
+  roots?(): readonly { readonly id: string }[]
+  list?(): readonly { readonly id: string }[]
+}
+
+/**
+ * Live agents the binding chooses from. `list()` also returns owned children, but a
+ * child normally appears only after the root's first loop request has bound it, and
+ * a bound root still matches only its own session id. A child that appears earlier
+ * leaves more than one candidate, so the override fails closed instead of binding it.
+ */
+function liveRoots(agents: TierInvocationAgents): readonly { readonly id: string }[] {
+  if (typeof agents.roots === 'function') return agents.roots()
+  if (typeof agents.list === 'function') return agents.list()
+  throw new Error(UNSUPPORTED_RUNTIME)
 }
 
 /** Only the headless startup opts in; ordinary provider mounting never waits for headless services. */
@@ -53,7 +69,8 @@ export function mountTierInvocation(ctx: Context, tiers: TierSelection): void {
     activate(override, sessionId, agents) {
       if (
         override !== undefined &&
-        (typeof llm.isAgentLoopRequest !== 'function' || typeof agents.roots !== 'function')
+        (typeof llm.isAgentLoopRequest !== 'function' ||
+          (typeof agents.roots !== 'function' && typeof agents.list !== 'function'))
       ) {
         throw new Error(UNSUPPORTED_RUNTIME)
       }
@@ -64,7 +81,7 @@ export function mountTierInvocation(ctx: Context, tiers: TierSelection): void {
               override,
               sessionId,
               agents,
-              previousRoots: new Set(agents.roots()),
+              previousRoots: new Set(liveRoots(agents)),
             }
       const activation = active
       return () => {
@@ -107,7 +124,7 @@ export function mountTierInvocation(ctx: Context, tiers: TierSelection): void {
       request.purpose !== undefined
     )
       return undefined
-    const roots = current.agents.roots()
+    const roots = liveRoots(current.agents)
     if (!current.root) {
       const candidates = roots.filter(
         (root) =>

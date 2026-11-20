@@ -5,8 +5,9 @@ import type { AddressInfo } from 'node:net'
 import { test } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import type { StreamChunk } from '@deepseek-ai/dsh-llm'
-import LlmRuntime, { LlmError } from '@deepseek-ai/dsh-llm'
+import LlmRuntime from '@deepseek-ai/dsh-llm'
 import * as plugin from '../src/index.ts'
+import { pluginLlmError } from '../src/plugin-error.ts'
 
 /** A competing plugin mounted beside the catalog; the tests only dispose it. */
 type Mounted = { dispose(): unknown }
@@ -58,7 +59,10 @@ async function drain(stream: AsyncIterable<StreamChunk>): Promise<void> {
       chunk.type === 'finish' &&
       (chunk.reason.kind === 'error' || chunk.reason.kind === 'aborted')
     ) {
-      throw new LlmError(chunk.reason.failure.message, chunk.reason.failure.code ?? 'STREAM_FAILED')
+      throw pluginLlmError(
+        chunk.reason.failure.message,
+        chunk.reason.failure.code ?? 'STREAM_FAILED',
+      )
     }
   }
 }

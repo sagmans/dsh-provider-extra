@@ -19,6 +19,7 @@ import type { LoginAuthType, LoginChoice, LoginCommandHost } from './login-contr
 import { StoredCredentialError } from './login-contract.ts'
 import { declaredCredentialRef, declareProviderRoute, legacySettings } from './login-route.ts'
 import { PendingCredentialStore, proveApiKey } from './login-verify.ts'
+import { pluginLlmError } from './plugin-error.ts'
 
 const PLUGIN_NAME = 'dsh-provider-extra'
 const GO_SOURCE = 'opencode-go'
@@ -94,7 +95,7 @@ function loginTargets(ctx: Context, config: LoginConfig, routes: LoginRoutes): T
       const provider = profiles.get(route.id)?.piProvider
       // A named refusal beats a TypeError when a catalog route has no loaded provider.
       if (provider === undefined)
-        throw new LlmError(`${ROUTE_NOT_LOADED}: ${route.id}`, ROUTE_NOT_LOADED_CODE)
+        throw pluginLlmError(`${ROUTE_NOT_LOADED}: ${route.id}`, ROUTE_NOT_LOADED_CODE)
       return { id: route.id, provider, auth: route.auth, served: true }
     })
   }
@@ -159,13 +160,13 @@ async function writableStore(ctx: Context, target: Target): Promise<Credentials>
   const credentials = ctx.get('credentials') as Credentials | undefined
   if (credentials === undefined) throw new LlmError(MISSING_STORE, 'NO_CREDENTIAL_STORE')
   if (target.auth === undefined)
-    throw new LlmError('This route names no credential to store', 'UNSUPPORTED_CREDENTIAL')
+    throw pluginLlmError('This route names no credential to store', 'UNSUPPORTED_CREDENTIAL')
   if ('apiKeyRef' in target.auth) {
     if (typeof credentials.set !== 'function' || typeof credentials.describe !== 'function') {
       throw new LlmError(MISSING_STORE, 'NO_CREDENTIAL_STORE')
     }
     if (!(await credentials.describe(target.auth.apiKeyRef)).writable)
-      throw new LlmError(READ_ONLY, 'READ_ONLY_CREDENTIAL')
+      throw pluginLlmError(READ_ONLY, 'READ_ONLY_CREDENTIAL')
   } else {
     if (
       typeof credentials.modifyRecord !== 'function' ||
@@ -174,7 +175,7 @@ async function writableStore(ctx: Context, target: Target): Promise<Credentials>
       throw new LlmError(MISSING_STORE, 'NO_CREDENTIAL_STORE')
     }
     const info = await credentials.describeRecord?.(recordKeyFor(target.auth.credentialProvider))
-    if (info?.writable === false) throw new LlmError(READ_ONLY, 'READ_ONLY_CREDENTIAL')
+    if (info?.writable === false) throw pluginLlmError(READ_ONLY, 'READ_ONLY_CREDENTIAL')
   }
   return credentials
 }
@@ -195,7 +196,7 @@ async function authenticate(
     const oauth = target.provider.auth.oauth
     // The picker offers only routes with this flow, but a route can change after that read.
     if (oauth?.login === undefined)
-      throw new LlmError(`${NO_OAUTH_FLOW}: ${target.id}`, 'UNSUPPORTED_CREDENTIAL')
+      throw pluginLlmError(`${NO_OAUTH_FLOW}: ${target.id}`, 'UNSUPPORTED_CREDENTIAL')
     // The flow owns cancellation until it returns a grant; then persistence owns completion.
     const grant = await oauth.login({ ...interaction, signal })
     await auth.credentials.modify(target.auth.credentialProvider, async () => grant)
@@ -213,7 +214,7 @@ async function authenticate(
   guard()
   if (target.auth !== undefined && 'apiKeyRef' in target.auth) {
     if (credential.type !== 'api_key' || credential.key === undefined) {
-      throw new LlmError(
+      throw pluginLlmError(
         `This login did not return a single API key for ${target.auth.apiKeyRef}`,
         'UNSUPPORTED_CREDENTIAL',
       )
@@ -237,7 +238,7 @@ async function authenticate(
     }
   } else {
     if (target.auth === undefined)
-      throw new LlmError('This route names no credential to store', 'UNSUPPORTED_CREDENTIAL')
+      throw pluginLlmError('This route names no credential to store', 'UNSUPPORTED_CREDENTIAL')
     await auth.credentials.modify(target.auth.credentialProvider, async () => {
       // A queued record update can still stop before its locked mutation begins.
       signal.throwIfAborted()

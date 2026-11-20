@@ -1,8 +1,8 @@
 /** Defaults share the profile Config owner rather than the legacy settings namespace. */
 import type { Context } from '@deepseek-ai/cordis'
-import { LlmError } from '@deepseek-ai/dsh-llm'
 import type { CatalogSelection, CatalogSnapshot } from './catalog.ts'
 import { compileCatalog } from './catalog.ts'
+import { pluginLlmError } from './plugin-error.ts'
 
 const EDITOR_SERVICE = 'configEditor'
 const PERSISTENCE_UNAVAILABLE = 'CONFIG_PERSISTENCE_UNAVAILABLE'
@@ -31,7 +31,7 @@ export function catalogDefault(
     currentSelection() {
       requireOwnership?.()
       if (snapshot.selection === null) {
-        throw new LlmError(
+        throw pluginLlmError(
           'dsh-provider-extra: the catalog selects no default model',
           'NO_DEFAULT_MODEL',
         )
@@ -46,7 +46,7 @@ export function catalogDefault(
       const entry: unknown = (owner.fiber as typeof owner.fiber & { entry?: unknown }).entry
       const editor = owner.get(EDITOR_SERVICE) as ConfigEditor | undefined
       if (entry === undefined || typeof editor?.edit !== 'function') {
-        throw new LlmError(
+        throw pluginLlmError(
           'dsh-provider-extra: this host cannot persist catalog.default; edit the owning profile Config',
           PERSISTENCE_UNAVAILABLE,
         )
@@ -57,7 +57,7 @@ export function catalogDefault(
         // restoring membership removed by another profile edit.
         const latest = compileCatalog(current.catalog)
         if (latest === undefined) {
-          throw new LlmError(
+          throw pluginLlmError(
             'dsh-provider-extra: the owning Config no longer contains a catalog',
             'CATALOG_OWNER_CHANGED',
           )
