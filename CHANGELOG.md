@@ -8,6 +8,8 @@ carry a breaking change, and a patch carries only fixes.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-20
+
 ### Added
 
 - The Web and Desktop Models page renders a Codex **Sign in** control from this
@@ -329,7 +331,8 @@ carry a breaking change, and a patch carries only fixes.
   a hand-written literal replays as model-visible content on whichever line it
   does not match.
 
-[Unreleased]: https://github.com/sagmans/dsh-provider-extra/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/sagmans/dsh-provider-extra/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/sagmans/dsh-provider-extra/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/sagmans/dsh-provider-extra/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/sagmans/dsh-provider-extra/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/sagmans/dsh-provider-extra/compare/v0.6.0...v0.7.0
